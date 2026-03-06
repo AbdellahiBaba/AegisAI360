@@ -6,12 +6,11 @@ export default {
   theme: {
     extend: {
       borderRadius: {
-        lg: ".5625rem", /* 9px */
-        md: ".375rem", /* 6px */
-        sm: ".1875rem", /* 3px */
+        lg: ".5625rem",
+        md: ".375rem",
+        sm: ".1875rem",
       },
       colors: {
-        // Flat / base colors (regular buttons)
         background: "hsl(var(--background) / <alpha-value>)",
         foreground: "hsl(var(--foreground) / <alpha-value>)",
         border: "hsl(var(--border) / <alpha-value>)",
@@ -79,7 +78,14 @@ export default {
           online: "rgb(34 197 94)",
           away: "rgb(245 158 11)",
           busy: "rgb(239 68 68)",
-          offline: "rgb(156 163 175)",
+          offline: "rgb(148 163 184)",
+        },
+        severity: {
+          critical: "rgb(239 68 68)",
+          high: "rgb(249 115 22)",
+          medium: "rgb(234 179 8)",
+          low: "rgb(59 130 246)",
+          info: "rgb(148 163 184)",
         },
       },
       fontFamily: {
@@ -96,10 +102,25 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "pulse-glow": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.4" },
+        },
+        "slide-in": {
+          "0%": { opacity: "0", transform: "translateY(-8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "fade-in": {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "pulse-glow": "pulse-glow 2s ease-in-out infinite",
+        "slide-in": "slide-in 0.3s ease-out",
+        "fade-in": "fade-in 0.5s ease-out",
       },
     },
   },
