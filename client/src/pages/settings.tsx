@@ -12,7 +12,10 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslation } from "react-i18next";
-import { Building2, Users, UserPlus, Copy, Shield, Settings as SettingsIcon } from "lucide-react";
+import {
+  Building2, Users, UserPlus, Copy, Shield, Zap, Play, Loader2,
+  ShieldCheck, ShieldAlert, ShieldOff,
+} from "lucide-react";
 import type { Organization, Invite } from "@shared/schema";
 import { useState } from "react";
 
@@ -32,6 +35,9 @@ export default function SettingsPage() {
   const { data: org, isLoading: orgLoading } = useQuery<Organization>({ queryKey: ["/api/organization"] });
   const { data: orgUsers } = useQuery<{ id: string; username: string; role: string }[]>({ queryKey: ["/api/organization/users"] });
   const { data: invites } = useQuery<Invite[]>({ queryKey: ["/api/invites"], enabled: isAdmin });
+  const { data: defenseData } = useQuery<{ defenseMode: string }>({ queryKey: ["/api/settings/defense-mode"] });
+  const { data: scenarios } = useQuery<{ id: string; name: string; description: string }[]>({ queryKey: ["/api/simulate/scenarios"] });
+  const [runningScenario, setRunningScenario] = useState<string | null>(null);
 
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
@@ -70,6 +76,38 @@ export default function SettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/organization/users"] });
       toast({ title: t("settings.roleUpdated") });
+    },
+  });
+
+  const updateDefenseModeMutation = useMutation({
+    mutationFn: async (defenseMode: string) => {
+      const res = await apiRequest("PATCH", "/api/settings/defense-mode", { defenseMode });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/defense-mode"] });
+      toast({ title: t("settings.defenseModeUpdated"), description: data.defenseMode });
+    },
+  });
+
+  const simulateMutation = useMutation({
+    mutationFn: async (scenario: string) => {
+      setRunningScenario(scenario);
+      const res = await apiRequest("POST", `/api/simulate/${scenario}`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: t("settings.simulationStarted"), description: data.scenario });
+      setTimeout(() => {
+        setRunningScenario(null);
+        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
+        toast({ title: t("settings.simulationComplete") });
+      }, 5000);
+    },
+    onError: () => {
+      setRunningScenario(null);
+      toast({ title: t("settings.simulationFailed"), variant: "destructive" });
     },
   });
 
@@ -278,6 +316,84 @@ export default function SettingsPage() {
                 ))}
               </TableBody>
             </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
+              <Zap className="w-4 h-4 text-primary" />{t("settings.defenseMode")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground mb-4">{t("settings.defenseModeDescription")}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                { mode: "auto", icon: ShieldCheck, label: t("settings.autoMode"), desc: t("settings.autoModeDesc"), color: "border-green-500/50" },
+                { mode: "semi-auto", icon: ShieldAlert, label: t("settings.semiAutoMode"), desc: t("settings.semiAutoModeDesc"), color: "border-yellow-500/50" },
+                { mode: "manual", icon: ShieldOff, label: t("settings.manualMode"), desc: t("settings.manualModeDesc"), color: "border-red-500/50" },
+              ].map(({ mode, icon: ModeIcon, label, desc, color }) => (
+                <button
+                  key={mode}
+                  onClick={() => updateDefenseModeMutation.mutate(mode)}
+                  disabled={updateDefenseModeMutation.isPending}
+                  data-testid={`button-defense-${mode}`}
+                  className={`p-4 rounded-lg border-2 text-start transition-all ${
+                    defenseData?.defenseMode === mode
+                      ? `${color} bg-primary/5`
+                      : "border-border hover:border-primary/30"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <ModeIcon className={`w-5 h-5 ${defenseData?.defenseMode === mode ? "text-primary" : "text-muted-foreground"}`} />
+                    <span className="text-sm font-semibold">{label}</span>
+                    {defenseData?.defenseMode === mode && (
+                      <Badge className="text-[9px] ms-auto">{t("common.active")}</Badge>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">{desc}</p>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
+              <Play className="w-4 h-4 text-primary" />{t("settings.threatSimulator")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground mb-4">{t("settings.simulatorDescription")}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {scenarios?.map((scenario) => (
+                <Card key={scenario.id} className="overflow-hidden">
+                  <CardContent className="p-4">
+                    <h3 className="text-xs font-semibold mb-1" data-testid={`text-scenario-${scenario.id}`}>{scenario.name}</h3>
+                    <p className="text-[10px] text-muted-foreground mb-3 line-clamp-2">{scenario.description}</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full text-xs"
+                      disabled={!!runningScenario}
+                      onClick={() => simulateMutation.mutate(scenario.id)}
+                      data-testid={`button-simulate-${scenario.id}`}
+                    >
+                      {runningScenario === scenario.id ? (
+                        <><Loader2 className="w-3 h-3 me-1.5 animate-spin" />{t("settings.simulating")}</>
+                      ) : (
+                        <><Play className="w-3 h-3 me-1.5" />{t("settings.runSimulation")}</>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}

@@ -1,6 +1,8 @@
 import { storage } from "./storage";
 import type { SecurityEvent, AlertRule } from "@shared/schema";
 
+const DESTRUCTIVE_ACTIONS = ["block_source", "auto_quarantine", "auto_sinkhole"];
+
 export class AlertEngine {
   private broadcast: (data: unknown) => void;
 
@@ -86,8 +88,47 @@ export class AlertEngine {
 
       await storage.incrementAlertRuleTrigger(rule.id);
 
-      for (const action of actions) {
-        switch (action.type) {
+      let defenseMode = "auto";
+      try {
+        const org = await storage.getOrganization(orgId);
+        if (org && (org as any).defenseMode) {
+          defenseMode = (org as any).defenseMode;
+        }
+      } catch {}
+
+      for (const rawAction of actions) {
+        const action = typeof rawAction === "string" ? rawAction : rawAction.type;
+        if (!action) continue;
+
+        const isDestructive = DESTRUCTIVE_ACTIONS.includes(action);
+
+        if (isDestructive && defenseMode === "manual") {
+          await storage.createNotification({
+            organizationId: orgId,
+            userId: null,
+            title: `Manual Approval Required: ${action}`,
+            message: `Rule "${rule.name}" wants to execute "${action}" for event: ${event.description.slice(0, 80)}. Defense mode is set to Manual - action requires manual execution.`,
+            type: "warning",
+            actionUrl: "/alert-rules",
+          });
+          this.broadcast({ type: "notification", orgId });
+          continue;
+        }
+
+        if (isDestructive && defenseMode === "semi-auto") {
+          await storage.createNotification({
+            organizationId: orgId,
+            userId: null,
+            title: `Pending Approval: ${action}`,
+            message: `Rule "${rule.name}" recommends "${action}" for event from ${event.source}: ${event.description.slice(0, 80)}. Semi-auto mode - review and approve.`,
+            type: "warning",
+            actionUrl: "/settings",
+          });
+          this.broadcast({ type: "notification", orgId });
+          continue;
+        }
+
+        switch (action) {
           case "create_incident":
             await storage.createIncident({
               organizationId: orgId,

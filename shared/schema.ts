@@ -14,6 +14,7 @@ export const organizations = pgTable("organizations", {
   stripeSubscriptionId: text("stripe_subscription_id"),
   maxUsers: integer("max_users").notNull().default(5),
   suspended: boolean("suspended").notNull().default(false),
+  defenseMode: text("defense_mode").notNull().default("auto"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -298,3 +299,21 @@ export type ThreatFeedConfig = typeof threatFeedConfigs.$inferSelect;
 export const insertResponseActionSchema = createInsertSchema(responseActions).omit({ id: true, createdAt: true, completedAt: true });
 export type InsertResponseAction = z.infer<typeof insertResponseActionSchema>;
 export type ResponseAction = typeof responseActions.$inferSelect;
+
+export const scanResults = pgTable("scan_results", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id),
+  scanType: text("scan_type").notNull(),
+  target: text("target").notNull(),
+  status: text("status").notNull().default("running"),
+  results: text("results"),
+  findings: integer("findings").notNull().default(0),
+  severity: text("severity").notNull().default("info"),
+  executedBy: varchar("executed_by"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertScanResultSchema = createInsertSchema(scanResults).omit({ id: true, createdAt: true, completedAt: true });
+export type InsertScanResult = z.infer<typeof insertScanResultSchema>;
+export type ScanResult = typeof scanResults.$inferSelect;

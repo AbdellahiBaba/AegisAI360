@@ -227,6 +227,14 @@ app.use((req, res, next) => {
     console.log("Admin seeding skipped (may already exist)");
   }
 
+  try {
+    const { seedAllOrganizations } = await import("./seedRules");
+    await seedAllOrganizations();
+    console.log("Default rules and playbooks seeded");
+  } catch (err) {
+    console.log("Rule seeding skipped (non-fatal)");
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

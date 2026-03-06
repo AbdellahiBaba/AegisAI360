@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard, ShieldAlert, Bug, Brain, Database,
   Network, Target, Clock, Radio, Lock, BookOpen, FileText,
-  Settings, CreditCard, LogOut, User, Shield, Bell, Flame,
+  Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -65,6 +65,7 @@ export function AppSidebar() {
   const detectItems: NavItem[] = [
     { title: t("sidebar.securityEvents"), testId: "security-events", url: "/alerts", icon: ShieldAlert },
     { title: t("sidebar.attackHeatmap"), testId: "att&ck-heatmap", url: "/attack-map", icon: Target },
+    { title: t("sidebar.scanner"), testId: "scanner", url: "/scanner", icon: Radar },
     { title: t("sidebar.honeypot"), testId: "honeypot", url: "/honeypot", icon: Radio },
     { title: t("sidebar.alertRules"), testId: "alert-rules", url: "/alert-rules", icon: Bell },
   ];

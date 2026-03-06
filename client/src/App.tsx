@@ -30,6 +30,7 @@ import Billing from "@/pages/billing";
 import Firewall from "@/pages/firewall";
 import AlertRules from "@/pages/alert-rules";
 import SuperAdmin from "@/pages/super-admin";
+import ScannerPage from "@/pages/scanner";
 import AboutPage from "@/pages/public/about";
 import FeaturesPage from "@/pages/public/features";
 import PricingPage from "@/pages/public/pricing";
@@ -57,6 +58,7 @@ function AppRouter() {
       <Route path="/billing" component={Billing} />
       <Route path="/firewall" component={Firewall} />
       <Route path="/alert-rules" component={AlertRules} />
+      <Route path="/scanner" component={ScannerPage} />
       <Route path="/super-admin" component={SuperAdmin} />
       <Route component={NotFound} />
     </Switch>

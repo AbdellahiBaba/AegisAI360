@@ -23,6 +23,8 @@ import { createSuperAdminRouter } from "./superAdmin";
 import { createThreatFeedsRouter } from "./threatFeeds";
 import { ResponseEngine } from "./responseEngine";
 import { AlertEngine } from "./alertEngine";
+import { scanPorts, lookupDNS, checkSSL, scanHeaders, scanVulnerabilities } from "./scanEngine";
+import { SCENARIOS } from "./threatSimulator";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -95,6 +97,9 @@ export async function registerRoutes(
   app.use("/api/notifications", requireAuth);
   app.use("/api/api-keys", requireAuth);
   app.use("/api/response", requireAuth);
+  app.use("/api/scan", requireAuth);
+  app.use("/api/settings", requireAuth);
+  app.use("/api/simulate", requireAuth);
 
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
@@ -1002,6 +1007,274 @@ export async function registerRoutes(
       } else {
         res.status(500).json({ error: "Failed to process message" });
       }
+    }
+  });
+
+  app.post("/api/scan/ports", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { target, ports } = z.object({
+        target: z.string().min(1),
+        ports: z.array(z.number()).optional(),
+      }).parse(req.body);
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "port_scan",
+        target,
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      res.json({ id: scanRecord.id, status: "running" });
+      try {
+        const results = await scanPorts(target, ports);
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: results.openPorts.length,
+          severity: results.riskLevel,
+          completedAt: new Date(),
+        });
+        if (results.openPorts.some(p => p.risk === "high" || p.risk === "critical")) {
+          await storage.createSecurityEvent({
+            organizationId: orgId,
+            eventType: "reconnaissance",
+            severity: results.riskLevel,
+            source: "Port Scanner",
+            sourceIp: target,
+            description: `Port scan on ${target}: ${results.openPorts.length} open ports found (${results.openPorts.filter(p => p.risk === "high" || p.risk === "critical").length} high-risk)`,
+          });
+        }
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Scan failed" });
+    }
+  });
+
+  app.post("/api/scan/dns", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "dns_lookup",
+        target,
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      res.json({ id: scanRecord.id, status: "running" });
+      try {
+        const results = await lookupDNS(target);
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: results.totalRecords,
+          severity: "info",
+          completedAt: new Date(),
+        });
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Scan failed" });
+    }
+  });
+
+  app.post("/api/scan/ssl", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "ssl_check",
+        target,
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      res.json({ id: scanRecord.id, status: "running" });
+      try {
+        const results = await checkSSL(target);
+        let severity = "info";
+        if (results.expired) severity = "critical";
+        else if (results.selfSigned) severity = "high";
+        else if (results.expiringSoon) severity = "medium";
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: results.expired ? 1 : results.expiringSoon ? 1 : 0,
+          severity,
+          completedAt: new Date(),
+        });
+        if (results.expired || results.selfSigned) {
+          await storage.createSecurityEvent({
+            organizationId: orgId,
+            eventType: "anomaly",
+            severity,
+            source: "SSL Scanner",
+            description: `SSL certificate issue on ${target}: ${results.expired ? "Certificate EXPIRED" : "Self-signed certificate"} (Grade: ${results.grade})`,
+          });
+        }
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Scan failed" });
+    }
+  });
+
+  app.post("/api/scan/headers", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "header_scan",
+        target,
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      res.json({ id: scanRecord.id, status: "running" });
+      try {
+        const results = await scanHeaders(target);
+        let severity = "info";
+        if (results.score < 40) severity = "high";
+        else if (results.score < 60) severity = "medium";
+        else if (results.score < 80) severity = "low";
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: results.findings,
+          severity,
+          completedAt: new Date(),
+        });
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Scan failed" });
+    }
+  });
+
+  app.post("/api/scan/vulnerabilities", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "vuln_scan",
+        target,
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      res.json({ id: scanRecord.id, status: "running" });
+      try {
+        const results = await scanVulnerabilities(target);
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: results.findings,
+          severity: results.riskLevel,
+          completedAt: new Date(),
+        });
+        if (results.findings > 0) {
+          await storage.createSecurityEvent({
+            organizationId: orgId,
+            eventType: "anomaly",
+            severity: results.riskLevel,
+            source: "Vulnerability Scanner",
+            description: `Vulnerability scan on ${target}: ${results.findings} issues found (Risk: ${results.riskLevel})`,
+          });
+        }
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Scan failed" });
+    }
+  });
+
+  app.get("/api/scan/history", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const results = await storage.getScanResults(orgId);
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch scan history" });
+    }
+  });
+
+  app.get("/api/settings/defense-mode", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const org = await storage.getOrganization(orgId);
+      res.json({ defenseMode: (org as any)?.defenseMode || "auto" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch defense mode" });
+    }
+  });
+
+  app.patch("/api/settings/defense-mode", requireRole("admin"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { defenseMode } = z.object({
+        defenseMode: z.enum(["auto", "semi-auto", "manual"]),
+      }).parse(req.body);
+      await storage.updateOrganization(orgId, { defenseMode } as any);
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "update_defense_mode",
+        targetType: "organization",
+        targetId: String(orgId),
+        details: `Defense mode changed to: ${defenseMode}`,
+      });
+      res.json({ defenseMode });
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to update defense mode" });
+    }
+  });
+
+  app.get("/api/simulate/scenarios", async (_req, res) => {
+    const scenarios = Object.entries(SCENARIOS).map(([id, s]) => ({
+      id,
+      name: s.name,
+      description: s.description,
+    }));
+    res.json(scenarios);
+  });
+
+  app.post("/api/simulate/:scenario", requireRole("admin"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { scenario } = req.params;
+      const scenarioConfig = SCENARIOS[scenario];
+      if (!scenarioConfig) {
+        return res.status(404).json({ error: "Scenario not found" });
+      }
+      res.json({ status: "running", scenario: scenarioConfig.name });
+      try {
+        const result = await scenarioConfig.fn(orgId);
+        await storage.createAuditLog({
+          organizationId: orgId,
+          userId: getUserId(req),
+          action: "run_simulation",
+          targetType: "simulation",
+          targetId: scenario,
+          details: result.description,
+        });
+        broadcast({ type: "simulation_complete", scenario, ...result, orgId });
+      } catch (err) {
+        console.error("Simulation error:", err);
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Simulation failed" });
     }
   });
 

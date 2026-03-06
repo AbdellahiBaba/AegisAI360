@@ -2,6 +2,7 @@ import {
   users, organizations, securityEvents, incidents, threatIntel, securityPolicies,
   invites, assets, auditLogs, honeypotEvents, quarantineItems, responsePlaybooks,
   apiKeys, firewallRules, alertRules, notifications, threatFeedConfigs, responseActions,
+  scanResults,
   type User, type InsertUser,
   type Organization, type InsertOrganization,
   type SecurityEvent, type InsertSecurityEvent,
@@ -20,6 +21,7 @@ import {
   type Notification, type InsertNotification,
   type ThreatFeedConfig, type InsertThreatFeedConfig,
   type ResponseAction, type InsertResponseAction,
+  type ScanResult, type InsertScanResult,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, gte, count, lt, ne } from "drizzle-orm";
@@ -127,6 +129,10 @@ export interface IStorage {
   getEventTrend(orgId: number): Promise<{ time: string; events: number }[]>;
   getEventCount(): Promise<number>;
   getPlatformStats(): Promise<{ totalOrgs: number; totalUsers: number; totalEvents: number }>;
+
+  getScanResults(orgId: number): Promise<ScanResult[]>;
+  createScanResult(result: InsertScanResult): Promise<ScanResult>;
+  updateScanResult(id: number, data: Partial<{ status: string; results: string; findings: number; severity: string; completedAt: Date }>): Promise<ScanResult | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -616,6 +622,20 @@ export class DatabaseStorage implements IStorage {
       totalUsers: usersCount?.count ?? 0,
       totalEvents: events?.count ?? 0,
     };
+  }
+
+  async getScanResults(orgId: number): Promise<ScanResult[]> {
+    return db.select().from(scanResults).where(eq(scanResults.organizationId, orgId)).orderBy(desc(scanResults.createdAt));
+  }
+
+  async createScanResult(result: InsertScanResult): Promise<ScanResult> {
+    const [created] = await db.insert(scanResults).values(result).returning();
+    return created;
+  }
+
+  async updateScanResult(id: number, data: Partial<{ status: string; results: string; findings: number; severity: string; completedAt: Date }>): Promise<ScanResult | undefined> {
+    const [updated] = await db.update(scanResults).set(data).where(eq(scanResults.id, id)).returning();
+    return updated;
   }
 }
 
