@@ -17,6 +17,7 @@ import {
   type User,
 } from "@shared/schema";
 import { requireAuth, requireRole } from "./auth";
+import { generateNetworkDevices, runNetworkVulnerabilityScan } from "./networkMonitor";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { createIngestionRouter } from "./ingestion";
 import { createSuperAdminRouter } from "./superAdmin";
@@ -101,6 +102,7 @@ export async function registerRoutes(
   app.use("/api/settings", requireAuth);
   app.use("/api/simulate", requireAuth);
   app.use("/api/support", requireAuth);
+  app.use("/api/network", requireAuth);
 
   app.post("/api/support/tickets", async (req, res) => {
     try {
@@ -182,6 +184,291 @@ export async function registerRoutes(
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to request remote session" });
+    }
+  });
+
+  app.get("/api/network/devices", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const devices = await storage.getNetworkDevices(orgId);
+      res.json(devices);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch network devices" });
+    }
+  });
+
+  app.get("/api/network/devices/:id", async (req, res) => {
+    try {
+      const device = await storage.getNetworkDevice(parseInt(req.params.id));
+      if (!device) return res.status(404).json({ error: "Device not found" });
+      const orgId = getOrgId(req);
+      if (device.organizationId !== orgId) return res.status(403).json({ error: "Access denied" });
+      res.json(device);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch device" });
+    }
+  });
+
+  app.post("/api/network/scan", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { scanType } = z.object({
+        scanType: z.enum(["quick", "full"]).optional().default("quick"),
+      }).parse(req.body || {});
+
+      const scan = await storage.createNetworkScan({
+        organizationId: orgId,
+        networkName: "Network Scan",
+        scanType,
+        status: "running",
+        devicesFound: 0,
+        unauthorizedCount: 0,
+      });
+
+      res.json({ scanId: scan.id, status: "running" });
+
+      try {
+        const deviceCount = scanType === "full" ? 15 : 10;
+        const newDevices = generateNetworkDevices(orgId, deviceCount);
+
+        const existingDevices = await storage.getNetworkDevices(orgId);
+        const existingMacs = new Set(existingDevices.map(d => d.macAddress));
+
+        let created = 0;
+        let unauthorizedCount = 0;
+        for (const device of newDevices) {
+          if (!existingMacs.has(device.macAddress)) {
+            await storage.createNetworkDevice(device);
+            created++;
+          }
+          if (device.authorization === "unauthorized") unauthorizedCount++;
+        }
+
+        const totalDevices = existingDevices.length + created;
+        await storage.updateNetworkScan(scan.id, {
+          status: "completed",
+          devicesFound: totalDevices,
+          unauthorizedCount,
+          completedAt: new Date(),
+          results: { newDevices: created, totalDevices, scanType },
+        });
+
+        if (unauthorizedCount > 0) {
+          await storage.createSecurityEvent({
+            organizationId: orgId,
+            eventType: "unauthorized_device",
+            severity: "high",
+            source: "network-monitor",
+            description: `Network scan detected ${unauthorizedCount} unauthorized device(s) on the network`,
+            sourceIp: "network-scanner",
+            status: "new",
+          });
+        }
+
+      } catch (err) {
+        console.error("Network scan error:", err);
+        await storage.updateNetworkScan(scan.id, { status: "failed" });
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to start network scan" });
+    }
+  });
+
+  app.post("/api/network/scan/vulnerability", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const devices = await storage.getNetworkDevices(orgId);
+
+      const scan = await storage.createNetworkScan({
+        organizationId: orgId,
+        networkName: "Vulnerability Scan",
+        scanType: "vulnerability",
+        status: "running",
+        devicesFound: devices.length,
+        unauthorizedCount: devices.filter(d => d.authorization === "unauthorized").length,
+      });
+
+      res.json({ scanId: scan.id, status: "running" });
+
+      try {
+        const { vulnerabilities, riskScore } = runNetworkVulnerabilityScan(devices);
+
+        await storage.updateNetworkScan(scan.id, {
+          status: "completed",
+          vulnerabilities,
+          completedAt: new Date(),
+          results: { riskScore, totalVulnerabilities: vulnerabilities.length },
+        });
+
+        const criticalVulns = vulnerabilities.filter((v: any) => v.severity === "critical" || v.severity === "high");
+        if (criticalVulns.length > 0) {
+          await storage.createSecurityEvent({
+            organizationId: orgId,
+            eventType: "network_vulnerability",
+            severity: "critical",
+            source: "network-monitor",
+            description: `Network vulnerability scan found ${criticalVulns.length} critical/high severity issue(s)`,
+            sourceIp: "vuln-scanner",
+            status: "new",
+          });
+        }
+
+      } catch (err) {
+        console.error("Vulnerability scan error:", err);
+        await storage.updateNetworkScan(scan.id, { status: "failed" });
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to start vulnerability scan" });
+    }
+  });
+
+  app.get("/api/network/scans", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const scans = await storage.getNetworkScans(orgId);
+      res.json(scans);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch scan history" });
+    }
+  });
+
+  app.patch("/api/network/devices/:id", async (req, res) => {
+    try {
+      const device = await storage.getNetworkDevice(parseInt(req.params.id));
+      if (!device) return res.status(404).json({ error: "Device not found" });
+      const orgId = getOrgId(req);
+      if (device.organizationId !== orgId) return res.status(403).json({ error: "Access denied" });
+
+      const data = z.object({
+        authorization: z.enum(["authorized", "unauthorized", "unknown"]).optional(),
+        notes: z.string().nullable().optional(),
+        isCompanyDevice: z.boolean().optional(),
+        assignedUser: z.string().nullable().optional(),
+        hostname: z.string().optional(),
+      }).parse(req.body);
+
+      const updated = await storage.updateNetworkDevice(device.id, data);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update device" });
+    }
+  });
+
+  app.post("/api/network/devices/:id/block", async (req, res) => {
+    try {
+      const device = await storage.getNetworkDevice(parseInt(req.params.id));
+      if (!device) return res.status(404).json({ error: "Device not found" });
+      const orgId = getOrgId(req);
+      if (device.organizationId !== orgId) return res.status(403).json({ error: "Access denied" });
+
+      await storage.updateNetworkDevice(device.id, { status: "blocked", authorization: "unauthorized" });
+
+      await storage.createFirewallRule({
+        organizationId: orgId,
+        ruleType: "ip_block",
+        value: device.ipAddress,
+        action: "block",
+        reason: `Blocked network device: ${device.hostname || device.macAddress}`,
+        status: "active",
+      });
+
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "block_network_device",
+        targetType: "network_device",
+        targetId: String(device.id),
+        details: `Blocked device ${device.hostname || device.macAddress} (${device.ipAddress})`,
+      });
+
+      res.json({ success: true, message: "Device blocked" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to block device" });
+    }
+  });
+
+  app.post("/api/network/devices/:id/kick", async (req, res) => {
+    try {
+      const device = await storage.getNetworkDevice(parseInt(req.params.id));
+      if (!device) return res.status(404).json({ error: "Device not found" });
+      const orgId = getOrgId(req);
+      if (device.organizationId !== orgId) return res.status(403).json({ error: "Access denied" });
+
+      await storage.updateNetworkDevice(device.id, { status: "offline" });
+
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "kick_network_device",
+        targetType: "network_device",
+        targetId: String(device.id),
+        details: `Kicked device ${device.hostname || device.macAddress} (${device.ipAddress}) from network`,
+      });
+
+      res.json({ success: true, message: "Device kicked from network" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to kick device" });
+    }
+  });
+
+  app.post("/api/network/devices/:id/authorize", async (req, res) => {
+    try {
+      const device = await storage.getNetworkDevice(parseInt(req.params.id));
+      if (!device) return res.status(404).json({ error: "Device not found" });
+      const orgId = getOrgId(req);
+      if (device.organizationId !== orgId) return res.status(403).json({ error: "Access denied" });
+
+      await storage.updateNetworkDevice(device.id, { authorization: "authorized", status: "online" });
+
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "authorize_network_device",
+        targetType: "network_device",
+        targetId: String(device.id),
+        details: `Authorized device ${device.hostname || device.macAddress} (${device.ipAddress})`,
+      });
+
+      res.json({ success: true, message: "Device authorized" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to authorize device" });
+    }
+  });
+
+  app.delete("/api/network/devices/:id", async (req, res) => {
+    try {
+      const device = await storage.getNetworkDevice(parseInt(req.params.id));
+      if (!device) return res.status(404).json({ error: "Device not found" });
+      const orgId = getOrgId(req);
+      if (device.organizationId !== orgId) return res.status(403).json({ error: "Access denied" });
+
+      await storage.deleteNetworkDevice(device.id);
+      res.json({ success: true, message: "Device removed" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete device" });
+    }
+  });
+
+  app.get("/api/network/traffic", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const devices = await storage.getNetworkDevices(orgId);
+      const totalIn = devices.reduce((sum, d) => sum + (Number(d.dataIn) || 0), 0);
+      const totalOut = devices.reduce((sum, d) => sum + (Number(d.dataOut) || 0), 0);
+      const topDevices = devices
+        .sort((a, b) => (Number(b.dataIn) + Number(b.dataOut)) - (Number(a.dataIn) + Number(a.dataOut)))
+        .slice(0, 10)
+        .map(d => ({
+          id: d.id,
+          hostname: d.hostname,
+          ipAddress: d.ipAddress,
+          dataIn: Number(d.dataIn),
+          dataOut: Number(d.dataOut),
+          total: Number(d.dataIn) + Number(d.dataOut),
+        }));
+      res.json({ totalIn, totalOut, totalDevices: devices.length, topDevices });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch traffic data" });
     }
   });
 

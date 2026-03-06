@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, bigint, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -338,3 +338,49 @@ export const supportTickets = pgTable("support_tickets", {
 export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
 export type SupportTicket = typeof supportTickets.$inferSelect;
+
+export const networkDevices = pgTable("network_devices", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id),
+  macAddress: text("mac_address").notNull(),
+  ipAddress: text("ip_address").notNull(),
+  hostname: text("hostname"),
+  manufacturer: text("manufacturer"),
+  deviceType: text("device_type").notNull().default("unknown"),
+  os: text("os"),
+  status: text("status").notNull().default("online"),
+  authorization: text("authorization").notNull().default("unknown"),
+  lastSeen: timestamp("last_seen").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  firstSeen: timestamp("first_seen").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  dataIn: bigint("data_in", { mode: "number" }).notNull().default(0),
+  dataOut: bigint("data_out", { mode: "number" }).notNull().default(0),
+  networkName: text("network_name"),
+  signalStrength: integer("signal_strength"),
+  location: text("location"),
+  notes: text("notes"),
+  isCompanyDevice: boolean("is_company_device").notNull().default(false),
+  assignedUser: text("assigned_user"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertNetworkDeviceSchema = createInsertSchema(networkDevices).omit({ id: true, createdAt: true });
+export type InsertNetworkDevice = z.infer<typeof insertNetworkDeviceSchema>;
+export type NetworkDevice = typeof networkDevices.$inferSelect;
+
+export const networkScans = pgTable("network_scans", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id),
+  networkName: text("network_name"),
+  scanType: text("scan_type").notNull().default("quick"),
+  status: text("status").notNull().default("running"),
+  devicesFound: integer("devices_found").notNull().default(0),
+  unauthorizedCount: integer("unauthorized_count").notNull().default(0),
+  vulnerabilities: jsonb("vulnerabilities"),
+  results: jsonb("results"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertNetworkScanSchema = createInsertSchema(networkScans).omit({ id: true, createdAt: true });
+export type InsertNetworkScan = z.infer<typeof insertNetworkScanSchema>;
+export type NetworkScan = typeof networkScans.$inferSelect;

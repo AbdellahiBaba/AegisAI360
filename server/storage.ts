@@ -2,7 +2,7 @@ import {
   users, organizations, securityEvents, incidents, threatIntel, securityPolicies,
   invites, assets, auditLogs, honeypotEvents, quarantineItems, responsePlaybooks,
   apiKeys, firewallRules, alertRules, notifications, threatFeedConfigs, responseActions,
-  scanResults, supportTickets,
+  scanResults, supportTickets, networkDevices, networkScans,
   type User, type InsertUser,
   type Organization, type InsertOrganization,
   type SecurityEvent, type InsertSecurityEvent,
@@ -23,6 +23,8 @@ import {
   type ResponseAction, type InsertResponseAction,
   type ScanResult, type InsertScanResult,
   type SupportTicket, type InsertSupportTicket,
+  type NetworkDevice, type InsertNetworkDevice,
+  type NetworkScan, type InsertNetworkScan,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, gte, count, lt, ne } from "drizzle-orm";
@@ -140,6 +142,15 @@ export interface IStorage {
   getSupportTicket(id: number): Promise<SupportTicket | undefined>;
   createSupportTicket(ticket: InsertSupportTicket): Promise<SupportTicket>;
   updateSupportTicket(id: number, data: Partial<{ status: string; priority: string; assignedTo: string | null; remoteSessionRequested: boolean; remoteSessionActive: boolean; messages: any }>): Promise<SupportTicket | undefined>;
+
+  getNetworkDevices(orgId: number): Promise<NetworkDevice[]>;
+  getNetworkDevice(id: number): Promise<NetworkDevice | undefined>;
+  createNetworkDevice(device: InsertNetworkDevice): Promise<NetworkDevice>;
+  updateNetworkDevice(id: number, data: Partial<NetworkDevice>): Promise<NetworkDevice | undefined>;
+  deleteNetworkDevice(id: number): Promise<void>;
+  getNetworkScans(orgId: number): Promise<NetworkScan[]>;
+  createNetworkScan(scan: InsertNetworkScan): Promise<NetworkScan>;
+  updateNetworkScan(id: number, data: Partial<NetworkScan>): Promise<NetworkScan | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -665,6 +676,43 @@ export class DatabaseStorage implements IStorage {
 
   async updateSupportTicket(id: number, data: Partial<{ status: string; priority: string; assignedTo: string | null; remoteSessionRequested: boolean; remoteSessionActive: boolean; messages: any }>): Promise<SupportTicket | undefined> {
     const [updated] = await db.update(supportTickets).set({ ...data, updatedAt: new Date() }).where(eq(supportTickets.id, id)).returning();
+    return updated;
+  }
+
+  async getNetworkDevices(orgId: number): Promise<NetworkDevice[]> {
+    return db.select().from(networkDevices).where(eq(networkDevices.organizationId, orgId)).orderBy(desc(networkDevices.lastSeen));
+  }
+
+  async getNetworkDevice(id: number): Promise<NetworkDevice | undefined> {
+    const [device] = await db.select().from(networkDevices).where(eq(networkDevices.id, id));
+    return device || undefined;
+  }
+
+  async createNetworkDevice(device: InsertNetworkDevice): Promise<NetworkDevice> {
+    const [created] = await db.insert(networkDevices).values(device).returning();
+    return created;
+  }
+
+  async updateNetworkDevice(id: number, data: Partial<NetworkDevice>): Promise<NetworkDevice | undefined> {
+    const [updated] = await db.update(networkDevices).set(data).where(eq(networkDevices.id, id)).returning();
+    return updated;
+  }
+
+  async deleteNetworkDevice(id: number): Promise<void> {
+    await db.delete(networkDevices).where(eq(networkDevices.id, id));
+  }
+
+  async getNetworkScans(orgId: number): Promise<NetworkScan[]> {
+    return db.select().from(networkScans).where(eq(networkScans.organizationId, orgId)).orderBy(desc(networkScans.createdAt));
+  }
+
+  async createNetworkScan(scan: InsertNetworkScan): Promise<NetworkScan> {
+    const [created] = await db.insert(networkScans).values(scan).returning();
+    return created;
+  }
+
+  async updateNetworkScan(id: number, data: Partial<NetworkScan>): Promise<NetworkScan | undefined> {
+    const [updated] = await db.update(networkScans).set(data).where(eq(networkScans.id, id)).returning();
     return updated;
   }
 }
