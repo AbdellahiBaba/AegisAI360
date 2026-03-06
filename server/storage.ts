@@ -66,6 +66,9 @@ export interface IStorage {
   createResponsePlaybook(playbook: InsertResponsePlaybook): Promise<ResponsePlaybook>;
   updateResponsePlaybook(id: number, orgId: number, data: Partial<{ enabled: boolean }>): Promise<ResponsePlaybook | undefined>;
 
+  getOrganizationUsers(orgId: number): Promise<Omit<User, "password">[]>;
+  updateUserRole(userId: string, orgId: number, role: string): Promise<Omit<User, "password"> | undefined>;
+
   getDashboardStats(orgId: number): Promise<{
     totalEvents: number;
     criticalAlerts: number;
@@ -286,6 +289,23 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(responsePlaybooks.id, id), eq(responsePlaybooks.organizationId, orgId)))
       .returning();
     return updated;
+  }
+
+  async getOrganizationUsers(orgId: number): Promise<Omit<User, "password">[]> {
+    const result = await db.select({
+      id: users.id,
+      username: users.username,
+      organizationId: users.organizationId,
+      role: users.role,
+    }).from(users).where(eq(users.organizationId, orgId));
+    return result as Omit<User, "password">[];
+  }
+
+  async updateUserRole(userId: string, orgId: number, role: string): Promise<Omit<User, "password"> | undefined> {
+    const [updated] = await db.update(users).set({ role })
+      .where(and(eq(users.id, userId), eq(users.organizationId, orgId)))
+      .returning({ id: users.id, username: users.username, organizationId: users.organizationId, role: users.role });
+    return updated as Omit<User, "password"> | undefined;
   }
 
   async getDashboardStats(orgId: number) {

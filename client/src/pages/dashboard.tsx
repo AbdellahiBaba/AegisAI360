@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { queryClient } from "@/lib/queryClient";
-import { ShieldAlert, AlertTriangle, Bug, Activity, ArrowUpRight, ArrowDownRight, Clock } from "lucide-react";
+import { ShieldAlert, AlertTriangle, Bug, Activity, ArrowUpRight, ArrowDownRight, Clock, Monitor, Lock, Radio } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import type { SecurityEvent } from "@shared/schema";
 
@@ -16,6 +16,9 @@ interface DashboardStats {
   threatScore: number;
   eventTrend: number;
   incidentTrend: number;
+  assetCount: number;
+  quarantineCount: number;
+  honeypotActivity: number;
 }
 
 const severityColors: Record<string, string> = {
@@ -333,22 +336,22 @@ export default function Dashboard() {
 
   return (
     <div className="p-4 md:p-6 space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
         <StatCard
-          title="Total Events (24h)"
+          title="Events (24h)"
           value={stats?.totalEvents ?? 0}
           icon={ShieldAlert}
           trend={stats?.eventTrend ?? 0}
           trendLabel="vs yesterday"
         />
         <StatCard
-          title="Critical Alerts"
+          title="Critical"
           value={stats?.criticalAlerts ?? 0}
           icon={AlertTriangle}
           accent={(stats?.criticalAlerts ?? 0) > 0 ? "text-severity-critical" : undefined}
         />
         <StatCard
-          title="Active Incidents"
+          title="Incidents"
           value={stats?.activeIncidents ?? 0}
           icon={Bug}
           trend={stats?.incidentTrend ?? 0}
@@ -359,6 +362,22 @@ export default function Dashboard() {
           value={`${stats?.threatScore ?? 0}/100`}
           icon={Activity}
           accent={getThreatScoreColor(stats?.threatScore ?? 0)}
+        />
+        <StatCard
+          title="Assets"
+          value={stats?.assetCount ?? 0}
+          icon={Monitor}
+        />
+        <StatCard
+          title="Quarantined"
+          value={stats?.quarantineCount ?? 0}
+          icon={Lock}
+          accent={(stats?.quarantineCount ?? 0) > 0 ? "text-severity-high" : undefined}
+        />
+        <StatCard
+          title="Honeypot"
+          value={stats?.honeypotActivity ?? 0}
+          icon={Radio}
         />
       </div>
 

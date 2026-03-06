@@ -17,6 +17,7 @@ import {
 } from "@shared/schema";
 import { requireAuth, requireRole } from "./auth";
 import { randomBytes } from "crypto";
+import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -577,6 +578,131 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete conversation" });
+    }
+  });
+
+  app.use("/api/billing", requireAuth);
+
+  app.get("/api/billing/config", async (_req, res) => {
+    try {
+      const publishableKey = await getStripePublishableKey();
+      res.json({ publishableKey });
+    } catch (error) {
+      res.status(500).json({ error: "Stripe not configured" });
+    }
+  });
+
+  app.get("/api/billing/status", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const org = await storage.getOrganization(orgId);
+      if (!org) return res.status(404).json({ error: "Organization not found" });
+      res.json({
+        plan: org.plan,
+        maxUsers: org.maxUsers,
+        stripeCustomerId: org.stripeCustomerId,
+        stripeSubscriptionId: org.stripeSubscriptionId,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch billing status" });
+    }
+  });
+
+  app.post("/api/billing/create-checkout", requireRole("admin"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { priceId } = z.object({ priceId: z.string() }).parse(req.body);
+      const org = await storage.getOrganization(orgId);
+      if (!org) return res.status(404).json({ error: "Organization not found" });
+
+      const stripe = await getUncachableStripeClient();
+
+      let customerId = org.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          metadata: { organizationId: String(orgId) },
+        });
+        customerId = customer.id;
+        await storage.updateOrganization(orgId, { stripeCustomerId: customerId });
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        payment_method_types: ['card'],
+        line_items: [{ price: priceId, quantity: 1 }],
+        mode: 'subscription',
+        success_url: `${req.protocol}://${req.get('host')}/billing?success=true`,
+        cancel_url: `${req.protocol}://${req.get('host')}/billing?canceled=true`,
+        metadata: { organizationId: String(orgId) },
+      });
+
+      res.json({ url: session.url });
+    } catch (error) {
+      console.error("Checkout error:", error);
+      res.status(500).json({ error: "Failed to create checkout session" });
+    }
+  });
+
+  app.post("/api/billing/portal", requireRole("admin"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const org = await storage.getOrganization(orgId);
+      if (!org?.stripeCustomerId) {
+        return res.status(400).json({ error: "No billing account found" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.billingPortal.sessions.create({
+        customer: org.stripeCustomerId,
+        return_url: `${req.protocol}://${req.get('host')}/billing`,
+      });
+
+      res.json({ url: session.url });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create portal session" });
+    }
+  });
+
+  app.get("/api/billing/products", async (_req, res) => {
+    try {
+      const { db: drizzleDb } = await import("./db");
+      const { sql } = await import("drizzle-orm");
+      const result = await drizzleDb.execute(
+        sql`SELECT p.id, p.name, p.description, p.metadata,
+              pr.id as price_id, pr.unit_amount, pr.currency, pr.recurring
+            FROM stripe.products p
+            JOIN stripe.prices pr ON pr.product = p.id AND pr.active = true
+            WHERE p.active = true
+            ORDER BY pr.unit_amount ASC`
+      );
+      res.json(result.rows);
+    } catch (error) {
+      res.json([]);
+    }
+  });
+
+  app.get("/api/organization/users", requireAuth, async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const orgUsers = await storage.getOrganizationUsers(orgId);
+      res.json(orgUsers);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  app.patch("/api/organization/users/:userId/role", requireRole("admin"), async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const orgId = getOrgId(req);
+      const { role } = z.object({ role: z.enum(["admin", "analyst", "auditor", "readonly"]) }).parse(req.body);
+      const updated = await storage.updateUserRole(userId, orgId, role);
+      if (!updated) return res.status(404).json({ error: "User not found" });
+      await storage.createAuditLog({ organizationId: orgId, userId: getUserId(req), action: "change_role", targetType: "user", targetId: userId, details: `role=${role}` });
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to update role" });
     }
   });
 

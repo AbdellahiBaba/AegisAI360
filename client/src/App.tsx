@@ -17,6 +17,14 @@ import ThreatIntel from "@/pages/threat-intel";
 import AiAnalysis from "@/pages/ai-analysis";
 import Policies from "@/pages/policies";
 import AuthPage from "@/pages/auth";
+import NetworkMap from "@/pages/network-map";
+import AttackMap from "@/pages/attack-map";
+import Forensics from "@/pages/forensics";
+import Honeypot from "@/pages/honeypot";
+import Quarantine from "@/pages/quarantine";
+import Playbooks from "@/pages/playbooks";
+import SettingsPage from "@/pages/settings";
+import Billing from "@/pages/billing";
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -36,6 +44,14 @@ function Router() {
       <Route path="/threat-intel" component={ThreatIntel} />
       <Route path="/ai-analysis" component={AiAnalysis} />
       <Route path="/policies" component={Policies} />
+      <Route path="/network-map" component={NetworkMap} />
+      <Route path="/attack-map" component={AttackMap} />
+      <Route path="/forensics" component={Forensics} />
+      <Route path="/honeypot" component={Honeypot} />
+      <Route path="/quarantine" component={Quarantine} />
+      <Route path="/playbooks" component={Playbooks} />
+      <Route path="/settings" component={SettingsPage} />
+      <Route path="/billing" component={Billing} />
       <Route component={NotFound} />
     </Switch>
   );
