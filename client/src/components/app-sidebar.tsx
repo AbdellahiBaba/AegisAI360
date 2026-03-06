@@ -1,5 +1,6 @@
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard, ShieldAlert, Bug, Brain, Database,
   Network, Target, Clock, Radio, Lock, BookOpen, FileText,
@@ -16,40 +17,10 @@ import { AegisLogo } from "@/components/logo";
 
 interface NavItem {
   title: string;
+  testId: string;
   url: string;
   icon: React.ElementType;
 }
-
-const commandItems: NavItem[] = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "AI Analysis", url: "/ai-analysis", icon: Brain },
-];
-
-const detectItems: NavItem[] = [
-  { title: "Security Events", url: "/alerts", icon: ShieldAlert },
-  { title: "ATT&CK Heatmap", url: "/attack-map", icon: Target },
-  { title: "Honeypot", url: "/honeypot", icon: Radio },
-  { title: "Alert Rules", url: "/alert-rules", icon: Bell },
-];
-
-const respondItems: NavItem[] = [
-  { title: "Incidents", url: "/incidents", icon: Bug },
-  { title: "Quarantine", url: "/quarantine", icon: Lock },
-  { title: "Playbooks", url: "/playbooks", icon: BookOpen },
-  { title: "Firewall", url: "/firewall", icon: Flame },
-  { title: "Policies", url: "/policies", icon: FileText },
-];
-
-const intelItems: NavItem[] = [
-  { title: "Threat Intel", url: "/threat-intel", icon: Database },
-  { title: "Network Map", url: "/network-map", icon: Network },
-  { title: "Forensic Timeline", url: "/forensics", icon: Clock },
-];
-
-const adminItems: NavItem[] = [
-  { title: "Settings", url: "/settings", icon: Settings },
-  { title: "Billing", url: "/billing", icon: CreditCard },
-];
 
 function NavGroup({ label, items, location }: { label: string; items: NavItem[]; location: string }) {
   return (
@@ -60,13 +31,13 @@ function NavGroup({ label, items, location }: { label: string; items: NavItem[];
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => (
-            <SidebarMenuItem key={item.title}>
+            <SidebarMenuItem key={item.testId}>
               <SidebarMenuButton
                 asChild
                 data-active={location === item.url}
                 className="data-[active=true]:bg-primary/10 data-[active=true]:text-primary data-[active=true]:font-semibold h-8"
               >
-                <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                <Link href={item.url} data-testid={`link-${item.testId}`}>
                   <item.icon className="w-4 h-4" />
                   <span className="text-xs">{item.title}</span>
                 </Link>
@@ -82,12 +53,44 @@ function NavGroup({ label, items, location }: { label: string; items: NavItem[];
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logoutMutation } = useAuth();
+  const { t } = useTranslation();
 
   const isSuperAdmin = user?.isSuperAdmin === true;
 
+  const commandItems: NavItem[] = [
+    { title: t("sidebar.dashboard"), testId: "dashboard", url: "/", icon: LayoutDashboard },
+    { title: t("sidebar.aiAnalysis"), testId: "ai-analysis", url: "/ai-analysis", icon: Brain },
+  ];
+
+  const detectItems: NavItem[] = [
+    { title: t("sidebar.securityEvents"), testId: "security-events", url: "/alerts", icon: ShieldAlert },
+    { title: t("sidebar.attackHeatmap"), testId: "att&ck-heatmap", url: "/attack-map", icon: Target },
+    { title: t("sidebar.honeypot"), testId: "honeypot", url: "/honeypot", icon: Radio },
+    { title: t("sidebar.alertRules"), testId: "alert-rules", url: "/alert-rules", icon: Bell },
+  ];
+
+  const respondItems: NavItem[] = [
+    { title: t("sidebar.incidents"), testId: "incidents", url: "/incidents", icon: Bug },
+    { title: t("sidebar.quarantine"), testId: "quarantine", url: "/quarantine", icon: Lock },
+    { title: t("sidebar.playbooks"), testId: "playbooks", url: "/playbooks", icon: BookOpen },
+    { title: t("sidebar.firewall"), testId: "firewall", url: "/firewall", icon: Flame },
+    { title: t("sidebar.policies"), testId: "policies", url: "/policies", icon: FileText },
+  ];
+
+  const intelItems: NavItem[] = [
+    { title: t("sidebar.threatIntel"), testId: "threat-intel", url: "/threat-intel", icon: Database },
+    { title: t("sidebar.networkMap"), testId: "network-map", url: "/network-map", icon: Network },
+    { title: t("sidebar.forensicTimeline"), testId: "forensic-timeline", url: "/forensics", icon: Clock },
+  ];
+
+  const adminItems: NavItem[] = [
+    { title: t("sidebar.settings"), testId: "settings", url: "/settings", icon: Settings },
+    { title: t("sidebar.billing"), testId: "billing", url: "/billing", icon: CreditCard },
+  ];
+
   const fullAdminItems = [
     ...adminItems,
-    ...(isSuperAdmin ? [{ title: "Super Admin", url: "/super-admin", icon: Shield }] : []),
+    ...(isSuperAdmin ? [{ title: t("sidebar.superAdmin"), testId: "super-admin", url: "/super-admin", icon: Shield }] : []),
   ];
 
   return (
@@ -101,11 +104,11 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="py-1">
-        <NavGroup label="Command" items={commandItems} location={location} />
-        <NavGroup label="Detect" items={detectItems} location={location} />
-        <NavGroup label="Respond" items={respondItems} location={location} />
-        <NavGroup label="Intel" items={intelItems} location={location} />
-        <NavGroup label="Admin" items={fullAdminItems} location={location} />
+        <NavGroup label={t("sidebar.command")} items={commandItems} location={location} />
+        <NavGroup label={t("sidebar.detect")} items={detectItems} location={location} />
+        <NavGroup label={t("sidebar.respond")} items={respondItems} location={location} />
+        <NavGroup label={t("sidebar.intel")} items={intelItems} location={location} />
+        <NavGroup label={t("sidebar.admin")} items={fullAdminItems} location={location} />
       </SidebarContent>
 
       <SidebarFooter className="p-3 space-y-2 border-t border-border/50">
@@ -138,8 +141,8 @@ export function AppSidebar() {
         </div>
         <div className="flex items-center gap-2">
           <div className="w-1.5 h-1.5 rounded-full bg-status-online animate-pulse-glow" />
-          <span className="text-[10px] text-muted-foreground font-mono">OPERATIONAL</span>
-          <Badge variant="secondary" className="ml-auto text-[9px] font-mono">v3.0</Badge>
+          <span className="text-[10px] text-muted-foreground font-mono">{t("common.operational")}</span>
+          <Badge variant="secondary" className="ml-auto text-[9px] font-mono">{t("common.version")}</Badge>
         </div>
       </SidebarFooter>
     </Sidebar>

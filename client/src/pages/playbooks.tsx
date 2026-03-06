@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +17,7 @@ import type { ResponsePlaybook } from "@shared/schema";
 import { useState } from "react";
 
 export default function Playbooks() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const { data: playbooks, isLoading } = useQuery<ResponsePlaybook[]>({ queryKey: ["/api/playbooks"] });
@@ -33,7 +35,7 @@ export default function Playbooks() {
       queryClient.invalidateQueries({ queryKey: ["/api/playbooks"] });
       setShowAddDialog(false);
       form.reset();
-      toast({ title: "Playbook created" });
+      toast({ title: t("playbooks.playbookCreated") });
     },
   });
 
@@ -63,31 +65,31 @@ export default function Playbooks() {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold tracking-wider uppercase">Response Playbooks</h1>
-          <p className="text-xs text-muted-foreground">Automated incident response procedures</p>
+          <h1 className="text-lg font-bold tracking-wider uppercase">{t("playbooks.title")}</h1>
+          <p className="text-xs text-muted-foreground">{t("playbooks.subtitle")}</p>
         </div>
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
           <DialogTrigger asChild>
-            <Button size="sm" data-testid="button-add-playbook"><Plus className="w-4 h-4 mr-1" />New Playbook</Button>
+            <Button size="sm" data-testid="button-add-playbook"><Plus className="w-4 h-4 me-1" />{t("playbooks.newPlaybook")}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>Create Playbook</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{t("playbooks.createPlaybook")}</DialogTitle></DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit((d) => addMutation.mutate(d))} className="space-y-3">
                 <FormField control={form.control} name="name" render={({ field }) => (
-                  <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} data-testid="input-playbook-name" /></FormControl></FormItem>
+                  <FormItem><FormLabel>{t("common.name")}</FormLabel><FormControl><Input {...field} data-testid="input-playbook-name" /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="description" render={({ field }) => (
-                  <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} rows={2} data-testid="input-playbook-description" /></FormControl></FormItem>
+                  <FormItem><FormLabel>{t("common.description")}</FormLabel><FormControl><Textarea {...field} rows={2} data-testid="input-playbook-description" /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="triggerConditions" render={({ field }) => (
-                  <FormItem><FormLabel>Trigger Conditions</FormLabel><FormControl><Input {...field} placeholder="e.g. severity=critical AND eventType=malware" data-testid="input-playbook-trigger" /></FormControl></FormItem>
+                  <FormItem><FormLabel>{t("playbooks.triggerConditions")}</FormLabel><FormControl><Input {...field} placeholder={t("playbooks.triggerPlaceholder")} data-testid="input-playbook-trigger" /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="actions" render={({ field }) => (
-                  <FormItem><FormLabel>Actions (comma-separated)</FormLabel><FormControl><Input {...field} placeholder="e.g. isolate_host,block_ip,notify_team" data-testid="input-playbook-actions" /></FormControl></FormItem>
+                  <FormItem><FormLabel>{t("playbooks.actionsLabel")}</FormLabel><FormControl><Input {...field} placeholder={t("playbooks.actionsPlaceholder")} data-testid="input-playbook-actions" /></FormControl></FormItem>
                 )} />
                 <Button type="submit" className="w-full" disabled={addMutation.isPending} data-testid="button-submit-playbook">
-                  {addMutation.isPending ? "Creating..." : "Create Playbook"}
+                  {addMutation.isPending ? t("common.creating") : t("playbooks.createPlaybook")}
                 </Button>
               </form>
             </Form>
@@ -97,15 +99,15 @@ export default function Playbooks() {
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Total Playbooks</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("playbooks.totalPlaybooks")}</span>
           <p className="text-2xl font-bold font-mono mt-1" data-testid="stat-total-playbooks">{playbooks?.length || 0}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Active</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("playbooks.active")}</span>
           <p className="text-2xl font-bold font-mono text-status-online mt-1" data-testid="stat-active-playbooks">{enabledCount}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Disabled</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("playbooks.disabled")}</span>
           <p className="text-2xl font-bold font-mono text-muted-foreground mt-1" data-testid="stat-disabled-playbooks">{disabledCount}</p>
         </CardContent></Card>
       </div>
@@ -134,20 +136,20 @@ export default function Playbooks() {
             <CardContent>
               {playbook.triggerConditions && (
                 <div className="mb-2">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Trigger Conditions</span>
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{t("playbooks.triggerConditions")}</span>
                   <div className="mt-1 p-2 rounded bg-muted/50 font-mono text-[11px] text-foreground">
-                    <AlertTriangle className="w-3 h-3 inline mr-1 text-severity-medium" />
+                    <AlertTriangle className="w-3 h-3 inline me-1 text-severity-medium" />
                     {playbook.triggerConditions}
                   </div>
                 </div>
               )}
               {playbook.actions && (
                 <div>
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Response Actions</span>
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{t("playbooks.responseActions")}</span>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {playbook.actions.split(",").map((action, i) => (
                       <Badge key={i} variant="secondary" className="text-[10px] font-mono">
-                        <Zap className="w-3 h-3 mr-0.5" />{action.trim().replace(/_/g, " ")}
+                        <Zap className="w-3 h-3 me-0.5" />{action.trim().replace(/_/g, " ")}
                       </Badge>
                     ))}
                   </div>

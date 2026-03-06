@@ -11,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from "react-i18next";
 import { Monitor, Server, Shield, Wifi, HardDrive, Plus, AlertTriangle } from "lucide-react";
 import type { Asset } from "@shared/schema";
 import { useState } from "react";
@@ -87,6 +88,7 @@ function AssetNode({ asset }: { asset: Asset }) {
 }
 
 export default function NetworkMap() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const { data: assets, isLoading } = useQuery<Asset[]>({ queryKey: ["/api/assets"] });
@@ -104,7 +106,7 @@ export default function NetworkMap() {
       queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
       setShowAddDialog(false);
       form.reset();
-      toast({ title: "Asset added" });
+      toast({ title: t("networkMap.assetAdded") });
     },
   });
 
@@ -128,42 +130,42 @@ export default function NetworkMap() {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold tracking-wider uppercase">Network Map</h1>
-          <p className="text-xs text-muted-foreground">Asset inventory and risk assessment</p>
+          <h1 className="text-lg font-bold tracking-wider uppercase">{t("networkMap.title")}</h1>
+          <p className="text-xs text-muted-foreground">{t("networkMap.subtitle")}</p>
         </div>
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
           <DialogTrigger asChild>
-            <Button size="sm" data-testid="button-add-asset"><Plus className="w-4 h-4 mr-1" />Add Asset</Button>
+            <Button size="sm" data-testid="button-add-asset"><Plus className="w-4 h-4 me-1" />{t("networkMap.addAsset")}</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Add Asset</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{t("networkMap.addAssetDialog")}</DialogTitle></DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit((d) => addMutation.mutate({ ...d, riskScore: Number(d.riskScore) }))} className="space-y-3">
                 <FormField control={form.control} name="name" render={({ field }) => (
-                  <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} data-testid="input-asset-name" /></FormControl></FormItem>
+                  <FormItem><FormLabel>{t("common.name")}</FormLabel><FormControl><Input {...field} data-testid="input-asset-name" /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="type" render={({ field }) => (
-                  <FormItem><FormLabel>Type</FormLabel><FormControl>
+                  <FormItem><FormLabel>{t("common.type")}</FormLabel><FormControl>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <SelectTrigger data-testid="select-asset-type"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="server">Server</SelectItem>
-                        <SelectItem value="workstation">Workstation</SelectItem>
-                        <SelectItem value="firewall">Firewall</SelectItem>
-                        <SelectItem value="network">Network</SelectItem>
-                        <SelectItem value="appliance">Appliance</SelectItem>
+                        <SelectItem value="server">{t("networkMap.server")}</SelectItem>
+                        <SelectItem value="workstation">{t("networkMap.workstation")}</SelectItem>
+                        <SelectItem value="firewall">{t("networkMap.firewallType")}</SelectItem>
+                        <SelectItem value="network">{t("networkMap.network")}</SelectItem>
+                        <SelectItem value="appliance">{t("networkMap.appliance")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="ipAddress" render={({ field }) => (
-                  <FormItem><FormLabel>IP Address</FormLabel><FormControl><Input {...field} data-testid="input-asset-ip" /></FormControl></FormItem>
+                  <FormItem><FormLabel>{t("networkMap.ipAddress")}</FormLabel><FormControl><Input {...field} data-testid="input-asset-ip" /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="os" render={({ field }) => (
-                  <FormItem><FormLabel>OS</FormLabel><FormControl><Input {...field} data-testid="input-asset-os" /></FormControl></FormItem>
+                  <FormItem><FormLabel>{t("networkMap.os")}</FormLabel><FormControl><Input {...field} data-testid="input-asset-os" /></FormControl></FormItem>
                 )} />
                 <Button type="submit" className="w-full" disabled={addMutation.isPending} data-testid="button-submit-asset">
-                  {addMutation.isPending ? "Adding..." : "Add Asset"}
+                  {addMutation.isPending ? t("common.adding") : t("networkMap.addAsset")}
                 </Button>
               </form>
             </Form>
@@ -173,19 +175,19 @@ export default function NetworkMap() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Total Assets</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("networkMap.totalAssets")}</span>
           <p className="text-2xl font-bold font-mono mt-1" data-testid="stat-total-assets">{assets?.length || 0}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Online</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("networkMap.online")}</span>
           <p className="text-2xl font-bold font-mono text-status-online mt-1" data-testid="stat-online">{onlineCount}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Isolated</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("networkMap.isolated")}</span>
           <p className="text-2xl font-bold font-mono text-severity-critical mt-1" data-testid="stat-isolated">{isolatedCount}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Avg Risk</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("networkMap.avgRisk")}</span>
           <p className={`text-2xl font-bold font-mono mt-1 ${getRiskColor(avgRisk)}`} data-testid="stat-avg-risk">{avgRisk}</p>
         </CardContent></Card>
       </div>
@@ -194,7 +196,7 @@ export default function NetworkMap() {
         <Card className="border-severity-critical/30 bg-severity-critical/5">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-severity-critical" />High Risk Assets
+              <AlertTriangle className="w-4 h-4 text-severity-critical" />{t("networkMap.highRiskAssets")}
             </CardTitle>
           </CardHeader>
           <CardContent>

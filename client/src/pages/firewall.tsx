@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,13 +16,6 @@ import { Search, Plus, Shield, Trash2, ShieldOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { FirewallRule } from "@shared/schema";
 
-const ruleTypeLabels: Record<string, string> = {
-  ip_block: "IP Block",
-  domain_block: "Domain Block",
-  port_block: "Port Block",
-  cidr_block: "CIDR Block",
-};
-
 const ruleTypeBadgeClasses: Record<string, string> = {
   ip_block: "bg-severity-critical/20 text-severity-critical",
   domain_block: "bg-severity-high/20 text-severity-high",
@@ -30,7 +24,7 @@ const ruleTypeBadgeClasses: Record<string, string> = {
 };
 
 function formatDate(dateStr: string | null) {
-  if (!dateStr) return "Never";
+  if (!dateStr) return "";
   return new Date(dateStr).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
@@ -40,6 +34,7 @@ function formatDate(dateStr: string | null) {
 }
 
 export default function Firewall() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -54,17 +49,24 @@ export default function Firewall() {
     refetchInterval: 15000,
   });
 
+  const ruleTypeLabels: Record<string, string> = {
+    ip_block: t("firewall.ipBlock"),
+    domain_block: t("firewall.domainBlock"),
+    port_block: t("firewall.portBlock"),
+    cidr_block: t("firewall.cidrBlock"),
+  };
+
   const createRule = useMutation({
     mutationFn: async (body: { ruleType: string; value: string; action: string; reason?: string; expiresAt?: string }) => {
       await apiRequest("POST", "/api/firewall", body);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/firewall"] });
-      toast({ title: "Firewall rule created" });
+      toast({ title: t("firewall.ruleCreated") });
       resetDialog();
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to create rule", description: err.message, variant: "destructive" });
+      toast({ title: t("firewall.ruleCreateFailed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -74,10 +76,10 @@ export default function Firewall() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/firewall"] });
-      toast({ title: "Rule status updated" });
+      toast({ title: t("firewall.statusUpdated") });
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to update rule", description: err.message, variant: "destructive" });
+      toast({ title: t("firewall.statusUpdateFailed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -87,10 +89,10 @@ export default function Firewall() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/firewall"] });
-      toast({ title: "Firewall rule deleted" });
+      toast({ title: t("firewall.ruleDeleted") });
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to delete rule", description: err.message, variant: "destructive" });
+      toast({ title: t("firewall.ruleDeleteFailed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -104,7 +106,7 @@ export default function Firewall() {
 
   function handleCreateRule() {
     if (!newValue.trim()) {
-      toast({ title: "Value is required", variant: "destructive" });
+      toast({ title: t("firewall.valueRequired"), variant: "destructive" });
       return;
     }
     const body: { ruleType: string; value: string; action: string; reason?: string; expiresAt?: string } = {
@@ -141,18 +143,18 @@ export default function Firewall() {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
           <Shield className="w-5 h-5 text-muted-foreground" />
-          <h1 className="text-lg font-semibold tracking-wider uppercase">Firewall Rules</h1>
+          <h1 className="text-lg font-semibold tracking-wider uppercase">{t("firewall.title")}</h1>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="secondary" className="font-mono text-xs" data-testid="text-rule-count">
-            {filtered.length} rules
+            {filtered.length} {t("common.rules")}
           </Badge>
           <Button
             onClick={() => setDialogOpen(true)}
             data-testid="button-add-rule"
           >
-            <Plus className="w-4 h-4 mr-1" />
-            Add Rule
+            <Plus className="w-4 h-4 me-1" />
+            {t("firewall.addRule")}
           </Button>
         </div>
       </div>
@@ -161,7 +163,7 @@ export default function Firewall() {
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search rules..."
+            placeholder={t("firewall.searchRules")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -170,14 +172,14 @@ export default function Firewall() {
         </div>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-[160px]" data-testid="select-type-filter">
-            <SelectValue placeholder="Rule Type" />
+            <SelectValue placeholder={t("firewall.ruleType")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="ip_block">IP Block</SelectItem>
-            <SelectItem value="domain_block">Domain Block</SelectItem>
-            <SelectItem value="port_block">Port Block</SelectItem>
-            <SelectItem value="cidr_block">CIDR Block</SelectItem>
+            <SelectItem value="all">{t("firewall.allTypes")}</SelectItem>
+            <SelectItem value="ip_block">{t("firewall.ipBlock")}</SelectItem>
+            <SelectItem value="domain_block">{t("firewall.domainBlock")}</SelectItem>
+            <SelectItem value="port_block">{t("firewall.portBlock")}</SelectItem>
+            <SelectItem value="cidr_block">{t("firewall.cidrBlock")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -187,19 +189,19 @@ export default function Firewall() {
           <ScrollArea className="h-[calc(100vh-230px)]">
             <div className="min-w-[600px]">
               <div className="grid grid-cols-[1fr_100px_80px_120px_120px_80px_60px] gap-2 px-4 py-2 border-b text-[10px] text-muted-foreground uppercase tracking-wider font-medium sticky top-0 bg-card z-10">
-                <span>Value</span>
-                <span>Type</span>
-                <span>Action</span>
-                <span>Reason</span>
-                <span>Expires</span>
-                <span>Status</span>
-                <span>Actions</span>
+                <span>{t("common.value")}</span>
+                <span>{t("common.type")}</span>
+                <span>{t("common.action")}</span>
+                <span>{t("firewall.reason")}</span>
+                <span>{t("firewall.expires")}</span>
+                <span>{t("common.status")}</span>
+                <span>{t("common.actions")}</span>
               </div>
               {filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-muted-foreground" data-testid="text-empty-state">
                   <ShieldOff className="w-10 h-10 mb-3 opacity-40" />
-                  <p className="text-sm font-medium tracking-wider uppercase">No Firewall Rules</p>
-                  <p className="text-xs mt-1">Add a rule to begin protecting your network perimeter</p>
+                  <p className="text-sm font-medium tracking-wider uppercase">{t("firewall.noRules")}</p>
+                  <p className="text-xs mt-1">{t("firewall.noRulesDescription")}</p>
                 </div>
               ) : (
                 filtered.map((rule) => (
@@ -217,7 +219,7 @@ export default function Firewall() {
                     <span className="text-[10px] text-muted-foreground uppercase font-mono">{rule.action}</span>
                     <span className="text-[10px] text-muted-foreground truncate">{rule.reason || "—"}</span>
                     <span className="text-[10px] text-muted-foreground font-mono">
-                      {formatDate(rule.expiresAt as unknown as string | null)}
+                      {formatDate(rule.expiresAt as unknown as string | null) || t("common.never")}
                     </span>
                     <div className="flex items-center gap-1.5">
                       <Switch
@@ -228,7 +230,7 @@ export default function Firewall() {
                         data-testid={`switch-toggle-rule-${rule.id}`}
                       />
                       <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
-                        {rule.status === "active" ? "On" : "Off"}
+                        {rule.status === "active" ? t("common.on") : t("common.off")}
                       </span>
                     </div>
                     <Button
@@ -250,25 +252,25 @@ export default function Firewall() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-sm tracking-wider uppercase">Add Firewall Rule</DialogTitle>
+            <DialogTitle className="text-sm tracking-wider uppercase">{t("firewall.addFirewallRule")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Rule Type</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">{t("firewall.ruleType")}</Label>
               <Select value={newRuleType} onValueChange={setNewRuleType}>
                 <SelectTrigger data-testid="select-new-rule-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ip_block">IP Block</SelectItem>
-                  <SelectItem value="domain_block">Domain Block</SelectItem>
-                  <SelectItem value="port_block">Port Block</SelectItem>
-                  <SelectItem value="cidr_block">CIDR Block</SelectItem>
+                  <SelectItem value="ip_block">{t("firewall.ipBlock")}</SelectItem>
+                  <SelectItem value="domain_block">{t("firewall.domainBlock")}</SelectItem>
+                  <SelectItem value="port_block">{t("firewall.portBlock")}</SelectItem>
+                  <SelectItem value="cidr_block">{t("firewall.cidrBlock")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Value</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">{t("common.value")}</Label>
               <Input
                 placeholder={
                   newRuleType === "ip_block" ? "192.168.1.100" :
@@ -282,16 +284,16 @@ export default function Firewall() {
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Reason (Optional)</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">{t("firewall.reasonOptional")}</Label>
               <Input
-                placeholder="Suspicious activity detected..."
+                placeholder={t("firewall.reasonPlaceholder")}
                 value={newReason}
                 onChange={(e) => setNewReason(e.target.value)}
                 data-testid="input-new-rule-reason"
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Expiration (Optional)</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">{t("firewall.expirationOptional")}</Label>
               <Input
                 type="datetime-local"
                 value={newExpiration}
@@ -302,14 +304,14 @@ export default function Firewall() {
           </div>
           <DialogFooter>
             <Button variant="secondary" onClick={resetDialog} data-testid="button-cancel-add-rule">
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               onClick={handleCreateRule}
               disabled={createRule.isPending}
               data-testid="button-submit-add-rule"
             >
-              {createRule.isPending ? "Creating..." : "Create Rule"}
+              {createRule.isPending ? t("common.creating") : t("firewall.createRule")}
             </Button>
           </DialogFooter>
         </DialogContent>

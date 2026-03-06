@@ -9,6 +9,7 @@ Military-grade multi-tenant SaaS SOC platform with real-time threat monitoring, 
 - **Database**: PostgreSQL via Drizzle ORM
 - **AI**: OpenAI via Replit AI Integrations (gpt-4o-mini)
 - **Payments**: Stripe via Replit connector (stripe-replit-sync)
+- **i18n**: i18next + react-i18next (English + Arabic with RTL support)
 - **Fonts**: Space Grotesk (sans), JetBrains Mono (mono)
 
 ## Architecture
@@ -29,9 +30,12 @@ server/webhookHandlers.ts - Stripe webhook processing
 server/seed-products.ts   - Creates 3 Stripe pricing tiers
 server/db.ts              - Drizzle + pg pool setup
 server/replit_integrations/chat/storage.ts - Chat CRUD
-client/src/App.tsx         - Layout with sidebar, auth, notification bell, 17 routes
-client/src/pages/          - 17 pages (see below)
-client/src/components/     - AppSidebar (5 nav groups), Logo, NotificationBell, ThemeProvider, shadcn
+client/src/i18n/index.ts   - i18next init (EN/AR, localStorage persistence, RTL dir toggling)
+client/src/i18n/en.json    - English translations (~200+ keys, organized by page namespace)
+client/src/i18n/ar.json    - Arabic translations (matching en.json structure)
+client/src/App.tsx         - Layout with sidebar, auth, notification bell, language switcher, 17 routes
+client/src/pages/          - 17 pages (see below), all translated with useTranslation()
+client/src/components/     - AppSidebar, Logo, NotificationBell, LanguageSwitcher, ThemeProvider, shadcn
 client/src/hooks/          - use-auth, use-toast, use-mobile
 ```
 
@@ -111,6 +115,16 @@ client/src/hooks/          - use-auth, use-toast, use-mobile
 - RESPOND: Incidents, Quarantine, Playbooks, Firewall, Policies
 - INTEL: Threat Intel, Network Map, Forensics
 - ADMIN: Settings, Billing, Super Admin (super admin only)
+
+## Internationalization (i18n)
+- Languages: English (default), Arabic (RTL)
+- Library: i18next + react-i18next
+- Translation files: `client/src/i18n/en.json` and `client/src/i18n/ar.json`
+- Language preference persisted to localStorage key `aegis-lang`
+- RTL: `dir` and `lang` attributes set on `<html>` element dynamically
+- Language switcher in header (authenticated) and auth page (unauthenticated)
+- All 19 pages and core components (sidebar, notification bell) fully translated
+- CSS uses logical properties (me/ms/start/end/border-e) for RTL compatibility
 
 ## Environment Variables
 - `DATABASE_URL` - PostgreSQL connection

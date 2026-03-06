@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ export default function Alerts() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedEvent, setSelectedEvent] = useState<SecurityEvent | null>(null);
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   const { data: events, isLoading } = useQuery<SecurityEvent[]>({
     queryKey: ["/api/security-events"],
@@ -56,7 +58,7 @@ export default function Alerts() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
-      toast({ title: "Event status updated" });
+      toast({ title: t("alerts.statusUpdated") });
     },
   });
 
@@ -68,10 +70,10 @@ export default function Alerts() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
       queryClient.invalidateQueries({ queryKey: ["/api/firewall"] });
-      toast({ title: "IP Blocked", description: `${data.mitigatedCount || 0} events mitigated.` });
+      toast({ title: t("alerts.ipBlocked"), description: t("alerts.eventsMitigated", { count: data.mitigatedCount || 0 }) });
     },
     onError: (err: Error) => {
-      toast({ title: "Block failed", description: err.message, variant: "destructive" });
+      toast({ title: t("alerts.blockFailed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -83,10 +85,10 @@ export default function Alerts() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
       queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
-      toast({ title: "Incident created from event" });
+      toast({ title: t("alerts.incidentCreated") });
     },
     onError: (err: Error) => {
-      toast({ title: "Failed", description: err.message, variant: "destructive" });
+      toast({ title: t("alerts.failed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -113,15 +115,15 @@ export default function Alerts() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h1 className="text-lg font-semibold tracking-wide">Security Events</h1>
-        <Badge variant="secondary" className="font-mono text-xs">{filtered.length} events</Badge>
+        <h1 className="text-lg font-semibold tracking-wide">{t("alerts.title")}</h1>
+        <Badge variant="secondary" className="font-mono text-xs">{filtered.length} {t("common.events")}</Badge>
       </div>
 
       <div className="flex gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search events..."
+            placeholder={t("alerts.searchEvents")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -130,28 +132,28 @@ export default function Alerts() {
         </div>
         <Select value={severityFilter} onValueChange={setSeverityFilter}>
           <SelectTrigger className="w-[140px]" data-testid="select-severity-filter">
-            <Filter className="w-3 h-3 mr-1" />
-            <SelectValue placeholder="Severity" />
+            <Filter className="w-3 h-3 me-1" />
+            <SelectValue placeholder={t("common.severity")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Severity</SelectItem>
-            <SelectItem value="critical">Critical</SelectItem>
-            <SelectItem value="high">High</SelectItem>
-            <SelectItem value="medium">Medium</SelectItem>
-            <SelectItem value="low">Low</SelectItem>
-            <SelectItem value="info">Info</SelectItem>
+            <SelectItem value="all">{t("alerts.allSeverity")}</SelectItem>
+            <SelectItem value="critical">{t("common.critical")}</SelectItem>
+            <SelectItem value="high">{t("common.high")}</SelectItem>
+            <SelectItem value="medium">{t("common.medium")}</SelectItem>
+            <SelectItem value="low">{t("common.low")}</SelectItem>
+            <SelectItem value="info">{t("common.info")}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[140px]" data-testid="select-status-filter">
-            <SelectValue placeholder="Status" />
+            <SelectValue placeholder={t("common.status")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="new">New</SelectItem>
-            <SelectItem value="investigating">Investigating</SelectItem>
-            <SelectItem value="resolved">Resolved</SelectItem>
-            <SelectItem value="dismissed">Dismissed</SelectItem>
+            <SelectItem value="all">{t("alerts.allStatus")}</SelectItem>
+            <SelectItem value="new">{t("alerts.new")}</SelectItem>
+            <SelectItem value="investigating">{t("alerts.investigating")}</SelectItem>
+            <SelectItem value="resolved">{t("alerts.resolved")}</SelectItem>
+            <SelectItem value="dismissed">{t("alerts.dismissed")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -161,15 +163,15 @@ export default function Alerts() {
           <ScrollArea className="h-[calc(100vh-230px)]">
             <div className="min-w-[600px]">
               <div className="grid grid-cols-[1fr_100px_120px_100px_80px_80px] gap-2 px-4 py-2 border-b text-[10px] text-muted-foreground uppercase tracking-wider font-medium sticky top-0 bg-card z-10">
-                <span>Description</span>
-                <span>Type</span>
-                <span>Source</span>
-                <span>Severity</span>
-                <span>Status</span>
-                <span>Time</span>
+                <span>{t("alerts.columnDescription")}</span>
+                <span>{t("alerts.columnType")}</span>
+                <span>{t("alerts.columnSource")}</span>
+                <span>{t("alerts.columnSeverity")}</span>
+                <span>{t("alerts.columnStatus")}</span>
+                <span>{t("alerts.columnTime")}</span>
               </div>
               {filtered.length === 0 ? (
-                <div className="text-center text-sm text-muted-foreground py-12">No events found</div>
+                <div className="text-center text-sm text-muted-foreground py-12">{t("alerts.noEventsFound")}</div>
               ) : (
                 filtered.map((event) => (
                   <div
@@ -181,7 +183,7 @@ export default function Alerts() {
                     <div className="min-w-0">
                       <p className="text-xs truncate">{event.description}</p>
                       <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                        {event.sourceIp || "N/A"} {event.destinationIp ? `→ ${event.destinationIp}` : ""}
+                        {event.sourceIp || t("common.noData")} {event.destinationIp ? `→ ${event.destinationIp}` : ""}
                       </p>
                     </div>
                     <span className="text-[10px] text-muted-foreground capitalize font-mono">{event.eventType.replace(/_/g, " ")}</span>
@@ -208,7 +210,7 @@ export default function Alerts() {
           {selectedEvent && (
             <>
               <SheetHeader>
-                <SheetTitle className="text-sm tracking-wider uppercase">Event Details</SheetTitle>
+                <SheetTitle className="text-sm tracking-wider uppercase">{t("alerts.eventDetails")}</SheetTitle>
               </SheetHeader>
               <div className="space-y-4 mt-4">
                 <div className="flex gap-2 flex-wrap">
@@ -221,13 +223,13 @@ export default function Alerts() {
                 </div>
                 <p className="text-sm">{selectedEvent.description}</p>
                 <div className="space-y-3">
-                  <DetailRow icon={Server} label="Event Type" value={selectedEvent.eventType.replace(/_/g, " ")} />
-                  <DetailRow icon={Globe} label="Source IP" value={selectedEvent.sourceIp || "N/A"} />
-                  <DetailRow icon={ArrowRight} label="Dest IP" value={selectedEvent.destinationIp || "N/A"} />
-                  <DetailRow icon={Server} label="Port" value={selectedEvent.port?.toString() || "N/A"} />
-                  <DetailRow icon={Server} label="Protocol" value={selectedEvent.protocol || "N/A"} />
-                  <DetailRow icon={Server} label="Source" value={selectedEvent.source} />
-                  <DetailRow icon={Clock} label="Time" value={formatDate(selectedEvent.createdAt as unknown as string)} />
+                  <DetailRow icon={Server} label={t("alerts.eventType")} value={selectedEvent.eventType.replace(/_/g, " ")} />
+                  <DetailRow icon={Globe} label={t("alerts.sourceIp")} value={selectedEvent.sourceIp || t("common.noData")} />
+                  <DetailRow icon={ArrowRight} label={t("alerts.destIp")} value={selectedEvent.destinationIp || t("common.noData")} />
+                  <DetailRow icon={Server} label={t("alerts.port")} value={selectedEvent.port?.toString() || t("common.noData")} />
+                  <DetailRow icon={Server} label={t("alerts.protocol")} value={selectedEvent.protocol || t("common.noData")} />
+                  <DetailRow icon={Server} label={t("common.source")} value={selectedEvent.source} />
+                  <DetailRow icon={Clock} label={t("common.time")} value={formatDate(selectedEvent.createdAt as unknown as string)} />
                 </div>
                 <div className="flex gap-2 mt-6 flex-wrap">
                   {selectedEvent.status === "new" && (
@@ -239,7 +241,7 @@ export default function Alerts() {
                       }}
                       data-testid="button-investigate-event"
                     >
-                      Investigate
+                      {t("alerts.investigate")}
                     </Button>
                   )}
                   {selectedEvent.status !== "resolved" && (
@@ -252,7 +254,7 @@ export default function Alerts() {
                       }}
                       data-testid="button-resolve-event"
                     >
-                      Resolve
+                      {t("alerts.resolve")}
                     </Button>
                   )}
                   {selectedEvent.status !== "dismissed" && (
@@ -265,40 +267,40 @@ export default function Alerts() {
                       }}
                       data-testid="button-dismiss-event"
                     >
-                      Dismiss
+                      {t("alerts.dismiss")}
                     </Button>
                   )}
                 </div>
                 <div className="border-t pt-4 mt-4 space-y-2">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Response Actions</p>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{t("alerts.responseActions")}</p>
                   <div className="flex gap-2 flex-wrap">
                     {selectedEvent.sourceIp && (
                       <Button
                         size="sm"
                         variant="destructive"
                         onClick={() => {
-                          if (!window.confirm(`Block IP ${selectedEvent.sourceIp}? This will create a firewall rule.`)) return;
+                          if (!window.confirm(t("alerts.blockIpConfirm", { ip: selectedEvent.sourceIp }))) return;
                           blockIp.mutate({ ip: selectedEvent.sourceIp!, reason: `Blocked from event: ${selectedEvent.description.slice(0, 80)}` });
                         }}
                         disabled={blockIp.isPending}
                         data-testid="button-block-ip"
                       >
-                        {blockIp.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <ShieldBan className="w-3 h-3 mr-1" />}
-                        Block Source IP
+                        {blockIp.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <ShieldBan className="w-3 h-3 me-1" />}
+                        {t("alerts.blockSourceIp")}
                       </Button>
                     )}
                     <Button
                       size="sm"
                       variant="secondary"
                       onClick={() => {
-                        if (!window.confirm("Create an incident from this event?")) return;
+                        if (!window.confirm(t("alerts.createIncidentConfirm"))) return;
                         createIncidentFromEvent.mutate({ eventId: selectedEvent.id });
                       }}
                       disabled={createIncidentFromEvent.isPending}
                       data-testid="button-create-incident-from-event"
                     >
-                      {createIncidentFromEvent.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <AlertTriangle className="w-3 h-3 mr-1" />}
-                      Create Incident
+                      {createIncidentFromEvent.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <AlertTriangle className="w-3 h-3 me-1" />}
+                      {t("alerts.createIncident")}
                     </Button>
                   </div>
                 </div>

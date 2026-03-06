@@ -11,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useTranslation } from "react-i18next";
 import { Building2, Users, UserPlus, Copy, Shield, Settings as SettingsIcon } from "lucide-react";
 import type { Organization, Invite } from "@shared/schema";
 import { useState } from "react";
@@ -23,6 +24,7 @@ const roleColors: Record<string, string> = {
 };
 
 export default function SettingsPage() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -42,7 +44,7 @@ export default function SettingsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/organization"] });
-      toast({ title: "Organization updated" });
+      toast({ title: t("settings.orgUpdated") });
     },
   });
 
@@ -56,7 +58,7 @@ export default function SettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/invites"] });
       inviteForm.reset();
-      toast({ title: "Invite created" });
+      toast({ title: t("settings.inviteCreated") });
     },
   });
 
@@ -67,7 +69,7 @@ export default function SettingsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/organization/users"] });
-      toast({ title: "Role updated" });
+      toast({ title: t("settings.roleUpdated") });
     },
   });
 
@@ -75,7 +77,7 @@ export default function SettingsPage() {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 2000);
-    toast({ title: "Invite code copied" });
+    toast({ title: t("settings.inviteCodeCopied") });
   };
 
   if (orgLoading) {
@@ -90,29 +92,29 @@ export default function SettingsPage() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div>
-        <h1 className="text-lg font-bold tracking-wider uppercase">Organization Settings</h1>
-        <p className="text-xs text-muted-foreground">Manage your organization, team members, and invitations</p>
+        <h1 className="text-lg font-bold tracking-wider uppercase">{t("settings.title")}</h1>
+        <p className="text-xs text-muted-foreground">{t("settings.subtitle")}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-primary" />Organization Details
+              <Building2 className="w-4 h-4 text-primary" />{t("settings.orgDetails")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Plan</span>
+                <span className="text-xs text-muted-foreground">{t("settings.plan")}</span>
                 <Badge variant="secondary" className="text-xs capitalize" data-testid="text-org-plan">{org?.plan}</Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Max Users</span>
+                <span className="text-xs text-muted-foreground">{t("settings.maxUsers")}</span>
                 <span className="text-xs font-mono" data-testid="text-max-users">{org?.maxUsers}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Current Users</span>
+                <span className="text-xs text-muted-foreground">{t("settings.currentUsers")}</span>
                 <span className="text-xs font-mono" data-testid="text-current-users">{orgUsers?.length || 0}</span>
               </div>
               {isAdmin && (
@@ -120,10 +122,10 @@ export default function SettingsPage() {
                   <form onSubmit={orgForm.handleSubmit((d) => updateOrgMutation.mutate(d))} className="flex gap-2 mt-3">
                     <FormField control={orgForm.control} name="name" render={({ field }) => (
                       <FormItem className="flex-1"><FormControl>
-                        <Input {...field} placeholder="Organization name" defaultValue={org?.name} data-testid="input-org-name" />
+                        <Input {...field} placeholder={t("settings.orgName")} defaultValue={org?.name} data-testid="input-org-name" />
                       </FormControl></FormItem>
                     )} />
-                    <Button type="submit" size="sm" disabled={updateOrgMutation.isPending} data-testid="button-update-org">Save</Button>
+                    <Button type="submit" size="sm" disabled={updateOrgMutation.isPending} data-testid="button-update-org">{t("common.save")}</Button>
                   </form>
                 </Form>
               )}
@@ -135,32 +137,32 @@ export default function SettingsPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-primary" />Invite Team Member
+                <UserPlus className="w-4 h-4 text-primary" />{t("settings.inviteTeamMember")}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <Form {...inviteForm}>
                 <form onSubmit={inviteForm.handleSubmit((d) => createInviteMutation.mutate(d))} className="space-y-3">
                   <FormField control={inviteForm.control} name="email" render={({ field }) => (
-                    <FormItem><FormLabel>Email (optional)</FormLabel><FormControl>
-                      <Input {...field} placeholder="user@example.com" data-testid="input-invite-email" />
+                    <FormItem><FormLabel>{t("settings.emailOptional")}</FormLabel><FormControl>
+                      <Input {...field} placeholder={t("settings.emailPlaceholder")} data-testid="input-invite-email" />
                     </FormControl></FormItem>
                   )} />
                   <FormField control={inviteForm.control} name="role" render={({ field }) => (
-                    <FormItem><FormLabel>Role</FormLabel><FormControl>
+                    <FormItem><FormLabel>{t("settings.role")}</FormLabel><FormControl>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <SelectTrigger data-testid="select-invite-role"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="analyst">Analyst</SelectItem>
-                          <SelectItem value="auditor">Auditor</SelectItem>
-                          <SelectItem value="readonly">Read Only</SelectItem>
+                          <SelectItem value="admin">{t("settings.admin")}</SelectItem>
+                          <SelectItem value="analyst">{t("settings.analyst")}</SelectItem>
+                          <SelectItem value="auditor">{t("settings.auditor")}</SelectItem>
+                          <SelectItem value="readonly">{t("settings.readOnly")}</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormControl></FormItem>
                   )} />
                   <Button type="submit" className="w-full" disabled={createInviteMutation.isPending} data-testid="button-create-invite">
-                    {createInviteMutation.isPending ? "Creating..." : "Generate Invite Code"}
+                    {createInviteMutation.isPending ? t("common.creating") : t("settings.generateInvite")}
                   </Button>
                 </form>
               </Form>
@@ -172,16 +174,16 @@ export default function SettingsPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-            <Users className="w-4 h-4 text-primary" />Team Members
+            <Users className="w-4 h-4 text-primary" />{t("settings.teamMembers")}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-[10px] uppercase tracking-wider">Username</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-wider">Role</TableHead>
-                {isAdmin && <TableHead className="text-[10px] uppercase tracking-wider">Actions</TableHead>}
+                <TableHead className="text-[10px] uppercase tracking-wider">{t("settings.username")}</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">{t("settings.role")}</TableHead>
+                {isAdmin && <TableHead className="text-[10px] uppercase tracking-wider">{t("common.actions")}</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -189,7 +191,7 @@ export default function SettingsPage() {
                 <TableRow key={u.id} data-testid={`user-row-${u.id}`}>
                   <TableCell>
                     <span className="text-xs font-mono" data-testid={`user-name-${u.id}`}>{u.username}</span>
-                    {u.id === user?.id && <Badge variant="secondary" className="ml-2 text-[10px]">You</Badge>}
+                    {u.id === user?.id && <Badge variant="secondary" className="ms-2 text-[10px]">{t("common.you")}</Badge>}
                   </TableCell>
                   <TableCell>
                     <Badge className={`text-[10px] ${roleColors[u.role] || roleColors.readonly}`}>{u.role}</Badge>
@@ -205,10 +207,10 @@ export default function SettingsPage() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="admin">Admin</SelectItem>
-                            <SelectItem value="analyst">Analyst</SelectItem>
-                            <SelectItem value="auditor">Auditor</SelectItem>
-                            <SelectItem value="readonly">Read Only</SelectItem>
+                            <SelectItem value="admin">{t("settings.admin")}</SelectItem>
+                            <SelectItem value="analyst">{t("settings.analyst")}</SelectItem>
+                            <SelectItem value="auditor">{t("settings.auditor")}</SelectItem>
+                            <SelectItem value="readonly">{t("settings.readOnly")}</SelectItem>
                           </SelectContent>
                         </Select>
                       )}
@@ -225,18 +227,18 @@ export default function SettingsPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-              <Shield className="w-4 h-4 text-primary" />Active Invites
+              <Shield className="w-4 h-4 text-primary" />{t("settings.activeInvites")}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-[10px] uppercase tracking-wider">Code</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-wider">Role</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-wider">Status</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-wider">Expires</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-wider">Actions</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">{t("settings.code")}</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">{t("settings.role")}</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">{t("common.status")}</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">{t("settings.expires")}</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -250,7 +252,7 @@ export default function SettingsPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={invite.used ? "secondary" : "default"} className="text-[10px]">
-                        {invite.used ? "Used" : "Pending"}
+                        {invite.used ? t("common.used") : t("common.pending")}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -267,8 +269,8 @@ export default function SettingsPage() {
                           onClick={() => copyInviteCode(invite.code)}
                           data-testid={`button-copy-invite-${invite.id}`}
                         >
-                          <Copy className="w-3 h-3 mr-1" />
-                          {copiedCode === invite.code ? "Copied!" : "Copy"}
+                          <Copy className="w-3 h-3 me-1" />
+                          {copiedCode === invite.code ? t("common.copied") : t("common.copy")}
                         </Button>
                       )}
                     </TableCell>

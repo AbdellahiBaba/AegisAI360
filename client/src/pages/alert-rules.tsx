@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,7 @@ interface ConditionRow {
 }
 
 function formatDate(dateStr: string | null) {
-  if (!dateStr) return "Never";
+  if (!dateStr) return "";
   return new Date(dateStr).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
@@ -55,7 +56,7 @@ function parseConditions(conditionsStr: string): ConditionRow[] {
 
 function summarizeConditions(conditionsStr: string): string {
   const conditions = parseConditions(conditionsStr);
-  if (conditions.length === 0) return "No conditions";
+  if (conditions.length === 0) return "";
   return conditions
     .map((c) => `${c.field} ${c.operator} "${c.value}"`)
     .join(" AND ");
@@ -72,6 +73,7 @@ function parseActions(actionsStr: string): string[] {
 }
 
 export default function AlertRules() {
+  const { t } = useTranslation();
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const [severity, setSeverity] = useState("medium");
@@ -80,6 +82,12 @@ export default function AlertRules() {
   ]);
   const [selectedActions, setSelectedActions] = useState<string[]>([]);
   const { toast } = useToast();
+
+  const actionTypeLabels: Record<string, string> = {
+    create_incident: t("alertRules.createIncidentAction"),
+    notify: t("alertRules.notifyAction"),
+    block_source: t("alertRules.blockSourceAction"),
+  };
 
   const { data: rules, isLoading } = useQuery<AlertRule[]>({
     queryKey: ["/api/alert-rules"],
@@ -98,12 +106,12 @@ export default function AlertRules() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/alert-rules"] });
-      toast({ title: "Alert rule created" });
+      toast({ title: t("alertRules.ruleCreated") });
       resetForm();
       setCreateOpen(false);
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to create rule", description: err.message, variant: "destructive" });
+      toast({ title: t("alertRules.ruleCreateFailed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -113,7 +121,7 @@ export default function AlertRules() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/alert-rules"] });
-      toast({ title: "Rule updated" });
+      toast({ title: t("alertRules.ruleUpdated") });
     },
   });
 
@@ -123,7 +131,7 @@ export default function AlertRules() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/alert-rules"] });
-      toast({ title: "Rule deleted" });
+      toast({ title: t("alertRules.ruleDeleted") });
     },
   });
 
@@ -169,15 +177,15 @@ export default function AlertRules() {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-lg font-semibold tracking-wide uppercase" data-testid="text-page-title">
-          Alert Rules
+          {t("alertRules.title")}
         </h1>
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="secondary" className="font-mono text-xs" data-testid="text-rules-count">
-            {rulesList.length} rules
+            {rulesList.length} {t("common.rules")}
           </Badge>
           <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="button-create-rule">
-            <Plus className="w-3 h-3 mr-1" />
-            CREATE RULE
+            <Plus className="w-3 h-3 me-1" />
+            {t("alertRules.createRule")}
           </Button>
         </div>
       </div>
@@ -187,19 +195,19 @@ export default function AlertRules() {
           <ScrollArea className="h-[calc(100vh-230px)]">
             <div className="min-w-[600px]">
               <div className="grid grid-cols-[1fr_90px_1fr_80px_100px_70px_50px] gap-2 px-4 py-2 border-b text-[10px] text-muted-foreground uppercase tracking-wider font-medium sticky top-0 bg-card z-10">
-                <span>NAME</span>
-                <span>SEVERITY</span>
-                <span>CONDITIONS</span>
-                <span>TRIGGERS</span>
-                <span>LAST TRIGGERED</span>
-                <span>STATUS</span>
+                <span>{t("common.name")}</span>
+                <span>{t("common.severity")}</span>
+                <span>{t("alertRules.conditions")}</span>
+                <span>{t("alertRules.triggers")}</span>
+                <span>{t("alertRules.lastTriggered")}</span>
+                <span>{t("common.status")}</span>
                 <span></span>
               </div>
               {rulesList.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-muted-foreground" data-testid="text-empty-state">
                   <AlertTriangle className="w-10 h-10 mb-3 opacity-40" />
-                  <p className="text-sm uppercase tracking-wider font-medium">No Alert Rules Configured</p>
-                  <p className="text-xs mt-1">Create your first rule to start automated threat detection</p>
+                  <p className="text-sm uppercase tracking-wider font-medium">{t("alertRules.noRulesConfigured")}</p>
+                  <p className="text-xs mt-1">{t("alertRules.noRulesDescription")}</p>
                 </div>
               ) : (
                 rulesList.map((rule) => (
@@ -215,7 +223,7 @@ export default function AlertRules() {
                       <div className="flex gap-1 mt-0.5 flex-wrap">
                         {parseActions(rule.actions).map((a) => (
                           <Badge key={a} variant="outline" className="text-[8px] uppercase">
-                            {a.replace(/_/g, " ")}
+                            {actionTypeLabels[a] || a.replace(/_/g, " ")}
                           </Badge>
                         ))}
                       </div>
@@ -227,7 +235,7 @@ export default function AlertRules() {
                       {rule.severity}
                     </Badge>
                     <p className="text-[10px] text-muted-foreground truncate font-mono" data-testid={`text-conditions-${rule.id}`}>
-                      {summarizeConditions(rule.conditions)}
+                      {summarizeConditions(rule.conditions) || t("alertRules.noConditions")}
                     </p>
                     <div className="flex items-center gap-1">
                       <Zap className="w-3 h-3 text-muted-foreground" />
@@ -238,7 +246,7 @@ export default function AlertRules() {
                     <div className="flex items-center gap-1">
                       <Clock className="w-3 h-3 text-muted-foreground" />
                       <span className="text-[10px] text-muted-foreground font-mono" data-testid={`text-last-triggered-${rule.id}`}>
-                        {formatDate(rule.lastTriggered as unknown as string | null)}
+                        {formatDate(rule.lastTriggered as unknown as string | null) || t("common.never")}
                       </span>
                     </div>
                     <Switch
@@ -267,41 +275,41 @@ export default function AlertRules() {
           <DialogHeader>
             <DialogTitle className="text-sm tracking-wider uppercase flex items-center gap-2">
               <Shield className="w-4 h-4" />
-              Create Alert Rule
+              {t("alertRules.createAlertRule")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="space-y-1">
-              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Rule Name</Label>
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("alertRules.ruleName")}</Label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Critical Brute Force Detection"
+                placeholder={t("alertRules.ruleNamePlaceholder")}
                 data-testid="input-rule-name"
               />
             </div>
 
             <div className="space-y-1">
-              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Severity</Label>
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("common.severity")}</Label>
               <Select value={severity} onValueChange={setSeverity}>
                 <SelectTrigger data-testid="select-rule-severity">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="critical">Critical</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="critical">{t("common.critical")}</SelectItem>
+                  <SelectItem value="high">{t("common.high")}</SelectItem>
+                  <SelectItem value="medium">{t("common.medium")}</SelectItem>
+                  <SelectItem value="low">{t("common.low")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Conditions</Label>
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("alertRules.conditions")}</Label>
                 <Button size="sm" variant="outline" onClick={addCondition} data-testid="button-add-condition">
-                  <Plus className="w-3 h-3 mr-1" />
-                  ADD
+                  <Plus className="w-3 h-3 me-1" />
+                  {t("alertRules.add")}
                 </Button>
               </div>
               {conditions.map((cond, i) => (
@@ -334,7 +342,7 @@ export default function AlertRules() {
                     className="flex-1 min-w-[100px]"
                     value={cond.value}
                     onChange={(e) => updateCondition(i, "value", e.target.value)}
-                    placeholder="Value"
+                    placeholder={t("common.value")}
                     data-testid={`input-condition-value-${i}`}
                   />
                   {conditions.length > 1 && (
@@ -352,7 +360,7 @@ export default function AlertRules() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Actions</Label>
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("alertRules.actionsLabel")}</Label>
               <div className="flex gap-4 flex-wrap">
                 {ACTION_TYPES.map((actionType) => (
                   <label key={actionType} className="flex items-center gap-2 cursor-pointer">
@@ -362,7 +370,7 @@ export default function AlertRules() {
                       data-testid={`checkbox-action-${actionType}`}
                     />
                     <span className="text-xs uppercase tracking-wider">
-                      {actionType.replace(/_/g, " ")}
+                      {actionTypeLabels[actionType] || actionType.replace(/_/g, " ")}
                     </span>
                   </label>
                 ))}
@@ -371,14 +379,14 @@ export default function AlertRules() {
           </div>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setCreateOpen(false)} data-testid="button-cancel-create">
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               onClick={() => createRule.mutate()}
               disabled={!name.trim() || conditions.some((c) => !c.value.trim()) || createRule.isPending}
               data-testid="button-submit-rule"
             >
-              {createRule.isPending ? "Creating..." : "CREATE RULE"}
+              {createRule.isPending ? t("common.creating") : t("alertRules.createRule")}
             </Button>
           </DialogFooter>
         </DialogContent>

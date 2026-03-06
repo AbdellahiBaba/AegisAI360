@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,14 +16,15 @@ import { Plus, Shield, Eye, Lock, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { SecurityPolicy } from "@shared/schema";
 
-const tierConfig: Record<string, { label: string; icon: React.ElementType; className: string }> = {
-  observe: { label: "Observe", icon: Eye, className: "bg-severity-info text-white" },
-  protect: { label: "Protect", icon: Shield, className: "bg-severity-low text-white" },
-  lockdown: { label: "Lockdown", icon: Lock, className: "bg-severity-high text-white" },
-  critical: { label: "Critical Infrastructure", icon: AlertTriangle, className: "bg-severity-critical text-white" },
+const tierConfig: Record<string, { labelKey: string; icon: React.ElementType; className: string }> = {
+  observe: { labelKey: "policies.observe", icon: Eye, className: "bg-severity-info text-white" },
+  protect: { labelKey: "policies.protect", icon: Shield, className: "bg-severity-low text-white" },
+  lockdown: { labelKey: "policies.lockdown", icon: Lock, className: "bg-severity-high text-white" },
+  critical: { labelKey: "policies.criticalInfra", icon: AlertTriangle, className: "bg-severity-critical text-white" },
 };
 
 export default function Policies() {
+  const { t } = useTranslation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -39,7 +41,7 @@ export default function Policies() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/security-policies"] });
-      toast({ title: "Policy created" });
+      toast({ title: t("policies.policyCreated") });
       setDialogOpen(false);
       setName("");
       setDescription("");
@@ -70,36 +72,36 @@ export default function Policies() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h1 className="text-lg font-semibold tracking-wide">Security Policies</h1>
+        <h1 className="text-lg font-semibold tracking-wide">{t("policies.title")}</h1>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm" data-testid="button-create-policy">
-              <Plus className="w-4 h-4 mr-1" />
-              New Policy
+              <Plus className="w-4 h-4 me-1" />
+              {t("policies.newPolicy")}
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create Security Policy</DialogTitle>
+              <DialogTitle>{t("policies.createPolicy")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 mt-2">
               <div className="space-y-2">
-                <Label>Policy Name</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Block Unsigned Binaries" data-testid="input-policy-name" />
+                <Label>{t("policies.policyName")}</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("policies.policyNamePlaceholder")} data-testid="input-policy-name" />
               </div>
               <div className="space-y-2">
-                <Label>Description</Label>
-                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the policy..." data-testid="input-policy-description" />
+                <Label>{t("common.description")}</Label>
+                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("policies.descriptionPlaceholder")} data-testid="input-policy-description" />
               </div>
               <div className="space-y-2">
-                <Label>Policy Tier</Label>
+                <Label>{t("policies.policyTier")}</Label>
                 <Select value={tier} onValueChange={setTier}>
                   <SelectTrigger data-testid="select-policy-tier"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="observe">Observe</SelectItem>
-                    <SelectItem value="protect">Protect</SelectItem>
-                    <SelectItem value="lockdown">Lockdown</SelectItem>
-                    <SelectItem value="critical">Critical Infrastructure</SelectItem>
+                    <SelectItem value="observe">{t("policies.observe")}</SelectItem>
+                    <SelectItem value="protect">{t("policies.protect")}</SelectItem>
+                    <SelectItem value="lockdown">{t("policies.lockdown")}</SelectItem>
+                    <SelectItem value="critical">{t("policies.criticalInfra")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -109,7 +111,7 @@ export default function Policies() {
                 className="w-full"
                 data-testid="button-submit-policy"
               >
-                {createPolicy.isPending ? "Creating..." : "Create Policy"}
+                {createPolicy.isPending ? t("common.creating") : t("policies.createPolicy")}
               </Button>
             </div>
           </DialogContent>
@@ -119,7 +121,7 @@ export default function Policies() {
       {(policies?.length ?? 0) === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            No policies configured. Create one to get started.
+            {t("policies.noPolicies")}
           </CardContent>
         </Card>
       ) : (
@@ -147,7 +149,7 @@ export default function Policies() {
                 <CardContent>
                   <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{policy.description}</p>
                   <Badge className={`${config.className} text-[9px] uppercase`}>
-                    {config.label}
+                    {t(config.labelKey)}
                   </Badge>
                 </CardContent>
               </Card>

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
+import { useTranslation } from "react-i18next";
 import { CreditCard, Zap, Shield, Crown, Check, ExternalLink, Loader2 } from "lucide-react";
 import { useMemo } from "react";
 
@@ -43,6 +44,7 @@ const planMeta: Record<string, { features: string[]; icon: React.ElementType; po
 };
 
 export default function Billing() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
 
@@ -105,8 +107,8 @@ export default function Billing() {
   return (
     <div className="p-4 md:p-6 space-y-6">
       <div>
-        <h1 className="text-lg font-bold tracking-wider uppercase">Billing & Subscription</h1>
-        <p className="text-xs text-muted-foreground">Manage your plan and billing information</p>
+        <h1 className="text-lg font-bold tracking-wider uppercase">{t("billing.title")}</h1>
+        <p className="text-xs text-muted-foreground">{t("billing.subtitle")}</p>
       </div>
 
       <Card>
@@ -117,10 +119,10 @@ export default function Billing() {
                 <CreditCard className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-bold">Current Plan: <span className="text-primary capitalize" data-testid="text-current-plan">{currentPlan}</span></p>
+                <p className="text-sm font-bold">{t("billing.currentPlanLabel")}: <span className="text-primary capitalize" data-testid="text-current-plan">{currentPlan}</span></p>
                 <p className="text-xs text-muted-foreground">
-                  {billingStatus?.maxUsers === -1 ? "Unlimited" : billingStatus?.maxUsers} users
-                  {billingStatus?.stripeSubscriptionId ? " · Active subscription" : " · No active subscription"}
+                  {billingStatus?.maxUsers === -1 ? t("billing.unlimited") : billingStatus?.maxUsers} {t("billing.users")}
+                  {billingStatus?.stripeSubscriptionId ? ` · ${t("billing.activeSubscription")}` : ` · ${t("billing.noActiveSubscription")}`}
                 </p>
               </div>
             </div>
@@ -132,8 +134,8 @@ export default function Billing() {
                 disabled={portalMutation.isPending}
                 data-testid="button-manage-billing"
               >
-                {portalMutation.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <ExternalLink className="w-4 h-4 mr-1" />}
-                Manage Billing
+                {portalMutation.isPending ? <Loader2 className="w-4 h-4 me-1 animate-spin" /> : <ExternalLink className="w-4 h-4 me-1" />}
+                {t("billing.manageBilling")}
               </Button>
             )}
           </div>
@@ -157,7 +159,7 @@ export default function Billing() {
             >
               {meta.popular && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge className="bg-primary text-primary-foreground text-[10px]">Most Popular</Badge>
+                  <Badge className="bg-primary text-primary-foreground text-[10px]">{t("billing.mostPopular")}</Badge>
                 </div>
               )}
               <CardHeader className="pb-2 pt-6">
@@ -166,15 +168,15 @@ export default function Billing() {
                   <CardTitle className="text-base font-bold capitalize">{tier}</CardTitle>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {tier === "starter" ? "Basic security monitoring for small teams" :
-                   tier === "professional" ? "Full-featured SOC platform for growing teams" :
-                   "Unlimited security operations"}
+                  {tier === "starter" ? t("billing.starterDesc") :
+                   tier === "professional" ? t("billing.professionalDesc") :
+                   t("billing.enterpriseDesc")}
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-baseline gap-1">
                   <span className="text-3xl font-bold font-mono">{displayPrice}</span>
-                  <span className="text-sm text-muted-foreground">/mo</span>
+                  <span className="text-sm text-muted-foreground">{t("billing.perMonth")}</span>
                 </div>
                 <div className="space-y-2">
                   {meta.features.map((f) => (
@@ -196,9 +198,9 @@ export default function Billing() {
                     }}
                     data-testid={`button-select-${tier}`}
                   >
-                    {isCurrent ? "Current Plan" :
-                     checkoutMutation.isPending ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Processing...</> :
-                     !product ? "Loading..." : "Upgrade"}
+                    {isCurrent ? t("common.currentPlan") :
+                     checkoutMutation.isPending ? <><Loader2 className="w-4 h-4 me-1 animate-spin" />{t("common.processing")}</> :
+                     !product ? t("common.loading") : t("common.upgrade")}
                   </Button>
                 )}
               </CardContent>

@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { useTranslation } from "react-i18next";
 import { Clock, Download, Filter, User, Shield, FileText, AlertTriangle, Settings } from "lucide-react";
 import type { AuditLog } from "@shared/schema";
 import { useState, useMemo } from "react";
@@ -50,6 +51,7 @@ function formatTimeAgo(dateStr: string) {
 }
 
 export default function Forensics() {
+  const { t } = useTranslation();
   const [actionFilter, setActionFilter] = useState("all");
   const [search, setSearch] = useState("");
 
@@ -100,31 +102,31 @@ export default function Forensics() {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold tracking-wider uppercase">Forensic Timeline</h1>
-          <p className="text-xs text-muted-foreground">Audit log and chronological event history</p>
+          <h1 className="text-lg font-bold tracking-wider uppercase">{t("forensics.title")}</h1>
+          <p className="text-xs text-muted-foreground">{t("forensics.subtitle")}</p>
         </div>
         <Button size="sm" variant="secondary" onClick={exportCsv} data-testid="button-export-csv">
-          <Download className="w-4 h-4 mr-1" />Export CSV
+          <Download className="w-4 h-4 me-1" />{t("forensics.exportCsv")}
         </Button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Total Events</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("forensics.totalEvents")}</span>
           <p className="text-2xl font-bold font-mono mt-1" data-testid="stat-total-logs">{logs?.length || 0}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Filtered</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("forensics.filtered")}</span>
           <p className="text-2xl font-bold font-mono text-primary mt-1" data-testid="stat-filtered">{filteredLogs.length}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Action Types</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("forensics.actionTypes")}</span>
           <p className="text-2xl font-bold font-mono mt-1" data-testid="stat-action-types">{uniqueActions.length}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Latest</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("forensics.latest")}</span>
           <p className="text-sm font-bold font-mono mt-1 text-muted-foreground" data-testid="stat-latest">
-            {logs?.[0] ? formatTimeAgo(logs[0].createdAt as unknown as string) : "N/A"}
+            {logs?.[0] ? formatTimeAgo(logs[0].createdAt as unknown as string) : t("common.noData")}
           </p>
         </CardContent></Card>
       </div>
@@ -133,11 +135,11 @@ export default function Forensics() {
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-              <Filter className="w-4 h-4" />Filters
+              <Filter className="w-4 h-4" />{t("forensics.filters")}
             </CardTitle>
             <div className="flex items-center gap-2">
               <Input
-                placeholder="Search details..."
+                placeholder={t("forensics.searchDetails")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-48 h-8 text-xs"
@@ -145,10 +147,10 @@ export default function Forensics() {
               />
               <Select value={actionFilter} onValueChange={setActionFilter}>
                 <SelectTrigger className="w-40 h-8 text-xs" data-testid="select-action-filter">
-                  <SelectValue placeholder="All Actions" />
+                  <SelectValue placeholder={t("forensics.allActions")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Actions</SelectItem>
+                  <SelectItem value="all">{t("forensics.allActions")}</SelectItem>
                   {uniqueActions.map((a) => (
                     <SelectItem key={a} value={a}>{a.replace(/_/g, " ")}</SelectItem>
                   ))}
@@ -162,14 +164,14 @@ export default function Forensics() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-            <Clock className="w-4 h-4 text-primary" />Timeline
+            <Clock className="w-4 h-4 text-primary" />{t("forensics.timeline")}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="h-[500px]">
             <div className="px-4 pb-4">
               {filteredLogs.length === 0 ? (
-                <div className="text-center text-sm text-muted-foreground py-12">No audit events found</div>
+                <div className="text-center text-sm text-muted-foreground py-12">{t("forensics.noAuditEvents")}</div>
               ) : (
                 <div className="relative">
                   <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />
@@ -178,7 +180,7 @@ export default function Forensics() {
                       const Icon = actionIcons[log.action] || Settings;
                       const color = actionColors[log.action] || "bg-muted";
                       return (
-                        <div key={log.id} className="flex gap-3 pl-1 py-2 animate-fade-in" data-testid={`audit-row-${log.id}`}>
+                        <div key={log.id} className="flex gap-3 ps-1 py-2 animate-fade-in" data-testid={`audit-row-${log.id}`}>
                           <div className="flex flex-col items-center flex-shrink-0">
                             <div className={`w-7 h-7 rounded-full ${color} flex items-center justify-center z-10`}>
                               <Icon className="w-3.5 h-3.5 text-white" />

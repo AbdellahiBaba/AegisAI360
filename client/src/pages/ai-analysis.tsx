@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { useTranslation } from "react-i18next";
 import { Brain, Send, Loader2, Trash2, Plus } from "lucide-react";
 
 interface Message {
@@ -17,6 +18,7 @@ interface Conversation {
 }
 
 export default function AiAnalysis() {
+  const { t } = useTranslation();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -52,7 +54,7 @@ export default function AiAnalysis() {
     const res = await fetch("/api/ai-conversations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "New Analysis" }),
+      body: JSON.stringify({ title: t("aiAnalysis.newAnalysis") }),
     });
     const conv = await res.json();
     setConversations((prev) => [conv, ...prev]);
@@ -131,7 +133,7 @@ export default function AiAnalysis() {
     } catch (error) {
       setMessages((prev) => [
         ...prev.slice(0, -1),
-        { role: "assistant", content: "An error occurred while processing your request. Please try again." },
+        { role: "assistant", content: t("aiAnalysis.errorMessage") },
       ]);
     } finally {
       setIsStreaming(false);
@@ -147,11 +149,11 @@ export default function AiAnalysis() {
 
   return (
     <div className="flex h-[calc(100vh-48px)]">
-      <div className="w-56 border-r flex flex-col flex-shrink-0">
+      <div className="w-56 border-e flex flex-col flex-shrink-0">
         <div className="p-3 border-b">
           <Button size="sm" className="w-full" onClick={createConversation} data-testid="button-new-analysis">
-            <Plus className="w-4 h-4 mr-1" />
-            New Analysis
+            <Plus className="w-4 h-4 me-1" />
+            {t("aiAnalysis.newAnalysis")}
           </Button>
         </div>
         <ScrollArea className="flex-1">
@@ -191,9 +193,9 @@ export default function AiAnalysis() {
               <div className="p-4 rounded-full bg-primary/10 mb-4">
                 <Brain className="w-8 h-8 text-primary" />
               </div>
-              <h2 className="text-lg font-semibold mb-2">AI Threat Analysis</h2>
+              <h2 className="text-lg font-semibold mb-2">{t("aiAnalysis.title")}</h2>
               <p className="text-sm text-muted-foreground max-w-md mb-6">
-                Describe a security event, paste logs, or ask about threat indicators. The AI will provide expert analysis and recommendations.
+                {t("aiAnalysis.subtitle")}
               </p>
               <div className="flex flex-wrap gap-2 justify-center max-w-lg">
                 {[
@@ -254,7 +256,7 @@ export default function AiAnalysis() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Describe a threat scenario or paste security logs for analysis..."
+              placeholder={t("aiAnalysis.inputPlaceholder")}
               className="resize-none min-h-[44px] max-h-[120px]"
               rows={1}
               data-testid="input-ai-message"

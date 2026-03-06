@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -90,6 +91,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function SuperAdmin() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("overview");
@@ -100,9 +102,9 @@ export default function SuperAdmin() {
         <Card className="max-w-md w-full">
           <CardContent className="p-8 text-center space-y-4">
             <ShieldAlert className="w-12 h-12 text-severity-critical mx-auto" />
-            <h2 className="text-lg font-semibold tracking-wide uppercase">Access Denied</h2>
+            <h2 className="text-lg font-semibold tracking-wide uppercase">{t("superAdmin.accessDenied")}</h2>
             <p className="text-sm text-muted-foreground">
-              You do not have super admin privileges to access this page.
+              {t("superAdmin.noPrivileges")}
             </p>
           </CardContent>
         </Card>
@@ -115,20 +117,20 @@ export default function SuperAdmin() {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <Shield className="w-5 h-5 text-severity-critical" />
-          <h1 className="text-lg font-semibold tracking-wide uppercase">Platform Administration</h1>
+          <h1 className="text-lg font-semibold tracking-wide uppercase">{t("superAdmin.platformAdmin")}</h1>
         </div>
         <Badge variant="destructive" className="text-[10px] uppercase tracking-wider">
-          Super Admin
+          {t("superAdmin.superAdminBadge")}
         </Badge>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList data-testid="tabs-admin">
-          <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
-          <TabsTrigger value="organizations" data-testid="tab-organizations">Organizations</TabsTrigger>
-          <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
-          <TabsTrigger value="system" data-testid="tab-system">System</TabsTrigger>
-          <TabsTrigger value="audit" data-testid="tab-audit">Audit Log</TabsTrigger>
+          <TabsTrigger value="overview" data-testid="tab-overview">{t("superAdmin.overview")}</TabsTrigger>
+          <TabsTrigger value="organizations" data-testid="tab-organizations">{t("superAdmin.organizations")}</TabsTrigger>
+          <TabsTrigger value="users" data-testid="tab-users">{t("superAdmin.users")}</TabsTrigger>
+          <TabsTrigger value="system" data-testid="tab-system">{t("superAdmin.system")}</TabsTrigger>
+          <TabsTrigger value="audit" data-testid="tab-audit">{t("superAdmin.auditLog")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 mt-4">
@@ -156,6 +158,7 @@ export default function SuperAdmin() {
 }
 
 function PlatformOverview() {
+  const { t } = useTranslation();
   const { data: stats, isLoading } = useQuery<PlatformStats>({
     queryKey: ["/api/admin/platform-stats"],
   });
@@ -171,9 +174,9 @@ function PlatformOverview() {
   }
 
   const cards = [
-    { label: "Total Organizations", value: stats?.totalOrgs ?? 0, icon: Building2 },
-    { label: "Total Users", value: stats?.totalUsers ?? 0, icon: Users },
-    { label: "Total Events", value: stats?.totalEvents ?? 0, icon: Activity },
+    { label: t("superAdmin.totalOrganizations"), value: stats?.totalOrgs ?? 0, icon: Building2 },
+    { label: t("superAdmin.totalUsers"), value: stats?.totalUsers ?? 0, icon: Users },
+    { label: t("superAdmin.totalEvents"), value: stats?.totalEvents ?? 0, icon: Activity },
   ];
 
   return (
@@ -198,6 +201,7 @@ function PlatformOverview() {
 }
 
 function OrganizationsTable() {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   const { data: orgs, isLoading } = useQuery<AdminOrganization[]>({
@@ -211,7 +215,7 @@ function OrganizationsTable() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/organizations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/platform-stats"] });
-      toast({ title: "Organization status updated" });
+      toast({ title: t("superAdmin.orgStatusUpdated") });
     },
   });
 
@@ -221,7 +225,7 @@ function OrganizationsTable() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/organizations"] });
-      toast({ title: "Organization plan updated" });
+      toast({ title: t("superAdmin.orgPlanUpdated") });
     },
   });
 
@@ -232,7 +236,7 @@ function OrganizationsTable() {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-        <CardTitle className="text-sm tracking-wider uppercase">Organizations</CardTitle>
+        <CardTitle className="text-sm tracking-wider uppercase">{t("superAdmin.organizations")}</CardTitle>
         <Badge variant="secondary" className="font-mono text-xs">{orgs?.length ?? 0}</Badge>
       </CardHeader>
       <CardContent className="p-0">
@@ -240,11 +244,11 @@ function OrganizationsTable() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-[10px] uppercase tracking-wider">Name</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-wider">Plan</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-wider">Users</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-wider">Status</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-wider">Actions</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">{t("common.name")}</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">{t("superAdmin.plan")}</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">{t("superAdmin.userCount")}</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">{t("common.status")}</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">{t("common.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -259,9 +263,9 @@ function OrganizationsTable() {
                   <TableCell className="text-xs font-mono">{org.userCount}</TableCell>
                   <TableCell>
                     {org.suspended ? (
-                      <Badge variant="destructive" className="text-[9px] uppercase">Suspended</Badge>
+                      <Badge variant="destructive" className="text-[9px] uppercase">{t("superAdmin.suspended")}</Badge>
                     ) : (
-                      <Badge className="bg-status-online/20 text-status-online text-[9px] uppercase">Active</Badge>
+                      <Badge className="bg-status-online/20 text-status-online text-[9px] uppercase">{t("common.active")}</Badge>
                     )}
                   </TableCell>
                   <TableCell>
@@ -274,9 +278,9 @@ function OrganizationsTable() {
                         data-testid={`button-toggle-suspend-${org.id}`}
                       >
                         {org.suspended ? (
-                          <><CheckCircle className="w-3 h-3 mr-1" /> Activate</>
+                          <><CheckCircle className="w-3 h-3 me-1" /> {t("superAdmin.activate")}</>
                         ) : (
-                          <><Ban className="w-3 h-3 mr-1" /> Suspend</>
+                          <><Ban className="w-3 h-3 me-1" /> {t("superAdmin.suspend")}</>
                         )}
                       </Button>
                       <Select
@@ -284,13 +288,13 @@ function OrganizationsTable() {
                         onValueChange={(plan) => changePlanMutation.mutate({ id: org.id, plan })}
                       >
                         <SelectTrigger className="w-[130px]" data-testid={`select-plan-${org.id}`}>
-                          <SelectValue placeholder="Change plan" />
+                          <SelectValue placeholder={t("superAdmin.changePlan")} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="starter">Starter</SelectItem>
-                          <SelectItem value="professional">Professional</SelectItem>
-                          <SelectItem value="enterprise">Enterprise</SelectItem>
-                          <SelectItem value="government">Government</SelectItem>
+                          <SelectItem value="starter">{t("superAdmin.starter")}</SelectItem>
+                          <SelectItem value="professional">{t("superAdmin.professional")}</SelectItem>
+                          <SelectItem value="enterprise">{t("superAdmin.enterprise")}</SelectItem>
+                          <SelectItem value="government">{t("superAdmin.government")}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -300,7 +304,7 @@ function OrganizationsTable() {
               {(!orgs || orgs.length === 0) && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">
-                    No organizations found
+                    {t("superAdmin.noOrganizations")}
                   </TableCell>
                 </TableRow>
               )}
@@ -313,6 +317,7 @@ function OrganizationsTable() {
 }
 
 function UsersTable() {
+  const { t } = useTranslation();
   const { data: users, isLoading } = useQuery<AdminUser[]>({
     queryKey: ["/api/admin/users"],
   });
@@ -324,7 +329,7 @@ function UsersTable() {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-        <CardTitle className="text-sm tracking-wider uppercase">Users</CardTitle>
+        <CardTitle className="text-sm tracking-wider uppercase">{t("superAdmin.users")}</CardTitle>
         <Badge variant="secondary" className="font-mono text-xs">{users?.length ?? 0}</Badge>
       </CardHeader>
       <CardContent className="p-0">
@@ -332,23 +337,23 @@ function UsersTable() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-[10px] uppercase tracking-wider">Username</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-wider">Organization</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-wider">Role</TableHead>
-                <TableHead className="text-[10px] uppercase tracking-wider">Super Admin</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">{t("superAdmin.username")}</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">{t("superAdmin.organization")}</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">{t("superAdmin.role")}</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">{t("superAdmin.superAdminBadge")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {(users || []).map((u, idx) => (
                 <TableRow key={u.id} data-testid={`user-row-${idx}`}>
                   <TableCell className="text-xs font-mono">{u.username}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{u.organizationName || "N/A"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{u.organizationName || t("common.noData")}</TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="text-[9px] uppercase">{u.role}</Badge>
                   </TableCell>
                   <TableCell>
                     {u.isSuperAdmin ? (
-                      <Badge variant="destructive" className="text-[9px] uppercase">Super Admin</Badge>
+                      <Badge variant="destructive" className="text-[9px] uppercase">{t("superAdmin.superAdminBadge")}</Badge>
                     ) : (
                       <span className="text-xs text-muted-foreground">--</span>
                     )}
@@ -358,7 +363,7 @@ function UsersTable() {
               {(!users || users.length === 0) && (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-8">
-                    No users found
+                    {t("superAdmin.noUsers")}
                   </TableCell>
                 </TableRow>
               )}
@@ -371,6 +376,7 @@ function UsersTable() {
 }
 
 function SystemHealthCard() {
+  const { t } = useTranslation();
   const { data: health, isLoading } = useQuery<SystemHealth>({
     queryKey: ["/api/admin/system-health"],
     refetchInterval: 30000,
@@ -385,13 +391,13 @@ function SystemHealthCard() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
           <CardTitle className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-            Uptime
+            {t("superAdmin.uptime")}
           </CardTitle>
           <Clock className="w-4 h-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
           <div className="text-xl font-bold font-mono" data-testid="stat-uptime">
-            {health ? formatUptime(health.uptime) : "N/A"}
+            {health ? formatUptime(health.uptime) : t("common.noData")}
           </div>
         </CardContent>
       </Card>
@@ -399,13 +405,13 @@ function SystemHealthCard() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
           <CardTitle className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-            Memory Usage
+            {t("superAdmin.memoryUsage")}
           </CardTitle>
           <HardDrive className="w-4 h-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
           <div className="text-xl font-bold font-mono" data-testid="stat-memory">
-            {health ? `${health.memory.percentage.toFixed(1)}%` : "N/A"}
+            {health ? `${health.memory.percentage.toFixed(1)}%` : t("common.noData")}
           </div>
           <p className="text-[10px] text-muted-foreground font-mono mt-1">
             {health ? `${(health.memory.used / 1024 / 1024).toFixed(0)}MB / ${(health.memory.total / 1024 / 1024).toFixed(0)}MB` : ""}
@@ -416,28 +422,28 @@ function SystemHealthCard() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
           <CardTitle className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-            System Load
+            {t("superAdmin.systemLoad")}
           </CardTitle>
           <Cpu className="w-4 h-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
           <div className="text-xl font-bold font-mono" data-testid="stat-load">
-            {health?.load ? health.load.map((l) => l.toFixed(2)).join(" / ") : "N/A"}
+            {health?.load ? health.load.map((l) => l.toFixed(2)).join(" / ") : t("common.noData")}
           </div>
-          <p className="text-[10px] text-muted-foreground mt-1">1m / 5m / 15m</p>
+          <p className="text-[10px] text-muted-foreground mt-1">{t("superAdmin.loadIntervals")}</p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
           <CardTitle className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-            Node Version
+            {t("superAdmin.nodeVersion")}
           </CardTitle>
           <Server className="w-4 h-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
           <div className="text-xl font-bold font-mono" data-testid="stat-node-version">
-            {health?.nodeVersion ?? "N/A"}
+            {health?.nodeVersion ?? t("common.noData")}
           </div>
         </CardContent>
       </Card>
@@ -446,6 +452,7 @@ function SystemHealthCard() {
 }
 
 function AuditLogFeed() {
+  const { t } = useTranslation();
   const { data: logs, isLoading } = useQuery<AuditEntry[]>({
     queryKey: ["/api/admin/audit-log"],
   });
@@ -457,8 +464,8 @@ function AuditLogFeed() {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-        <CardTitle className="text-sm tracking-wider uppercase">Audit Log</CardTitle>
-        <Badge variant="secondary" className="font-mono text-xs">{logs?.length ?? 0} entries</Badge>
+        <CardTitle className="text-sm tracking-wider uppercase">{t("superAdmin.auditLog")}</CardTitle>
+        <Badge variant="secondary" className="font-mono text-xs">{logs?.length ?? 0} {t("common.entries")}</Badge>
       </CardHeader>
       <CardContent className="p-0">
         <ScrollArea className="h-[calc(100vh-300px)]">
@@ -473,7 +480,7 @@ function AuditLogFeed() {
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   {entry.userId && (
-                    <Badge variant="secondary" className="text-[9px]">User: {entry.userId}</Badge>
+                    <Badge variant="secondary" className="text-[9px]">{t("superAdmin.user")}: {entry.userId}</Badge>
                   )}
                   {entry.targetType && (
                     <Badge variant="outline" className="text-[9px]">
@@ -487,7 +494,7 @@ function AuditLogFeed() {
               </div>
             ))}
             {(!logs || logs.length === 0) && (
-              <div className="text-center text-sm text-muted-foreground py-12">No audit log entries</div>
+              <div className="text-center text-sm text-muted-foreground py-12">{t("superAdmin.noAuditEntries")}</div>
             )}
           </div>
         </ScrollArea>

@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,23 +64,23 @@ function getDefconLevel(stats: DashboardStats): number {
   return 5;
 }
 
-const defconDescriptions: Record<number, string> = {
-  1: "MAXIMUM READINESS — ACTIVE THREAT DETECTED",
-  2: "HIGH ALERT — ELEVATED THREAT LEVEL",
-  3: "INCREASED READINESS — THREATS PRESENT",
-  4: "ABOVE NORMAL — ACTIVITY DETECTED",
-  5: "ALL CLEAR — NOMINAL OPERATIONS",
-};
-
 function DefconIndicator({ stats }: { stats: DashboardStats }) {
+  const { t } = useTranslation();
   const level = getDefconLevel(stats);
+  const defconDescriptions: Record<number, string> = {
+    1: t("dashboard.defcon1"),
+    2: t("dashboard.defcon2"),
+    3: t("dashboard.defcon3"),
+    4: t("dashboard.defcon4"),
+    5: t("dashboard.defcon5"),
+  };
   return (
     <div className={`defcon-${level} rounded-md p-4 flex items-center justify-between gap-4 flex-wrap`} data-testid="defcon-indicator">
       <div className="flex items-center gap-3">
         <Crosshair className="w-6 h-6" />
         <div>
           <div className="text-lg font-bold font-mono tracking-widest uppercase" data-testid="defcon-level">
-            DEFCON {level}
+            {t("dashboard.defcon")} {level}
           </div>
           <div className="text-xs font-mono tracking-wider opacity-90" data-testid="defcon-description">
             {defconDescriptions[level]}
@@ -87,7 +88,7 @@ function DefconIndicator({ stats }: { stats: DashboardStats }) {
         </div>
       </div>
       <div className="font-mono text-xs tracking-wider opacity-75">
-        THREAT SCORE: {stats.threatScore}/100
+        {t("dashboard.threatScore")}: {stats.threatScore}/100
       </div>
     </div>
   );
@@ -135,10 +136,11 @@ function StatCard({ title, value, icon: Icon, trend, trendLabel, accent }: {
 }
 
 function EventTrendChart({ data }: { data: { time: string; events: number }[] }) {
+  const { t } = useTranslation();
   return (
     <Card className="col-span-2">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">Event Trend (24h)</CardTitle>
+        <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">{t("dashboard.eventTrend")}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="h-[220px]">
@@ -178,10 +180,11 @@ function EventTrendChart({ data }: { data: { time: string; events: number }[] })
 }
 
 function SeverityBreakdown({ data }: { data: { name: string; value: number }[] }) {
+  const { t } = useTranslation();
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">Severity Breakdown</CardTitle>
+        <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">{t("dashboard.severityBreakdown")}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="h-[220px] flex items-center justify-center">
@@ -238,23 +241,24 @@ function formatTimeAgo(dateStr: string) {
 
 function QuickActions() {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const lockdownMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/response/emergency-lockdown");
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "LOCKDOWN ACTIVATED", description: "Emergency lockdown has been initiated across all systems." });
+      toast({ title: t("dashboard.lockdownActivated"), description: t("dashboard.lockdownDescription") });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/response/actions"] });
     },
     onError: (error: Error) => {
-      toast({ title: "LOCKDOWN FAILED", description: error.message, variant: "destructive" });
+      toast({ title: t("dashboard.lockdownFailed"), description: error.message, variant: "destructive" });
     },
   });
 
   const handleLockdown = () => {
-    if (window.confirm("CONFIRM EMERGENCY LOCKDOWN\n\nThis will activate all defensive measures and block all external traffic. Continue?")) {
+    if (window.confirm(t("dashboard.lockdownConfirm"))) {
       lockdownMutation.mutate();
     }
   };
@@ -262,7 +266,7 @@ function QuickActions() {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">Quick Actions</CardTitle>
+        <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">{t("dashboard.quickActions")}</CardTitle>
       </CardHeader>
       <CardContent>
         <Button
@@ -272,8 +276,8 @@ function QuickActions() {
           disabled={lockdownMutation.isPending}
           data-testid="button-emergency-lockdown"
         >
-          <Flame className="w-4 h-4 mr-2" />
-          {lockdownMutation.isPending ? "INITIATING..." : "EMERGENCY LOCKDOWN"}
+          <Flame className="w-4 h-4 me-2" />
+          {lockdownMutation.isPending ? t("common.initiating") : t("dashboard.emergencyLockdown")}
         </Button>
       </CardContent>
     </Card>
@@ -281,19 +285,20 @@ function QuickActions() {
 }
 
 function RecentAlerts({ events }: { events: SecurityEvent[] }) {
+  const { t } = useTranslation();
   return (
     <Card className="col-span-2">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">Recent Alerts</CardTitle>
-          <Badge variant="secondary" className="text-[10px] font-mono">{events.length} events</Badge>
+          <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">{t("dashboard.recentAlerts")}</CardTitle>
+          <Badge variant="secondary" className="text-[10px] font-mono">{events.length} {t("common.events")}</Badge>
         </div>
       </CardHeader>
       <CardContent className="p-0">
         <ScrollArea className="h-[260px]">
           <div className="px-4 pb-4">
             {events.length === 0 ? (
-              <div className="text-center text-sm text-muted-foreground py-8 font-mono">No recent alerts</div>
+              <div className="text-center text-sm text-muted-foreground py-8 font-mono">{t("dashboard.noRecentAlerts")}</div>
             ) : (
               <div className="space-y-1">
                 {events.map((event) => (
@@ -306,7 +311,7 @@ function RecentAlerts({ events }: { events: SecurityEvent[] }) {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs truncate">{event.description}</p>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-[10px] text-muted-foreground font-mono">{event.sourceIp || "N/A"}</span>
+                        <span className="text-[10px] text-muted-foreground font-mono">{event.sourceIp || t("common.noData")}</span>
                         <span className="text-[10px] text-muted-foreground">{event.source}</span>
                       </div>
                     </div>
@@ -327,14 +332,15 @@ function RecentAlerts({ events }: { events: SecurityEvent[] }) {
 }
 
 function ActivityFeed({ events }: { events: SecurityEvent[] }) {
+  const { t } = useTranslation();
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">Live Feed</CardTitle>
+          <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">{t("dashboard.liveFeed")}</CardTitle>
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full bg-status-online animate-pulse-glow" />
-            <span className="text-[10px] text-muted-foreground font-mono">Live</span>
+            <span className="text-[10px] text-muted-foreground font-mono">{t("common.live")}</span>
           </div>
         </div>
       </CardHeader>
@@ -363,6 +369,7 @@ function ActivityFeed({ events }: { events: SecurityEvent[] }) {
 }
 
 function ResponseActionsFeed({ actions }: { actions: ResponseAction[] }) {
+  const { t } = useTranslation();
   const actionStatusClasses: Record<string, string> = {
     completed: "bg-status-online/20 text-status-online",
     pending: "bg-severity-medium/20 text-severity-medium",
@@ -374,7 +381,7 @@ function ResponseActionsFeed({ actions }: { actions: ResponseAction[] }) {
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">Response Actions</CardTitle>
+          <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">{t("dashboard.responseActions")}</CardTitle>
           <Zap className="w-4 h-4 text-muted-foreground" />
         </div>
       </CardHeader>
@@ -382,7 +389,7 @@ function ResponseActionsFeed({ actions }: { actions: ResponseAction[] }) {
         <ScrollArea className="h-[260px]">
           <div className="px-4 pb-4">
             {actions.length === 0 ? (
-              <div className="text-center text-sm text-muted-foreground py-8 font-mono">No recent actions</div>
+              <div className="text-center text-sm text-muted-foreground py-8 font-mono">{t("dashboard.noRecentActions")}</div>
             ) : (
               <div className="space-y-2">
                 {actions.map((action) => (
@@ -414,6 +421,7 @@ function ResponseActionsFeed({ actions }: { actions: ResponseAction[] }) {
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
     refetchInterval: 10000,
@@ -491,44 +499,44 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
         <StatCard
-          title="Events (24h)"
+          title={t("dashboard.events24h")}
           value={stats?.totalEvents ?? 0}
           icon={ShieldAlert}
           trend={stats?.eventTrend ?? 0}
-          trendLabel="vs yesterday"
+          trendLabel={t("dashboard.vsYesterday")}
         />
         <StatCard
-          title="Critical"
+          title={t("dashboard.critical")}
           value={stats?.criticalAlerts ?? 0}
           icon={AlertTriangle}
           accent={(stats?.criticalAlerts ?? 0) > 0 ? "text-severity-critical" : undefined}
         />
         <StatCard
-          title="Incidents"
+          title={t("dashboard.incidents")}
           value={stats?.activeIncidents ?? 0}
           icon={Bug}
           trend={stats?.incidentTrend ?? 0}
-          trendLabel="this week"
+          trendLabel={t("dashboard.thisWeek")}
         />
         <StatCard
-          title="Blocked IPs"
+          title={t("dashboard.blockedIps")}
           value={stats?.blockedIps ?? 0}
           icon={ShieldOff}
           accent={(stats?.blockedIps ?? 0) > 0 ? "text-severity-high" : undefined}
         />
         <StatCard
-          title="Assets"
+          title={t("dashboard.assets")}
           value={stats?.assetCount ?? 0}
           icon={Monitor}
         />
         <StatCard
-          title="Quarantined"
+          title={t("dashboard.quarantined")}
           value={stats?.quarantineCount ?? 0}
           icon={Lock}
           accent={(stats?.quarantineCount ?? 0) > 0 ? "text-severity-high" : undefined}
         />
         <StatCard
-          title="Active Rules"
+          title={t("dashboard.activeRules")}
           value={stats?.activeRules ?? 0}
           icon={Activity}
         />

@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,6 +25,7 @@ function formatTime(dateStr: string) {
 }
 
 export default function Quarantine() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { data: items, isLoading } = useQuery<QuarantineItem[]>({ queryKey: ["/api/quarantine"] });
 
@@ -34,7 +36,7 @@ export default function Quarantine() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quarantine"] });
-      toast({ title: "Quarantine item updated" });
+      toast({ title: t("quarantine.itemUpdated") });
     },
   });
 
@@ -54,25 +56,25 @@ export default function Quarantine() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div>
-        <h1 className="text-lg font-bold tracking-wider uppercase">Quarantine Management</h1>
-        <p className="text-xs text-muted-foreground">Manage quarantined files and threats</p>
+        <h1 className="text-lg font-bold tracking-wider uppercase">{t("quarantine.title")}</h1>
+        <p className="text-xs text-muted-foreground">{t("quarantine.subtitle")}</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Total Items</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("quarantine.totalItems")}</span>
           <p className="text-2xl font-bold font-mono mt-1" data-testid="stat-total-quarantine">{items?.length || 0}</p>
         </CardContent></Card>
         <Card className="border-severity-critical/30"><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Quarantined</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("quarantine.quarantined")}</span>
           <p className="text-2xl font-bold font-mono text-severity-critical mt-1" data-testid="stat-quarantined">{quarantinedCount}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Restored</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("quarantine.restored")}</span>
           <p className="text-2xl font-bold font-mono text-status-online mt-1" data-testid="stat-restored">{restoredCount}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Deleted</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("quarantine.deleted")}</span>
           <p className="text-2xl font-bold font-mono text-muted-foreground mt-1" data-testid="stat-deleted">{deletedCount}</p>
         </CardContent></Card>
       </div>
@@ -80,7 +82,7 @@ export default function Quarantine() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-            <Lock className="w-4 h-4 text-primary" />Quarantined Items
+            <Lock className="w-4 h-4 text-primary" />{t("quarantine.quarantinedItems")}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -88,13 +90,13 @@ export default function Quarantine() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-[10px] uppercase tracking-wider">File</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-wider">Threat</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-wider">Source</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-wider">Status</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-wider">Quarantined By</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-wider">Time</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-wider">Actions</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">{t("quarantine.file")}</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">{t("quarantine.threat")}</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">{t("quarantine.source")}</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">{t("quarantine.status")}</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">{t("quarantine.quarantinedBy")}</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">{t("quarantine.time")}</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">{t("quarantine.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -113,7 +115,7 @@ export default function Quarantine() {
                       <span className="text-xs text-severity-critical">{item.threat}</span>
                     </TableCell>
                     <TableCell>
-                      <span className="text-xs font-mono">{item.sourceAsset || "N/A"}</span>
+                      <span className="text-xs font-mono">{item.sourceAsset || t("common.noData")}</span>
                     </TableCell>
                     <TableCell>
                       <Badge className={`text-[10px] ${statusColors[item.status] || statusColors.quarantined}`}>
@@ -121,7 +123,7 @@ export default function Quarantine() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <span className="text-xs text-muted-foreground">{item.quarantinedBy || "System"}</span>
+                      <span className="text-xs text-muted-foreground">{item.quarantinedBy || t("quarantine.system")}</span>
                     </TableCell>
                     <TableCell>
                       <span className="text-[10px] text-muted-foreground font-mono">
@@ -139,15 +141,15 @@ export default function Quarantine() {
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Restore File</AlertDialogTitle>
+                                <AlertDialogTitle>{t("quarantine.restoreFile")}</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Restore {item.fileName} from quarantine? This may expose the system to the detected threat.
+                                  {t("quarantine.restoreConfirm", { fileName: item.fileName })}
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogCancel>{t("quarantine.cancel")}</AlertDialogCancel>
                                 <AlertDialogAction onClick={() => updateMutation.mutate({ id: item.id, status: "restored", action: "restored" })}>
-                                  Restore
+                                  {t("quarantine.restore")}
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
@@ -160,18 +162,18 @@ export default function Quarantine() {
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Permanently Delete</AlertDialogTitle>
+                                <AlertDialogTitle>{t("quarantine.permanentlyDelete")}</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Permanently delete {item.fileName}? This action cannot be undone.
+                                  {t("quarantine.deleteConfirm", { fileName: item.fileName })}
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogCancel>{t("quarantine.cancel")}</AlertDialogCancel>
                                 <AlertDialogAction
                                   className="bg-destructive"
                                   onClick={() => updateMutation.mutate({ id: item.id, status: "deleted", action: "deleted" })}
                                 >
-                                  Delete
+                                  {t("common.delete")}
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>

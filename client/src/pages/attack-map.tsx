@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useTranslation } from "react-i18next";
 import { Crosshair, Target, Shield } from "lucide-react";
 
 interface AttackMapData {
@@ -66,6 +67,7 @@ function getHeatTextColor(count: number, max: number) {
 }
 
 export default function AttackMap() {
+  const { t } = useTranslation();
   const { data, isLoading } = useQuery<AttackMapData>({
     queryKey: ["/api/attack-map/stats"],
     refetchInterval: 15000,
@@ -95,27 +97,27 @@ export default function AttackMap() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div>
-        <h1 className="text-lg font-bold tracking-wider uppercase">MITRE ATT&CK Heatmap</h1>
-        <p className="text-xs text-muted-foreground">Technique coverage and detection frequency across the ATT&CK matrix</p>
+        <h1 className="text-lg font-bold tracking-wider uppercase">{t("attackMap.title")}</h1>
+        <p className="text-xs text-muted-foreground">{t("attackMap.subtitle")}</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Total Events</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("attackMap.totalEvents")}</span>
           <p className="text-2xl font-bold font-mono mt-1" data-testid="stat-total-events">{data?.totalEvents || 0}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Techniques Detected</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("attackMap.techniquesDetected")}</span>
           <p className="text-2xl font-bold font-mono text-primary mt-1" data-testid="stat-techniques">{totalTechniques}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Tactics Covered</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("attackMap.tacticsCovered")}</span>
           <p className="text-2xl font-bold font-mono text-primary mt-1" data-testid="stat-tactics">{coveredTactics}/{TACTICS_ORDER.length}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Top Technique</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("attackMap.topTechnique")}</span>
           <p className="text-sm font-bold font-mono mt-1 text-severity-critical" data-testid="stat-top-technique">
-            {topTechnique ? `${topTechnique.techniqueId} (${topTechnique.count})` : "N/A"}
+            {topTechnique ? `${topTechnique.techniqueId} (${topTechnique.count})` : t("common.noData")}
           </p>
         </CardContent></Card>
       </div>
@@ -123,7 +125,7 @@ export default function AttackMap() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-            <Target className="w-4 h-4 text-primary" />ATT&CK Matrix Coverage
+            <Target className="w-4 h-4 text-primary" />{t("attackMap.matrixCoverage")}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -156,7 +158,7 @@ export default function AttackMap() {
                           ))
                         ) : (
                           <div className="px-2 py-1.5 rounded bg-muted/50 text-[10px] text-muted-foreground italic flex items-center">
-                            No detections
+                            {t("attackMap.noDetections")}
                           </div>
                         )}
                       </div>
@@ -173,7 +175,7 @@ export default function AttackMap() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-              <Crosshair className="w-4 h-4 text-primary" />Detection Frequency
+              <Crosshair className="w-4 h-4 text-primary" />{t("attackMap.detectionFrequency")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -185,7 +187,7 @@ export default function AttackMap() {
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-0.5">
                         <span className="text-[11px] truncate">{techniqueNames[t.techniqueId] || t.techniqueId}</span>
-                        <span className="text-[10px] font-mono text-muted-foreground ml-2">{t.count}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground ms-2">{t.count}</span>
                       </div>
                       <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
                         <div
@@ -204,20 +206,20 @@ export default function AttackMap() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-              <Shield className="w-4 h-4 text-primary" />Mitigation Recommendations
+              <Shield className="w-4 h-4 text-primary" />{t("attackMap.mitigationRecs")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[300px]">
               <div className="space-y-3">
-                {techniques.sort((a, b) => b.count - a.count).slice(0, 5).map((t) => (
-                  <div key={t.techniqueId} className="p-3 rounded-md bg-muted/50 border border-border">
+                {techniques.sort((a, b) => b.count - a.count).slice(0, 5).map((tech) => (
+                  <div key={tech.techniqueId} className="p-3 rounded-md bg-muted/50 border border-border">
                     <div className="flex items-center gap-2 mb-1">
-                      <Badge variant="secondary" className="text-[10px] font-mono">{t.techniqueId}</Badge>
-                      <span className="text-xs font-medium">{techniqueNames[t.techniqueId] || t.techniqueId}</span>
+                      <Badge variant="secondary" className="text-[10px] font-mono">{tech.techniqueId}</Badge>
+                      <span className="text-xs font-medium">{techniqueNames[tech.techniqueId] || tech.techniqueId}</span>
                     </div>
                     <p className="text-[11px] text-muted-foreground">
-                      Tactic: {t.tactic} · Detected {t.count} time{t.count !== 1 ? "s" : ""}. Review detection rules and ensure endpoint coverage for this technique.
+                      {t("attackMap.tacticLabel")}: {tech.tactic} · {t("attackMap.detectedTimes", { count: tech.count })}
                     </p>
                   </div>
                 ))}
@@ -230,21 +232,21 @@ export default function AttackMap() {
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center gap-4 flex-wrap">
-            <span className="text-xs text-muted-foreground uppercase tracking-wider">Heat Scale:</span>
+            <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("attackMap.heatScale")}:</span>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-muted" /> <span className="text-[10px] text-muted-foreground">None</span>
+              <div className="w-4 h-4 rounded bg-muted" /> <span className="text-[10px] text-muted-foreground">{t("common.none")}</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-primary/40" /> <span className="text-[10px] text-muted-foreground">Low</span>
+              <div className="w-4 h-4 rounded bg-primary/40" /> <span className="text-[10px] text-muted-foreground">{t("common.low")}</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-severity-medium" /> <span className="text-[10px] text-muted-foreground">Medium</span>
+              <div className="w-4 h-4 rounded bg-severity-medium" /> <span className="text-[10px] text-muted-foreground">{t("common.medium")}</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-severity-high" /> <span className="text-[10px] text-muted-foreground">High</span>
+              <div className="w-4 h-4 rounded bg-severity-high" /> <span className="text-[10px] text-muted-foreground">{t("common.high")}</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-severity-critical" /> <span className="text-[10px] text-muted-foreground">Critical</span>
+              <div className="w-4 h-4 rounded bg-severity-critical" /> <span className="text-[10px] text-muted-foreground">{t("common.critical")}</span>
             </div>
           </div>
         </CardContent>

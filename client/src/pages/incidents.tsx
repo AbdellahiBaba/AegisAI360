@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function Incidents() {
+  const { t } = useTranslation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -58,10 +60,10 @@ export default function Incidents() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
-      toast({ title: "Playbook executed", description: `${data.results?.length || 0} steps completed` });
+      toast({ title: t("incidents.playbookExecuted"), description: t("incidents.stepsCompleted", { count: data.results?.length || 0 }) });
     },
     onError: (err: Error) => {
-      toast({ title: "Playbook failed", description: err.message, variant: "destructive" });
+      toast({ title: t("incidents.playbookFailed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -71,7 +73,7 @@ export default function Incidents() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
-      toast({ title: "Incident created" });
+      toast({ title: t("incidents.incidentCreated") });
       setDialogOpen(false);
       setTitle("");
       setDescription("");
@@ -86,7 +88,7 @@ export default function Incidents() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
-      toast({ title: "Incident updated" });
+      toast({ title: t("incidents.incidentUpdated") });
     },
   });
 
@@ -112,42 +114,42 @@ export default function Incidents() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h1 className="text-lg font-semibold tracking-wide">Incidents</h1>
+        <h1 className="text-lg font-semibold tracking-wide">{t("incidents.title")}</h1>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm" data-testid="button-create-incident">
-              <Plus className="w-4 h-4 mr-1" />
-              New Incident
+              <Plus className="w-4 h-4 me-1" />
+              {t("incidents.newIncident")}
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create Incident</DialogTitle>
+              <DialogTitle>{t("incidents.createIncident")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 mt-2">
               <div className="space-y-2">
-                <Label>Title</Label>
-                <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Incident title" data-testid="input-incident-title" />
+                <Label>{t("incidents.incidentTitle")}</Label>
+                <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("incidents.incidentTitlePlaceholder")} data-testid="input-incident-title" />
               </div>
               <div className="space-y-2">
-                <Label>Description</Label>
-                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the incident..." data-testid="input-incident-description" />
+                <Label>{t("incidents.incidentDescription")}</Label>
+                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("incidents.incidentDescriptionPlaceholder")} data-testid="input-incident-description" />
               </div>
               <div className="space-y-2">
-                <Label>Severity</Label>
+                <Label>{t("common.severity")}</Label>
                 <Select value={severity} onValueChange={setSeverity}>
                   <SelectTrigger data-testid="select-incident-severity"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="critical">Critical</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="critical">{t("common.critical")}</SelectItem>
+                    <SelectItem value="high">{t("common.high")}</SelectItem>
+                    <SelectItem value="medium">{t("common.medium")}</SelectItem>
+                    <SelectItem value="low">{t("common.low")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Assignee</Label>
-                <Input value={assignee} onChange={(e) => setAssignee(e.target.value)} placeholder="Assign to..." data-testid="input-incident-assignee" />
+                <Label>{t("incidents.assignee")}</Label>
+                <Input value={assignee} onChange={(e) => setAssignee(e.target.value)} placeholder={t("incidents.assigneePlaceholder")} data-testid="input-incident-assignee" />
               </div>
               <Button
                 onClick={() => createIncident.mutate()}
@@ -155,7 +157,7 @@ export default function Incidents() {
                 className="w-full"
                 data-testid="button-submit-incident"
               >
-                {createIncident.isPending ? "Creating..." : "Create Incident"}
+                {createIncident.isPending ? t("common.creating") : t("incidents.createIncident")}
               </Button>
             </div>
           </DialogContent>
@@ -165,7 +167,7 @@ export default function Incidents() {
       {(incidents?.length ?? 0) === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            No incidents reported. Use the button above to create one.
+            {t("incidents.noIncidents")}
           </CardContent>
         </Card>
       ) : (
@@ -210,18 +212,18 @@ export default function Incidents() {
                         disabled={updateStatus.isPending}
                         data-testid={`button-advance-${incident.id}`}
                       >
-                        Move to {nextStatus}
+                        {t("incidents.moveTo", { status: nextStatus })}
                       </Button>
                     )}
                     {playbooks && playbooks.filter(p => p.enabled).length > 0 && incident.status !== "closed" && incident.status !== "resolved" && (
                       <Select onValueChange={(pbId) => {
-                        if (window.confirm("Execute this playbook?")) {
+                        if (window.confirm(t("incidents.executePlaybookConfirm"))) {
                           executePlaybook.mutate({ playbookId: parseInt(pbId), context: {} });
                         }
                       }}>
                         <SelectTrigger className="h-8 w-[160px] text-xs" data-testid={`select-playbook-${incident.id}`}>
-                          <Play className="w-3 h-3 mr-1" />
-                          <SelectValue placeholder="Run Playbook" />
+                          <Play className="w-3 h-3 me-1" />
+                          <SelectValue placeholder={t("incidents.runPlaybook")} />
                         </SelectTrigger>
                         <SelectContent>
                           {playbooks.filter(p => p.enabled).map(pb => (

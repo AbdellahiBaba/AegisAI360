@@ -8,6 +8,8 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { NotificationBell } from "@/components/notification-bell";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
@@ -55,6 +57,7 @@ function AppRouter() {
 }
 
 function AppLayout() {
+  const { t } = useTranslation();
   const style = {
     "--sidebar-width": "15rem",
     "--sidebar-width-icon": "3rem",
@@ -71,11 +74,12 @@ function AppLayout() {
               <div className="hidden sm:flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-status-online animate-pulse-glow" />
                 <span className="text-[9px] font-mono text-muted-foreground tracking-[0.3em] uppercase">
-                  Live Operations
+                  {t("common.liveOperations")}
                 </span>
               </div>
             </div>
             <div className="flex items-center gap-1">
+              <LanguageSwitcher />
               <NotificationBell />
             </div>
           </header>
@@ -89,6 +93,7 @@ function AppLayout() {
 }
 
 function AuthenticatedApp() {
+  const { t } = useTranslation();
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
@@ -97,7 +102,7 @@ function AuthenticatedApp() {
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
           <span className="text-xs font-mono text-muted-foreground tracking-wider uppercase">
-            Initializing...
+            {t("common.initializing")}
           </span>
         </div>
       </div>

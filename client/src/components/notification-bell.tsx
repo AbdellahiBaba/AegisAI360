@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Bell, AlertTriangle, Info, Zap, CheckCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,7 @@ function formatTimeAgo(dateStr: string) {
 }
 
 export function NotificationBell() {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   const { data: unreadData } = useQuery<{ count: number }>({
@@ -81,7 +83,7 @@ export function NotificationBell() {
       </PopoverTrigger>
       <PopoverContent className="w-[360px] p-0" align="end">
         <div className="flex items-center justify-between px-4 py-2.5 border-b">
-          <span className="text-xs font-medium tracking-wider uppercase">Notifications</span>
+          <span className="text-xs font-medium tracking-wider uppercase">{t("notifications.title")}</span>
           {unreadCount > 0 && (
             <Button
               variant="ghost"
@@ -90,15 +92,15 @@ export function NotificationBell() {
               onClick={() => markAllRead.mutate()}
               data-testid="button-mark-all-read"
             >
-              <CheckCheck className="w-3 h-3 mr-1" />
-              Mark all read
+              <CheckCheck className="w-3 h-3 me-1" />
+              {t("notifications.markAllRead")}
             </Button>
           )}
         </div>
         <ScrollArea className="max-h-[360px]">
           {!notifications || notifications.length === 0 ? (
             <div className="text-center text-xs text-muted-foreground py-8">
-              No notifications
+              {t("notifications.noNotifications")}
             </div>
           ) : (
             <div className="divide-y">

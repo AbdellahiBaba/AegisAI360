@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ function formatTimeAgo(dateStr: string) {
 }
 
 export default function Honeypot() {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   const { data: events, isLoading } = useQuery<HoneypotEvent[]>({
@@ -52,10 +54,10 @@ export default function Honeypot() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/firewall"] });
-      toast({ title: "Attacker IP blocked" });
+      toast({ title: t("honeypot.attackerBlocked") });
     },
     onError: (err: Error) => {
-      toast({ title: "Block failed", description: err.message, variant: "destructive" });
+      toast({ title: t("honeypot.blockFailed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -99,32 +101,32 @@ export default function Honeypot() {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold tracking-wider uppercase">Honeypot Dashboard</h1>
-          <p className="text-xs text-muted-foreground">Real-time attacker interaction monitoring</p>
+          <h1 className="text-lg font-bold tracking-wider uppercase">{t("honeypot.title")}</h1>
+          <p className="text-xs text-muted-foreground">{t("honeypot.subtitle")}</p>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full bg-status-online animate-pulse-glow" />
-          <span className="text-xs text-muted-foreground">Live Monitoring</span>
+          <span className="text-xs text-muted-foreground">{t("honeypot.liveMonitoring")}</span>
         </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Total Interactions</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("honeypot.totalInteractions")}</span>
           <p className="text-2xl font-bold font-mono mt-1" data-testid="stat-total-interactions">{stats.total}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Unique Attackers</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("honeypot.uniqueAttackers")}</span>
           <p className="text-2xl font-bold font-mono text-severity-critical mt-1" data-testid="stat-unique-attackers">{stats.uniqueIps}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Services Targeted</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("honeypot.servicesTargeted")}</span>
           <p className="text-2xl font-bold font-mono text-primary mt-1" data-testid="stat-services">{Object.keys(stats.services).length}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Top Attacker</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("honeypot.topAttacker")}</span>
           <p className="text-sm font-bold font-mono text-severity-high mt-1" data-testid="stat-top-attacker">
-            {stats.topAttacker ? `${stats.topAttacker[0]} (${stats.topAttacker[1]})` : "N/A"}
+            {stats.topAttacker ? `${stats.topAttacker[0]} (${stats.topAttacker[1]})` : t("common.noData")}
           </p>
         </CardContent></Card>
       </div>
@@ -133,7 +135,7 @@ export default function Honeypot() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-              <Wifi className="w-4 h-4 text-primary" />Service Breakdown
+              <Wifi className="w-4 h-4 text-primary" />{t("honeypot.serviceBreakdown")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -157,7 +159,7 @@ export default function Honeypot() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-primary" />Attack Origins
+              <MapPin className="w-4 h-4 text-primary" />{t("honeypot.attackOrigins")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -176,7 +178,7 @@ export default function Honeypot() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-              <Bug className="w-4 h-4 text-primary" />Active Honeypots
+              <Bug className="w-4 h-4 text-primary" />{t("honeypot.activeHoneypots")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -189,7 +191,7 @@ export default function Honeypot() {
                       <div className="w-2 h-2 rounded-full bg-status-online animate-pulse-glow" />
                       <span className="text-xs font-mono">{name}</span>
                     </div>
-                    <Badge variant="secondary" className="text-[10px]">{count} hits</Badge>
+                    <Badge variant="secondary" className="text-[10px]">{count} {t("common.hits")}</Badge>
                   </div>
                 );
               })}
@@ -202,9 +204,9 @@ export default function Honeypot() {
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-              <Radio className="w-4 h-4 text-severity-critical animate-pulse-glow" />Live Attack Feed
+              <Radio className="w-4 h-4 text-severity-critical animate-pulse-glow" />{t("honeypot.liveAttackFeed")}
             </CardTitle>
-            <Badge variant="secondary" className="text-[10px]">{events?.length || 0} events</Badge>
+            <Badge variant="secondary" className="text-[10px]">{events?.length || 0} {t("common.events")}</Badge>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -239,15 +241,15 @@ export default function Honeypot() {
                         className="text-[9px]"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (window.confirm(`Block attacker IP ${event.attackerIp}?`)) {
+                          if (window.confirm(t("honeypot.blockAttackerConfirm", { ip: event.attackerIp }))) {
                             blockIp.mutate({ ip: event.attackerIp, reason: `Honeypot attacker: ${event.service} ${event.action}` });
                           }
                         }}
                         disabled={blockIp.isPending}
                         data-testid={`button-block-attacker-${event.id}`}
                       >
-                        <ShieldBan className="w-3 h-3 mr-0.5" />
-                        Block
+                        <ShieldBan className="w-3 h-3 me-0.5" />
+                        {t("common.block")}
                       </Button>
                     </div>
                   </div>

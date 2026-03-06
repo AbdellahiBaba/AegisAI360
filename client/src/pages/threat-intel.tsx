@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function ThreatIntelPage() {
+  const { t } = useTranslation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -57,7 +59,7 @@ export default function ThreatIntelPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/threat-intel"] });
-      toast({ title: "Indicator added" });
+      toast({ title: t("threatIntel.indicatorAdded") });
       setDialogOpen(false);
       setValue("");
       setSource("");
@@ -81,10 +83,10 @@ export default function ThreatIntelPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/firewall"] });
-      toast({ title: "IP blocked via firewall" });
+      toast({ title: t("threatIntel.ipBlocked") });
     },
     onError: (err: Error) => {
-      toast({ title: "Block failed", description: err.message, variant: "destructive" });
+      toast({ title: t("threatIntel.blockFailed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -95,10 +97,10 @@ export default function ThreatIntelPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/firewall"] });
-      toast({ title: "Domain sinkholed" });
+      toast({ title: t("threatIntel.domainSinkholed") });
     },
     onError: (err: Error) => {
-      toast({ title: "Sinkhole failed", description: err.message, variant: "destructive" });
+      toast({ title: t("threatIntel.sinkholeFailed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -123,73 +125,73 @@ export default function ThreatIntelPage() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h1 className="text-lg font-semibold tracking-wide">Threat Intelligence</h1>
+        <h1 className="text-lg font-semibold tracking-wide">{t("threatIntel.title")}</h1>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm" data-testid="button-add-indicator">
-              <Plus className="w-4 h-4 mr-1" />
-              Add IOC
+              <Plus className="w-4 h-4 me-1" />
+              {t("threatIntel.addIoc")}
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add Indicator of Compromise</DialogTitle>
+              <DialogTitle>{t("threatIntel.addIndicator")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 mt-2">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Type</Label>
+                  <Label>{t("common.type")}</Label>
                   <Select value={indicatorType} onValueChange={setIndicatorType}>
                     <SelectTrigger data-testid="select-indicator-type"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ip">IP Address</SelectItem>
-                      <SelectItem value="domain">Domain</SelectItem>
-                      <SelectItem value="hash">File Hash</SelectItem>
-                      <SelectItem value="url">URL</SelectItem>
-                      <SelectItem value="email">Email</SelectItem>
+                      <SelectItem value="ip">{t("threatIntel.ipAddress")}</SelectItem>
+                      <SelectItem value="domain">{t("threatIntel.domain")}</SelectItem>
+                      <SelectItem value="hash">{t("threatIntel.fileHash")}</SelectItem>
+                      <SelectItem value="url">{t("threatIntel.url")}</SelectItem>
+                      <SelectItem value="email">{t("threatIntel.email")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Threat Type</Label>
+                  <Label>{t("threatIntel.threatType")}</Label>
                   <Select value={threatType} onValueChange={setThreatType}>
                     <SelectTrigger data-testid="select-threat-type"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="malware">Malware</SelectItem>
-                      <SelectItem value="phishing">Phishing</SelectItem>
-                      <SelectItem value="c2">C2 Server</SelectItem>
-                      <SelectItem value="botnet">Botnet</SelectItem>
-                      <SelectItem value="apt">APT</SelectItem>
-                      <SelectItem value="ransomware">Ransomware</SelectItem>
+                      <SelectItem value="malware">{t("threatIntel.malware")}</SelectItem>
+                      <SelectItem value="phishing">{t("threatIntel.phishing")}</SelectItem>
+                      <SelectItem value="c2">{t("threatIntel.c2Server")}</SelectItem>
+                      <SelectItem value="botnet">{t("threatIntel.botnet")}</SelectItem>
+                      <SelectItem value="apt">{t("threatIntel.apt")}</SelectItem>
+                      <SelectItem value="ransomware">{t("threatIntel.ransomware")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Value</Label>
-                <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="e.g. 192.168.1.1 or evil.com" data-testid="input-indicator-value" />
+                <Label>{t("common.value")}</Label>
+                <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder={t("threatIntel.valuePlaceholder")} data-testid="input-indicator-value" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Severity</Label>
+                  <Label>{t("common.severity")}</Label>
                   <Select value={severity} onValueChange={setSeverity}>
                     <SelectTrigger data-testid="select-indicator-severity"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="critical">Critical</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="critical">{t("common.critical")}</SelectItem>
+                      <SelectItem value="high">{t("common.high")}</SelectItem>
+                      <SelectItem value="medium">{t("common.medium")}</SelectItem>
+                      <SelectItem value="low">{t("common.low")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Source</Label>
-                  <Input value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. VirusTotal" data-testid="input-indicator-source" />
+                  <Label>{t("common.source")}</Label>
+                  <Input value={source} onChange={(e) => setSource(e.target.value)} placeholder={t("threatIntel.sourcePlaceholder")} data-testid="input-indicator-source" />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Description (optional)</Label>
-                <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Additional context..." data-testid="input-indicator-description" />
+                <Label>{t("threatIntel.descriptionOptional")}</Label>
+                <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("threatIntel.descriptionPlaceholder")} data-testid="input-indicator-description" />
               </div>
               <Button
                 onClick={() => createIndicator.mutate()}
@@ -197,7 +199,7 @@ export default function ThreatIntelPage() {
                 className="w-full"
                 data-testid="button-submit-indicator"
               >
-                {createIndicator.isPending ? "Adding..." : "Add Indicator"}
+                {createIndicator.isPending ? t("common.adding") : t("threatIntel.addIndicatorBtn")}
               </Button>
             </div>
           </DialogContent>
@@ -206,20 +208,20 @@ export default function ThreatIntelPage() {
 
       <div className="flex gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search indicators..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" data-testid="input-search-intel" />
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input placeholder={t("threatIntel.searchIndicators")} value={search} onChange={(e) => setSearch(e.target.value)} className="ps-9" data-testid="input-search-intel" />
         </div>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-[140px]" data-testid="select-type-filter">
-            <SelectValue placeholder="Type" />
+            <SelectValue placeholder={t("common.type")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="ip">IP Address</SelectItem>
-            <SelectItem value="domain">Domain</SelectItem>
-            <SelectItem value="hash">File Hash</SelectItem>
-            <SelectItem value="url">URL</SelectItem>
-            <SelectItem value="email">Email</SelectItem>
+            <SelectItem value="all">{t("threatIntel.allTypes")}</SelectItem>
+            <SelectItem value="ip">{t("threatIntel.ipAddress")}</SelectItem>
+            <SelectItem value="domain">{t("threatIntel.domain")}</SelectItem>
+            <SelectItem value="hash">{t("threatIntel.fileHash")}</SelectItem>
+            <SelectItem value="url">{t("threatIntel.url")}</SelectItem>
+            <SelectItem value="email">{t("threatIntel.email")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -230,16 +232,16 @@ export default function ThreatIntelPage() {
             <div className="min-w-[600px]">
               <div className="grid grid-cols-[40px_1fr_100px_80px_100px_80px_60px_80px] gap-2 px-4 py-2 border-b text-[10px] text-muted-foreground uppercase tracking-wider font-medium sticky top-0 bg-card z-10">
                 <span></span>
-                <span>Value</span>
-                <span>Threat</span>
-                <span>Severity</span>
-                <span>Source</span>
-                <span>Seen</span>
-                <span>Active</span>
-                <span>Actions</span>
+                <span>{t("common.value")}</span>
+                <span>{t("threatIntel.threat")}</span>
+                <span>{t("common.severity")}</span>
+                <span>{t("common.source")}</span>
+                <span>{t("threatIntel.seen")}</span>
+                <span>{t("common.active")}</span>
+                <span>{t("common.actions")}</span>
               </div>
               {filtered.length === 0 ? (
-                <div className="text-center text-sm text-muted-foreground py-12">No indicators found</div>
+                <div className="text-center text-sm text-muted-foreground py-12">{t("threatIntel.noIndicators")}</div>
               ) : (
                 filtered.map((ind) => {
                   const Icon = typeIcons[ind.indicatorType] || Globe;
@@ -273,7 +275,7 @@ export default function ThreatIntelPage() {
                         onClick={() => toggleActive.mutate({ id: ind.id, active: !ind.active })}
                         data-testid={`button-toggle-${ind.id}`}
                       >
-                        {ind.active ? "On" : "Off"}
+                        {ind.active ? t("common.on") : t("common.off")}
                       </Button>
                       <div>
                         {ind.indicatorType === "ip" && (
@@ -282,15 +284,15 @@ export default function ThreatIntelPage() {
                             variant="destructive"
                             className="text-[9px]"
                             onClick={() => {
-                              if (window.confirm(`Block IP ${ind.value}?`)) {
+                              if (window.confirm(t("threatIntel.blockIpConfirm", { value: ind.value }))) {
                                 blockIp.mutate({ ip: ind.value, reason: `Threat intel IOC: ${ind.threatType}` });
                               }
                             }}
                             disabled={blockIp.isPending}
                             data-testid={`button-block-indicator-${ind.id}`}
                           >
-                            <ShieldBan className="w-3 h-3 mr-0.5" />
-                            Block
+                            <ShieldBan className="w-3 h-3 me-0.5" />
+                            {t("common.block")}
                           </Button>
                         )}
                         {ind.indicatorType === "domain" && (
@@ -299,15 +301,15 @@ export default function ThreatIntelPage() {
                             variant="destructive"
                             className="text-[9px]"
                             onClick={() => {
-                              if (window.confirm(`Sinkhole domain ${ind.value}?`)) {
+                              if (window.confirm(t("threatIntel.sinkholeConfirm", { value: ind.value }))) {
                                 sinkholeDomain.mutate({ domain: ind.value });
                               }
                             }}
                             disabled={sinkholeDomain.isPending}
                             data-testid={`button-sinkhole-indicator-${ind.id}`}
                           >
-                            <ShieldBan className="w-3 h-3 mr-0.5" />
-                            Sinkhole
+                            <ShieldBan className="w-3 h-3 me-0.5" />
+                            {t("common.sinkhole")}
                           </Button>
                         )}
                       </div>
