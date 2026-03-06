@@ -271,6 +271,62 @@ export class ResponseEngine {
     return { results };
   }
 
+  async autoThreatResponse(orgId: number, event: { id: number; eventType: string; severity: string; source: string; sourceIp: string | null; description: string }) {
+    const actionsTaken: string[] = [];
+    const eventTypeLower = event.eventType.toLowerCase();
+
+    if (event.severity === "critical" && (eventTypeLower.includes("malware") || eventTypeLower.includes("ransomware") || eventTypeLower.includes("c2"))) {
+      if (event.sourceIp) {
+        try {
+          await storage.createFirewallRule({
+            organizationId: orgId,
+            ruleType: "ip_block",
+            value: event.sourceIp,
+            action: "block",
+            reason: `Auto-defend: ${event.eventType} from ${event.source}`,
+            createdBy: null,
+            status: "active",
+          });
+          await storage.mitigateEventsByIp(orgId, event.sourceIp);
+          actionsTaken.push(`Blocked IP ${event.sourceIp}`);
+        } catch {}
+      }
+
+      const incident = await storage.createIncident({
+        organizationId: orgId,
+        title: `[Auto-Defend] ${event.eventType}: ${event.description.slice(0, 80)}`,
+        description: `Automated threat response triggered for event #${event.id}.\n\nSource: ${event.source}\nIP: ${event.sourceIp || "N/A"}\nType: ${event.eventType}`,
+        severity: "critical",
+        status: "investigating",
+      });
+      actionsTaken.push(`Created incident #${incident.id}`);
+
+      await storage.createNotification({
+        organizationId: orgId,
+        userId: null,
+        title: "Auto-Defend Activated",
+        message: `Automated response to ${event.eventType} from ${event.source}. ${actionsTaken.length} actions taken.`,
+        type: "critical",
+        actionUrl: "/incidents",
+      });
+      actionsTaken.push("Notification sent");
+
+      await storage.createResponseAction({
+        organizationId: orgId,
+        actionType: "auto_threat_response",
+        target: event.source,
+        status: "completed",
+        executedBy: null,
+        details: JSON.stringify({ eventId: event.id, eventType: event.eventType, sourceIp: event.sourceIp }),
+        result: actionsTaken.join("; "),
+      });
+
+      this.broadcast({ type: "auto_defend", orgId, actions: actionsTaken });
+    }
+
+    return { actionsTaken };
+  }
+
   async emergencyLockdown(orgId: number, userId: string) {
     const events = await storage.getSecurityEvents(orgId);
     const assets = await storage.getAssets(orgId);

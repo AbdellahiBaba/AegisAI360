@@ -760,6 +760,21 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/response/auto-defend", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { eventId } = z.object({ eventId: z.number() }).parse(req.body);
+      const events = await storage.getSecurityEvents(orgId);
+      const event = events.find(e => e.id === eventId);
+      if (!event) return res.status(404).json({ error: "Event not found" });
+      const result = await responseEngine.autoThreatResponse(orgId, event);
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: error.message || "Failed to execute auto-defend" });
+    }
+  });
+
   app.get("/api/response/actions", async (req, res) => {
     try {
       const actions = await storage.getResponseActions(getOrgId(req));

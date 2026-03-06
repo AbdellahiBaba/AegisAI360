@@ -33,9 +33,11 @@ server/replit_integrations/chat/storage.ts - Chat CRUD
 client/src/i18n/index.ts   - i18next init (EN/AR, localStorage persistence, RTL dir toggling)
 client/src/i18n/en.json    - English translations (~200+ keys, organized by page namespace)
 client/src/i18n/ar.json    - Arabic translations (matching en.json structure)
-client/src/App.tsx         - Layout with sidebar, auth, notification bell, language switcher, 17 routes
-client/src/pages/          - 17 pages (see below), all translated with useTranslation()
-client/src/components/     - AppSidebar, Logo, NotificationBell, LanguageSwitcher, ThemeProvider, shadcn
+client/src/App.tsx         - Layout with sidebar, auth, notification bell, language switcher, public+auth routes
+client/src/pages/          - 17 authenticated pages + landing page + 6 public pages, all translated
+client/src/pages/public/   - About, Features, Pricing, Privacy, Terms, Refund (public, no auth required)
+client/src/pages/landing.tsx - Main landing page with Matrix rain animation, hero, stats
+client/src/components/     - AppSidebar, Logo, NotificationBell, LanguageSwitcher, ThemeProvider, PublicLayout, MatrixRain, shadcn
 client/src/hooks/          - use-auth, use-toast, use-mobile
 ```
 
@@ -96,15 +98,31 @@ client/src/hooks/          - use-auth, use-toast, use-mobile
 - Sinkhole Domain
 - Emergency Lockdown (blocks all critical event source IPs)
 - Execute Playbook (multi-step automated response)
+- Auto-Quarantine (alert engine auto-quarantines malware/ransomware events)
+- Auto-Sinkhole (alert engine auto-blocks domain-like sources)
+- Auto Threat Response (POST /api/response/auto-defend) - automatic block+incident+notify for critical threats
 
 ## Data Ingestion APIs
 - POST `/api/ingest/syslog` - Syslog format ingestion
 - POST `/api/ingest/siem` - SIEM integration (Splunk/QRadar format)
 - POST `/api/ingest/generic` - Generic event ingestion
 
+## Public Pages
+- Landing Page (`/`) - Matrix rain animation, hero with typing text, feature showcase, stats counters, CTA
+- Features (`/features`) - Platform capabilities grid with icons
+- Pricing (`/pricing`) - 3 tiers (Starter $9, Professional $29, Enterprise $79)
+- About (`/about`) - Mission, values, team section
+- Privacy (`/privacy`) - Privacy policy
+- Terms (`/terms`) - Terms of service
+- Refund (`/refund`) - Refund policy
+- All public pages use `PublicLayout` with shared header/footer
+- Public pages accessible without authentication via `RootRouter` in App.tsx
+
 ## Visual Identity
-- Military-grade tactical dark theme (forced dark mode, no light toggle)
-- Background: `220 40% 4%`, Primary: `192 90% 40%`
+- Royal military tactical dark theme (forced dark mode, no light toggle)
+- Background: `228 45% 3%` (deep midnight navy), Primary: `42 90% 50%` (gold/amber)
+- Favicon: SVG shield with gold gradient (`client/public/favicon.svg`)
+- Logo: Military shield SVG with gold gradients, circuit-eye motif, tactical lines
 - Tactical grid background pattern, scanline animation
 - DEFCON-1 through DEFCON-5 CSS indicator classes
 - Severity colors: critical (red), high (orange), medium (yellow), low (blue), info (slate)

@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -30,6 +30,13 @@ import Billing from "@/pages/billing";
 import Firewall from "@/pages/firewall";
 import AlertRules from "@/pages/alert-rules";
 import SuperAdmin from "@/pages/super-admin";
+import AboutPage from "@/pages/public/about";
+import FeaturesPage from "@/pages/public/features";
+import PricingPage from "@/pages/public/pricing";
+import PrivacyPage from "@/pages/public/privacy";
+import TermsPage from "@/pages/public/terms";
+import RefundPage from "@/pages/public/refund";
+import LandingPage from "@/pages/landing";
 
 function AppRouter() {
   return (
@@ -95,6 +102,7 @@ function AppLayout() {
 function AuthenticatedApp() {
   const { t } = useTranslation();
   const { user, isLoading } = useAuth();
+  const [location] = useLocation();
 
   if (isLoading) {
     return (
@@ -109,8 +117,41 @@ function AuthenticatedApp() {
     );
   }
 
-  if (!user) return <AuthPage />;
+  if (!user) {
+    if (location === "/auth") return <AuthPage />;
+    return <LandingPage />;
+  }
   return <AppLayout />;
+}
+
+const PUBLIC_ROUTES = ["/about", "/features", "/pricing", "/privacy", "/terms", "/refund"];
+
+function PublicRouter() {
+  return (
+    <Switch>
+      <Route path="/about" component={AboutPage} />
+      <Route path="/features" component={FeaturesPage} />
+      <Route path="/pricing" component={PricingPage} />
+      <Route path="/privacy" component={PrivacyPage} />
+      <Route path="/terms" component={TermsPage} />
+      <Route path="/refund" component={RefundPage} />
+    </Switch>
+  );
+}
+
+function RootRouter() {
+  const [location] = useLocation();
+  const isPublicRoute = PUBLIC_ROUTES.some((route) => location === route);
+
+  if (isPublicRoute) {
+    return <PublicRouter />;
+  }
+
+  return (
+    <AuthProvider>
+      <AuthenticatedApp />
+    </AuthProvider>
+  );
 }
 
 function App() {
@@ -118,9 +159,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
-          <AuthProvider>
-            <AuthenticatedApp />
-          </AuthProvider>
+          <RootRouter />
           <Toaster />
         </TooltipProvider>
       </ThemeProvider>

@@ -126,6 +126,39 @@ export class AlertEngine {
             }
             break;
 
+          case "auto_quarantine":
+            if (event.eventType.toLowerCase().includes("malware") || event.eventType.toLowerCase().includes("ransomware")) {
+              try {
+                await storage.createQuarantineItem({
+                  organizationId: orgId,
+                  fileName: event.source + "_" + Date.now(),
+                  fileHash: "auto_" + event.id,
+                  threat: event.eventType || event.description.slice(0, 50),
+                  sourceAsset: event.source,
+                  action: "quarantined",
+                  status: "quarantined",
+                  quarantinedBy: null,
+                });
+              } catch {}
+            }
+            break;
+
+          case "auto_sinkhole":
+            if (event.source && /^[a-zA-Z0-9]([a-zA-Z0-9-]*\.)+[a-zA-Z]{2,}$/.test(event.source)) {
+              try {
+                await storage.createFirewallRule({
+                  organizationId: orgId,
+                  ruleType: "domain_block",
+                  value: event.source,
+                  action: "sinkhole",
+                  reason: `Auto-sinkholed by alert rule: ${rule.name}`,
+                  createdBy: null,
+                  status: "active",
+                });
+              } catch {}
+            }
+            break;
+
           default:
             break;
         }

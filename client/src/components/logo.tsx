@@ -4,41 +4,49 @@ export function AegisLogo({ size = 36, showText = true }: { size?: number; showT
       <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="shieldGrad" x1="24" y1="0" x2="24" y2="48" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="hsl(192 90% 45%)" />
-            <stop offset="100%" stopColor="hsl(192 90% 25%)" />
+            <stop offset="0%" stopColor="hsl(45 100% 65%)" />
+            <stop offset="50%" stopColor="hsl(42 90% 50%)" />
+            <stop offset="100%" stopColor="hsl(38 85% 30%)" />
+          </linearGradient>
+          <linearGradient id="innerGrad" x1="24" y1="8" x2="24" y2="40" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="hsl(228 45% 12%)" />
+            <stop offset="100%" stopColor="hsl(228 45% 5%)" />
           </linearGradient>
           <linearGradient id="circuitGrad" x1="12" y1="12" x2="36" y2="36" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="hsl(200 100% 55%)" stopOpacity="0.6" />
-            <stop offset="100%" stopColor="hsl(192 90% 40%)" stopOpacity="0.3" />
+            <stop offset="0%" stopColor="hsl(42 90% 60%)" stopOpacity="0.8" />
+            <stop offset="100%" stopColor="hsl(42 90% 40%)" stopOpacity="0.4" />
           </linearGradient>
         </defs>
         <path
           d="M24 2L6 10v12c0 11.1 7.7 21.4 18 24 10.3-2.6 18-12.9 18-24V10L24 2z"
           fill="url(#shieldGrad)"
-          stroke="hsl(200 100% 55%)"
-          strokeWidth="1"
-          strokeOpacity="0.5"
+          stroke="hsl(45 100% 70%)"
+          strokeWidth="0.5"
+          strokeOpacity="0.6"
         />
         <path
-          d="M24 5L9 12v10c0 9.6 6.5 18.5 15 20.8V5z"
-          fill="hsl(192 90% 35%)"
-          fillOpacity="0.3"
+          d="M24 6L10 12.5v9.5c0 9 6 17.5 14 19.8 8-2.3 14-10.8 14-19.8v-9.5L24 6z"
+          fill="url(#innerGrad)"
+          stroke="hsl(42 90% 50%)"
+          strokeWidth="0.3"
+          strokeOpacity="0.4"
         />
-        <line x1="16" y1="18" x2="22" y2="18" stroke="url(#circuitGrad)" strokeWidth="1.2" />
-        <line x1="22" y1="18" x2="22" y2="24" stroke="url(#circuitGrad)" strokeWidth="1.2" />
-        <line x1="22" y1="24" x2="32" y2="24" stroke="url(#circuitGrad)" strokeWidth="1.2" />
-        <line x1="26" y1="14" x2="26" y2="20" stroke="url(#circuitGrad)" strokeWidth="1.2" />
-        <line x1="16" y1="28" x2="20" y2="28" stroke="url(#circuitGrad)" strokeWidth="1.2" />
-        <line x1="20" y1="28" x2="20" y2="34" stroke="url(#circuitGrad)" strokeWidth="1.2" />
-        <line x1="28" y1="30" x2="32" y2="30" stroke="url(#circuitGrad)" strokeWidth="1.2" />
-        <circle cx="16" cy="18" r="1.5" fill="hsl(200 100% 55%)" />
-        <circle cx="22" cy="24" r="1.5" fill="hsl(200 100% 55%)" />
-        <circle cx="32" cy="24" r="1.5" fill="hsl(200 100% 55%)" />
-        <circle cx="26" cy="14" r="1.5" fill="hsl(200 100% 55%)" />
-        <circle cx="20" cy="34" r="1.5" fill="hsl(200 100% 55%)" />
-        <rect x="11" y="38" width="7" height="2.5" rx="0.5" fill="hsl(192 90% 50%)" fillOpacity="0.9" />
-        <rect x="20" y="38" width="7" height="2.5" rx="0.5" fill="hsl(0 80% 55%)" fillOpacity="0.9" />
-        <rect x="29" y="38" width="7" height="2.5" rx="0.5" fill="hsl(0 0% 85%)" fillOpacity="0.9" />
+        <circle cx="24" cy="20" r="5" fill="none" stroke="url(#circuitGrad)" strokeWidth="1.2" />
+        <circle cx="24" cy="20" r="2" fill="hsl(42 90% 55%)" />
+        <line x1="24" y1="15" x2="24" y2="10" stroke="url(#circuitGrad)" strokeWidth="0.8" />
+        <line x1="24" y1="25" x2="24" y2="30" stroke="url(#circuitGrad)" strokeWidth="0.8" />
+        <line x1="19" y1="20" x2="14" y2="20" stroke="url(#circuitGrad)" strokeWidth="0.8" />
+        <line x1="29" y1="20" x2="34" y2="20" stroke="url(#circuitGrad)" strokeWidth="0.8" />
+        <line x1="20.5" y1="16.5" x2="17" y2="13" stroke="url(#circuitGrad)" strokeWidth="0.6" />
+        <line x1="27.5" y1="16.5" x2="31" y2="13" stroke="url(#circuitGrad)" strokeWidth="0.6" />
+        <line x1="20.5" y1="23.5" x2="17" y2="27" stroke="url(#circuitGrad)" strokeWidth="0.6" />
+        <line x1="27.5" y1="23.5" x2="31" y2="27" stroke="url(#circuitGrad)" strokeWidth="0.6" />
+        <circle cx="14" cy="20" r="1" fill="hsl(42 90% 55%)" fillOpacity="0.7" />
+        <circle cx="34" cy="20" r="1" fill="hsl(42 90% 55%)" fillOpacity="0.7" />
+        <circle cx="24" cy="10" r="1" fill="hsl(42 90% 55%)" fillOpacity="0.7" />
+        <circle cx="24" cy="30" r="1" fill="hsl(42 90% 55%)" fillOpacity="0.7" />
+        <rect x="18" y="33" width="12" height="1.5" rx="0.75" fill="hsl(42 90% 50%)" fillOpacity="0.5" />
+        <rect x="20" y="36" width="8" height="1" rx="0.5" fill="hsl(42 90% 50%)" fillOpacity="0.3" />
       </svg>
       {showText && (
         <div className="flex flex-col">
