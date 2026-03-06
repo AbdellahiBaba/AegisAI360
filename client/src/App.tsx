@@ -6,8 +6,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider, useTheme } from "@/components/theme-provider";
+import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon } from "lucide-react";
+import { Sun, Moon, Loader2 } from "lucide-react";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Alerts from "@/pages/alerts";
@@ -15,6 +16,7 @@ import Incidents from "@/pages/incidents";
 import ThreatIntel from "@/pages/threat-intel";
 import AiAnalysis from "@/pages/ai-analysis";
 import Policies from "@/pages/policies";
+import AuthPage from "@/pages/auth";
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -68,12 +70,29 @@ function AppLayout() {
   );
 }
 
+function AuthenticatedApp() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) return <AuthPage />;
+  return <AppLayout />;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
-          <AppLayout />
+          <AuthProvider>
+            <AuthenticatedApp />
+          </AuthProvider>
           <Toaster />
         </TooltipProvider>
       </ThemeProvider>
