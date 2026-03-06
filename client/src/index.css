@@ -42,7 +42,7 @@
   --chart-3: 20 90% 55%;
   --chart-4: 0 80% 55%;
   --chart-5: 270 60% 55%;
-  --font-sans: 'Space Grotesk', sans-serif;
+  --font-sans: 'Space Grotesk', 'Cairo', sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: 'JetBrains Mono', monospace;
   --radius: .5rem;
@@ -136,6 +136,15 @@
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+html[dir="rtl"] {
+  --font-sans: 'Cairo', 'Space Grotesk', sans-serif;
+}
+
+html[dir="rtl"] body {
+  line-height: 1.8;
+  letter-spacing: 0;
 }
 
 @layer base {

@@ -10,13 +10,15 @@ Military-grade multi-tenant SaaS SOC platform with real-time threat monitoring, 
 - **AI**: OpenAI via Replit AI Integrations (gpt-4o-mini)
 - **Payments**: Stripe via Replit connector (stripe-replit-sync)
 - **i18n**: i18next + react-i18next (English + Arabic with RTL support)
-- **Fonts**: Space Grotesk (sans), JetBrains Mono (mono)
+- **Fonts**: Space Grotesk (sans), Cairo (Arabic/RTL), JetBrains Mono (mono)
+- **Security**: Helmet (headers), express-rate-limit, xss sanitization, intrusion detection
 
 ## Architecture
 ```
 shared/schema.ts          - Drizzle schema + Zod insert schemas + types (17+ tables)
 shared/models/chat.ts     - Conversations/messages tables
-server/index.ts           - Express app bootstrap, Stripe init, super admin seed
+server/index.ts           - Express app bootstrap, Stripe init, super admin seed, security middleware chain
+server/securityMiddleware.ts - Intrusion detection, IP blocking, attack classification, security stats
 server/routes.ts          - All API routes + WebSocket + AI streaming + billing + response actions
 server/storage.ts         - DatabaseStorage implementing IStorage (org-scoped)
 server/auth.ts            - Passport-local, sessions, register/login/logout, RBAC

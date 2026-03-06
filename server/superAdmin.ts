@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { storage } from "./storage";
 import type { User } from "@shared/schema";
 import os from "os";
+import { getSecurityStats } from "./securityMiddleware";
 
 function requireSuperAdmin(req: Request, res: Response, next: any) {
   if (!req.isAuthenticated()) return res.status(401).json({ error: "Authentication required" });
@@ -98,6 +99,15 @@ export function createSuperAdminRouter() {
       res.json(logs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch audit logs" });
+    }
+  });
+
+  router.get("/security-stats", async (_req: Request, res: Response) => {
+    try {
+      const stats = getSecurityStats();
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch security stats" });
     }
   });
 

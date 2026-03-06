@@ -273,7 +273,13 @@
     "noAuditEntries": "لا توجد إدخالات في سجل التدقيق",
     "orgStatusUpdated": "تم تحديث حالة المؤسسة",
     "orgPlanUpdated": "تم تحديث خطة المؤسسة",
-    "user": "المستخدم"
+    "user": "المستخدم",
+    "security": "الأمان",
+    "blockedAttacks": "الهجمات المحظورة",
+    "rateLimitedIPs": "عناوين IP المحدودة",
+    "blockedIPs": "عناوين IP المحظورة",
+    "recentSecurityEvents": "أحداث الأمان الأخيرة",
+    "noSecurityEvents": "لم يتم اكتشاف أحداث أمنية"
   },
   "honeypot": {
     "title": "لوحة مصيدة العسل",

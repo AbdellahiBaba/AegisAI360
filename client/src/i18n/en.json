@@ -273,7 +273,13 @@
     "noAuditEntries": "No audit log entries",
     "orgStatusUpdated": "Organization status updated",
     "orgPlanUpdated": "Organization plan updated",
-    "user": "User"
+    "user": "User",
+    "security": "Security",
+    "blockedAttacks": "Blocked Attacks",
+    "rateLimitedIPs": "Rate-Limited IPs",
+    "blockedIPs": "Blocked IPs",
+    "recentSecurityEvents": "Recent Security Events",
+    "noSecurityEvents": "No security events detected"
   },
   "honeypot": {
     "title": "Honeypot Dashboard",

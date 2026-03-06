@@ -24,6 +24,8 @@ import {
   ShieldAlert,
   Ban,
   CheckCircle,
+  Lock,
+  AlertTriangle,
 } from "lucide-react";
 
 interface PlatformStats {
@@ -55,6 +57,18 @@ interface SystemHealth {
   memory: { used: number; total: number; percentage: number };
   load: number[];
   nodeVersion: string;
+}
+
+interface SecurityStats {
+  blockedAttacks: number;
+  rateLimitedIps: number;
+  blockedIps: number;
+  recentEvents: Array<{
+    timestamp: string;
+    type: string;
+    ip: string;
+    path: string;
+  }>;
 }
 
 interface AuditEntry {
@@ -130,6 +144,7 @@ export default function SuperAdmin() {
           <TabsTrigger value="organizations" data-testid="tab-organizations">{t("superAdmin.organizations")}</TabsTrigger>
           <TabsTrigger value="users" data-testid="tab-users">{t("superAdmin.users")}</TabsTrigger>
           <TabsTrigger value="system" data-testid="tab-system">{t("superAdmin.system")}</TabsTrigger>
+          <TabsTrigger value="security" data-testid="tab-security">{t("superAdmin.security", "Security")}</TabsTrigger>
           <TabsTrigger value="audit" data-testid="tab-audit">{t("superAdmin.auditLog")}</TabsTrigger>
         </TabsList>
 
@@ -147,6 +162,10 @@ export default function SuperAdmin() {
 
         <TabsContent value="system" className="mt-4">
           <SystemHealthCard />
+        </TabsContent>
+
+        <TabsContent value="security" className="mt-4">
+          <SecurityPanel />
         </TabsContent>
 
         <TabsContent value="audit" className="mt-4">
@@ -500,5 +519,103 @@ function AuditLogFeed() {
         </ScrollArea>
       </CardContent>
     </Card>
+  );
+}
+
+function SecurityPanel() {
+  const { t } = useTranslation();
+  const { data: stats, isLoading } = useQuery<SecurityStats>({
+    queryKey: ["/api/admin/security-stats"],
+    refetchInterval: 10000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-28" />
+        ))}
+      </div>
+    );
+  }
+
+  const secCards = [
+    {
+      label: t("superAdmin.blockedAttacks", "Blocked Attacks"),
+      value: stats?.blockedAttacks ?? 0,
+      icon: ShieldAlert,
+      color: "text-severity-critical",
+    },
+    {
+      label: t("superAdmin.rateLimitedIPs", "Rate-Limited IPs"),
+      value: stats?.rateLimitedIps ?? 0,
+      icon: Ban,
+      color: "text-amber-500",
+    },
+    {
+      label: t("superAdmin.blockedIPs", "Blocked IPs"),
+      value: stats?.blockedIps ?? 0,
+      icon: Lock,
+      color: "text-red-500",
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {secCards.map((card) => (
+          <Card key={card.label}>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                {card.label}
+              </CardTitle>
+              <card.icon className={`w-4 h-4 ${card.color}`} />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono" data-testid={`security-stat-${card.label.toLowerCase().replace(/\s/g, "-")}`}>
+                {card.value.toLocaleString()}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xs uppercase tracking-wider flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            {t("superAdmin.recentSecurityEvents", "Recent Security Events")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ScrollArea className="h-[calc(100vh-450px)]">
+            <div className="divide-y">
+              {(stats?.recentEvents || []).map((event, idx) => (
+                <div key={idx} className="px-4 py-3 space-y-1" data-testid={`security-event-${idx}`}>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <Badge variant="destructive" className="text-[9px] uppercase tracking-wider">
+                      {event.type}
+                    </Badge>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {new Date(event.timestamp).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono">
+                    <span>IP: {event.ip}</span>
+                    {event.path && <span className="truncate max-w-[300px]">{event.path}</span>}
+                  </div>
+                </div>
+              ))}
+              {(!stats?.recentEvents || stats.recentEvents.length === 0) && (
+                <div className="flex flex-col items-center gap-2 py-12">
+                  <CheckCircle className="w-8 h-8 text-emerald-500" />
+                  <span className="text-sm text-muted-foreground">{t("superAdmin.noSecurityEvents", "No security events detected")}</span>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
