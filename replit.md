@@ -1,7 +1,7 @@
 # AegisAI - Defensive Cybersecurity Platform
 
 ## Overview
-Military-grade multi-tenant SaaS SOC platform with real-time threat monitoring, one-click defense response actions, firewall management, alert rules engine, super admin system, AI-powered threat detection, WebSocket live feeds, Stripe billing, organization-based data separation, and role-based access control.
+Military-grade multi-tenant SaaS SOC platform with real-time threat monitoring, one-click defense response actions, firewall management, alert rules engine, super admin system, AI-powered threat detection, WebSocket live feeds, Stripe billing, organization-based data separation, role-based access control, security scanning tools, threat simulation engine, and configurable automation defense modes.
 
 ## Tech Stack
 - **Frontend**: React + TypeScript, Vite, Tailwind CSS, shadcn/ui, Recharts, Wouter (routing), TanStack Query
@@ -15,15 +15,18 @@ Military-grade multi-tenant SaaS SOC platform with real-time threat monitoring, 
 
 ## Architecture
 ```
-shared/schema.ts          - Drizzle schema + Zod insert schemas + types (17+ tables)
+shared/schema.ts          - Drizzle schema + Zod insert schemas + types (18+ tables)
 shared/models/chat.ts     - Conversations/messages tables
-server/index.ts           - Express app bootstrap, Stripe init, super admin seed, security middleware chain
+server/index.ts           - Express app bootstrap, Stripe init, super admin seed, rule seeding, security middleware chain
 server/securityMiddleware.ts - Intrusion detection, IP blocking, attack classification, security stats
-server/routes.ts          - All API routes + WebSocket + AI streaming + billing + response actions
+server/routes.ts          - All API routes + WebSocket + AI streaming + billing + scanning + simulation
 server/storage.ts         - DatabaseStorage implementing IStorage (org-scoped)
 server/auth.ts            - Passport-local, sessions, register/login/logout, RBAC
 server/ingestion.ts       - Real data ingestion APIs (syslog, SIEM, generic)
-server/alertEngine.ts     - Alert rules evaluation engine
+server/alertEngine.ts     - Alert rules evaluation engine with defense mode support
+server/seedRules.ts       - Pre-built detection rules + response playbooks seeder
+server/scanEngine.ts      - Security scanning engine (port/DNS/SSL/header/vulnerability)
+server/threatSimulator.ts - Threat simulation engine (6 attack scenarios)
 server/superAdmin.ts      - Super admin middleware and platform management
 server/threatFeeds.ts     - Threat feed integration
 server/responseEngine.ts  - One-click defense response actions
@@ -33,18 +36,19 @@ server/seed-products.ts   - Creates 3 Stripe pricing tiers
 server/db.ts              - Drizzle + pg pool setup
 server/replit_integrations/chat/storage.ts - Chat CRUD
 client/src/i18n/index.ts   - i18next init (EN/AR, localStorage persistence, RTL dir toggling)
-client/src/i18n/en.json    - English translations (~200+ keys, organized by page namespace)
+client/src/i18n/en.json    - English translations (~300+ keys, organized by page namespace)
 client/src/i18n/ar.json    - Arabic translations (matching en.json structure)
 client/src/App.tsx         - Layout with sidebar, auth, notification bell, language switcher, public+auth routes
-client/src/pages/          - 17 authenticated pages + landing page + 6 public pages, all translated
+client/src/pages/          - 18 authenticated pages + landing page + 6 public pages, all translated
 client/src/pages/public/   - About, Features, Pricing, Privacy, Terms, Refund (public, no auth required)
 client/src/pages/landing.tsx - Main landing page with Matrix rain animation, hero, stats
+client/src/pages/scanner.tsx - Security scanner with 5 scan types (tabs) + scan history
 client/src/components/     - AppSidebar, Logo, NotificationBell, LanguageSwitcher, ThemeProvider, PublicLayout, MatrixRain, shadcn
 client/src/hooks/          - use-auth, use-toast, use-mobile
 ```
 
 ## Database Tables
-- `organizations` - Multi-tenant orgs (plan, slug, stripe IDs)
+- `organizations` - Multi-tenant orgs (plan, slug, stripe IDs, defenseMode)
 - `users` - Auth (varchar UUID PK, org FK, role, isSuperAdmin)
 - `invites` - Invite codes (org FK, role, expiry)
 - `security_events` - Security alerts (org-scoped, ATT&CK technique/tactic)
@@ -60,6 +64,7 @@ client/src/hooks/          - use-auth, use-toast, use-mobile
 - `alert_rules` - Custom alert rule conditions and actions
 - `response_actions` - Log of all response actions taken
 - `notifications` - User notifications with read status
+- `scan_results` - Security scan results (port/DNS/SSL/header/vuln scans)
 - `conversations` - AI chat conversations
 - `messages` - Chat messages with role
 - `stripe.*` - Auto-managed by stripe-replit-sync
@@ -77,11 +82,46 @@ client/src/hooks/          - use-auth, use-toast, use-mobile
 10. Honeypot Dashboard - Live attack feed, country origins, service breakdown, block attacker IP
 11. Quarantine - File management with restore/delete actions
 12. Response Playbooks - Create/toggle automated response procedures
-13. Organization Settings - Team members, invite system, role management
+13. Organization Settings - Team members, invite system, role management, defense mode toggle, threat simulator
 14. Billing - Pricing tiers (Starter $9, Professional $29, Enterprise $79)
 15. Firewall Management - Rules table, add/edit/toggle/delete rules, search/filter
 16. Alert Rules - Rules list, conditions builder, enable/disable, delete
-17. Super Admin - Platform stats, org management, user table, system health, audit log
+17. Super Admin - Platform stats, org management, user table, system health, audit log, security tab
+18. Security Scanner - Port scanner, DNS lookup, SSL checker, header audit, vulnerability scan, scan history
+
+## Security Scanner
+5 scan types accessible at `/scanner`:
+- **Port Scanner**: TCP connection scan across 23 common ports using Node.js `net.Socket`, risk-classified
+- **DNS Lookup**: Resolves A, AAAA, MX, NS, TXT, CNAME records using `dns.promises`
+- **SSL/TLS Checker**: Grabs certificates via `tls.connect`, grades A-F, flags expired/self-signed/expiring
+- **Header Audit**: Checks 8 security headers (HSTS, CSP, X-Frame-Options, etc.), scores percentage, grades A-F
+- **Vulnerability Scanner**: Checks 20 common paths (.env, .git, admin panels, backup dirs), severity-rated
+- All results stored in `scan_results` table and high-risk findings create `security_events`
+- APIs: POST `/api/scan/ports|dns|ssl|headers|vulnerabilities`, GET `/api/scan/history`
+
+## Threat Simulation Engine
+6 attack scenarios for testing automated defense (admin only):
+1. **SSH Brute Force** - 15+ rapid login attempts from a single IP
+2. **Ransomware Outbreak** - Dropper, C2 beacon, file encryption, data exfiltration
+3. **Phishing Campaign** - Malicious emails, credential harvesting, compromised user
+4. **Port Scan Sweep** - Network recon across 12 ports from external IP
+5. **Data Exfiltration** - DB queries, DNS tunneling, bulk encrypted transfer
+6. **APT Kill Chain** - Full lifecycle: recon, exploit, persistence, lateral movement, credential dump, exfil
+- APIs: GET `/api/simulate/scenarios`, POST `/api/simulate/:scenario`
+
+## Automation Defense Modes
+Three modes controlling how AlertEngine responds to threats:
+- **Full Auto** (default): All rules execute automatically (block IPs, quarantine files, sinkhole domains)
+- **Semi-Auto**: Destructive actions create pending approval notifications instead of executing
+- **Manual**: Only notifications generated; all defensive actions require manual execution
+- Stored in `organizations.defenseMode` column
+- APIs: GET `/api/settings/defense-mode`, PATCH `/api/settings/defense-mode`
+
+## Pre-Built Detection Rules (12 rules, auto-seeded)
+SSH Brute Force, Ransomware, SQL Injection, XSS, Port Scan, Data Exfiltration, Phishing, Lateral Movement, Privilege Escalation, C2 Beacon, Zero-Day Exploit, Unauthorized Access
+
+## Pre-Built Response Playbooks (6 playbooks, auto-seeded)
+Ransomware Containment, Phishing Response, Brute Force Mitigation, Data Exfiltration Response, Malware Outbreak, Insider Threat Response
 
 ## Auth & Multi-Tenancy
 - Passport-local with scrypt hashing, connect-pg-simple sessions
@@ -131,7 +171,7 @@ client/src/hooks/          - use-auth, use-toast, use-mobile
 
 ## Sidebar Navigation (5 Groups)
 - COMMAND: Dashboard, AI Analysis
-- DETECT: Security Events, ATT&CK Map, Honeypot, Alert Rules
+- DETECT: Security Events, ATT&CK Map, Scanner, Honeypot, Alert Rules
 - RESPOND: Incidents, Quarantine, Playbooks, Firewall, Policies
 - INTEL: Threat Intel, Network Map, Forensics
 - ADMIN: Settings, Billing, Super Admin (super admin only)
@@ -143,7 +183,7 @@ client/src/hooks/          - use-auth, use-toast, use-mobile
 - Language preference persisted to localStorage key `aegis-lang`
 - RTL: `dir` and `lang` attributes set on `<html>` element dynamically
 - Language switcher in header (authenticated) and auth page (unauthenticated)
-- All 19 pages and core components (sidebar, notification bell) fully translated
+- All pages and core components fully translated (300+ keys each language)
 - CSS uses logical properties (me/ms/start/end/border-e) for RTL compatibility
 
 ## Environment Variables

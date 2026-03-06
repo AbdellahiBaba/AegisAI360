@@ -23,7 +23,7 @@ import { createSuperAdminRouter } from "./superAdmin";
 import { createThreatFeedsRouter } from "./threatFeeds";
 import { ResponseEngine } from "./responseEngine";
 import { AlertEngine } from "./alertEngine";
-import { scanPorts, lookupDNS, checkSSL, scanHeaders, scanVulnerabilities } from "./scanEngine";
+import { scanPorts, lookupDNS, checkSSL, scanHeaders, scanVulnerabilities, isPrivateTarget } from "./scanEngine";
 import { SCENARIOS } from "./threatSimulator";
 
 const openai = new OpenAI({
@@ -1017,6 +1017,9 @@ export async function registerRoutes(
         target: z.string().min(1),
         ports: z.array(z.number()).optional(),
       }).parse(req.body);
+      if (isPrivateTarget(target)) {
+        return res.status(400).json({ error: "Scanning private/internal addresses is not allowed" });
+      }
       const scanRecord = await storage.createScanResult({
         organizationId: orgId,
         scanType: "port_scan",
@@ -1057,6 +1060,9 @@ export async function registerRoutes(
     try {
       const orgId = getOrgId(req);
       const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      if (isPrivateTarget(target)) {
+        return res.status(400).json({ error: "Scanning private/internal addresses is not allowed" });
+      }
       const scanRecord = await storage.createScanResult({
         organizationId: orgId,
         scanType: "dns_lookup",
@@ -1087,6 +1093,9 @@ export async function registerRoutes(
     try {
       const orgId = getOrgId(req);
       const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      if (isPrivateTarget(target)) {
+        return res.status(400).json({ error: "Scanning private/internal addresses is not allowed" });
+      }
       const scanRecord = await storage.createScanResult({
         organizationId: orgId,
         scanType: "ssl_check",
@@ -1130,6 +1139,9 @@ export async function registerRoutes(
     try {
       const orgId = getOrgId(req);
       const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      if (isPrivateTarget(target)) {
+        return res.status(400).json({ error: "Scanning private/internal addresses is not allowed" });
+      }
       const scanRecord = await storage.createScanResult({
         organizationId: orgId,
         scanType: "header_scan",
@@ -1164,6 +1176,9 @@ export async function registerRoutes(
     try {
       const orgId = getOrgId(req);
       const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      if (isPrivateTarget(target)) {
+        return res.status(400).json({ error: "Scanning private/internal addresses is not allowed" });
+      }
       const scanRecord = await storage.createScanResult({
         organizationId: orgId,
         scanType: "vuln_scan",

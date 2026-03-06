@@ -4,6 +4,25 @@ import tls from "tls";
 import https from "https";
 import http from "http";
 
+const PRIVATE_IP_RANGES = [
+  /^127\./,
+  /^10\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^192\.168\./,
+  /^0\./,
+  /^169\.254\./,
+  /^::1$/,
+  /^fc00:/,
+  /^fe80:/,
+  /^fd/,
+  /^localhost$/i,
+];
+
+export function isPrivateTarget(target: string): boolean {
+  const host = target.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+  return PRIVATE_IP_RANGES.some((r) => r.test(host));
+}
+
 const COMMON_PORTS: Record<number, string> = {
   21: "FTP", 22: "SSH", 23: "Telnet", 25: "SMTP", 53: "DNS",
   80: "HTTP", 110: "POP3", 143: "IMAP", 443: "HTTPS", 445: "SMB",
