@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Search, Filter, Clock, Globe, Server, ArrowRight } from "lucide-react";
+import { Search, Filter, Clock, Globe, Server, ArrowRight, ShieldBan, AlertTriangle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { SecurityEvent } from "@shared/schema";
 
@@ -57,6 +57,36 @@ export default function Alerts() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
       toast({ title: "Event status updated" });
+    },
+  });
+
+  const blockIp = useMutation({
+    mutationFn: async ({ ip, reason }: { ip: string; reason: string }) => {
+      const res = await apiRequest("POST", "/api/response/block-ip", { ip, reason });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/firewall"] });
+      toast({ title: "IP Blocked", description: `${data.mitigatedCount || 0} events mitigated.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Block failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const createIncidentFromEvent = useMutation({
+    mutationFn: async ({ eventId }: { eventId: number }) => {
+      const res = await apiRequest("POST", "/api/response/create-incident-from-event", { eventId });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
+      toast({ title: "Incident created from event" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -238,6 +268,39 @@ export default function Alerts() {
                       Dismiss
                     </Button>
                   )}
+                </div>
+                <div className="border-t pt-4 mt-4 space-y-2">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Response Actions</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {selectedEvent.sourceIp && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          if (!window.confirm(`Block IP ${selectedEvent.sourceIp}? This will create a firewall rule.`)) return;
+                          blockIp.mutate({ ip: selectedEvent.sourceIp!, reason: `Blocked from event: ${selectedEvent.description.slice(0, 80)}` });
+                        }}
+                        disabled={blockIp.isPending}
+                        data-testid="button-block-ip"
+                      >
+                        {blockIp.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <ShieldBan className="w-3 h-3 mr-1" />}
+                        Block Source IP
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        if (!window.confirm("Create an incident from this event?")) return;
+                        createIncidentFromEvent.mutate({ eventId: selectedEvent.id });
+                      }}
+                      disabled={createIncidentFromEvent.isPending}
+                      data-testid="button-create-incident-from-event"
+                    >
+                      {createIncidentFromEvent.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <AlertTriangle className="w-3 h-3 mr-1" />}
+                      Create Incident
+                    </Button>
+                  </div>
                 </div>
               </div>
             </>

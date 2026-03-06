@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Shield, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { AegisLogoLarge } from "@/components/logo";
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -33,80 +34,82 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md space-y-6">
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-primary">
-            <Shield className="w-8 h-8 text-primary-foreground" />
-          </div>
-          <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-wider">
-              AEGIS<span className="text-primary">AI</span>
-            </h1>
-            <p className="text-xs text-muted-foreground tracking-widest uppercase mt-1">
-              Security Operations Center
-            </p>
-          </div>
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-background tactical-grid p-4">
+      <div className="absolute top-0 left-0 right-0 h-8 bg-primary/10 border-b border-primary/20 flex items-center justify-center">
+        <span className="text-[10px] font-mono text-primary/60 tracking-[0.4em] uppercase">
+          Authorized Personnel Only
+        </span>
+      </div>
 
-        <Card>
+      <div className="w-full max-w-md space-y-8">
+        <AegisLogoLarge />
+
+        <Card className="border-primary/10">
           <CardHeader className="pb-4">
-            <CardTitle className="text-center text-sm uppercase tracking-wider">
-              {isLogin ? "Sign In" : "Create Account"}
+            <CardTitle className="text-center text-xs uppercase tracking-[0.3em] text-muted-foreground">
+              {isLogin ? "Operator Authentication" : "Register Operator"}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="username" className="text-[10px] uppercase tracking-wider">Callsign</Label>
                 <Input
                   id="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter username"
+                  placeholder="Enter callsign"
                   required
+                  className="font-mono"
                   data-testid="input-username"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password" className="text-[10px] uppercase tracking-wider">Passphrase</Label>
                 <Input
                   id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
+                  placeholder="Enter passphrase"
                   required
                   minLength={6}
+                  className="font-mono"
                   data-testid="input-password"
                 />
               </div>
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full tracking-wider uppercase text-xs"
                 disabled={mutation.isPending}
                 data-testid="button-auth-submit"
               >
                 {mutation.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
                 ) : null}
-                {isLogin ? "Sign In" : "Create Account"}
+                {isLogin ? "Authenticate" : "Register"}
               </Button>
             </form>
             <div className="mt-4 text-center">
               <button
                 type="button"
                 onClick={() => setIsLogin(!isLogin)}
-                className="text-xs text-primary hover:underline"
+                className="text-[10px] text-primary hover:underline tracking-wider uppercase"
                 data-testid="button-toggle-auth-mode"
               >
                 {isLogin
-                  ? "Don't have an account? Create one"
-                  : "Already have an account? Sign in"}
+                  ? "Request new operator access"
+                  : "Existing operator? Authenticate"}
               </button>
             </div>
           </CardContent>
         </Card>
+
+        <div className="text-center">
+          <p className="text-[9px] text-muted-foreground/50 font-mono tracking-wider">
+            AegisAI Cyber Defense Platform v3.0
+          </p>
+        </div>
       </div>
     </div>
   );

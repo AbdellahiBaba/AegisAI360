@@ -1,60 +1,62 @@
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import {
-  Shield, LayoutDashboard, ShieldAlert, Bug, Database, Brain, FileText,
-  Network, Target, Clock, Radio, Lock, BookOpen, Settings, CreditCard, LogOut, User,
+  LayoutDashboard, ShieldAlert, Bug, Brain, Database,
+  Network, Target, Clock, Radio, Lock, BookOpen, FileText,
+  Settings, CreditCard, LogOut, User, Shield, Bell, Flame,
 } from "lucide-react";
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarHeader,
-  SidebarFooter,
+  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
+  SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
+  SidebarHeader, SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AegisLogo } from "@/components/logo";
 
-const operationsItems = [
+interface NavItem {
+  title: string;
+  url: string;
+  icon: React.ElementType;
+}
+
+const commandItems: NavItem[] = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Security Events", url: "/alerts", icon: ShieldAlert },
-  { title: "Incidents", url: "/incidents", icon: Bug },
   { title: "AI Analysis", url: "/ai-analysis", icon: Brain },
 ];
 
-const detectionItems = [
-  { title: "Threat Intel", url: "/threat-intel", icon: Database },
-  { title: "Network Map", url: "/network-map", icon: Network },
+const detectItems: NavItem[] = [
+  { title: "Security Events", url: "/alerts", icon: ShieldAlert },
   { title: "ATT&CK Heatmap", url: "/attack-map", icon: Target },
   { title: "Honeypot", url: "/honeypot", icon: Radio },
+  { title: "Alert Rules", url: "/alert-rules", icon: Bell },
 ];
 
-const responseItems = [
+const respondItems: NavItem[] = [
+  { title: "Incidents", url: "/incidents", icon: Bug },
   { title: "Quarantine", url: "/quarantine", icon: Lock },
   { title: "Playbooks", url: "/playbooks", icon: BookOpen },
+  { title: "Firewall", url: "/firewall", icon: Flame },
   { title: "Policies", url: "/policies", icon: FileText },
+];
+
+const intelItems: NavItem[] = [
+  { title: "Threat Intel", url: "/threat-intel", icon: Database },
+  { title: "Network Map", url: "/network-map", icon: Network },
   { title: "Forensic Timeline", url: "/forensics", icon: Clock },
 ];
 
-const adminItems = [
-  { title: "Settings", url: "/settings", icon: Settings, roles: ["admin", "analyst", "auditor", "readonly"] },
-  { title: "Billing", url: "/billing", icon: CreditCard, roles: ["admin"] },
+const adminItems: NavItem[] = [
+  { title: "Settings", url: "/settings", icon: Settings },
+  { title: "Billing", url: "/billing", icon: CreditCard },
 ];
 
-const planColors: Record<string, string> = {
-  starter: "bg-severity-info text-white",
-  professional: "bg-primary text-primary-foreground",
-  enterprise: "bg-severity-high text-white",
-};
-
-function NavGroup({ label, items, location }: { label: string; items: typeof operationsItems; location: string }) {
+function NavGroup({ label, items, location }: { label: string; items: NavItem[]; location: string }) {
   return (
     <SidebarGroup>
-      <SidebarGroupLabel className="text-[10px] tracking-widest uppercase">{label}</SidebarGroupLabel>
+      <SidebarGroupLabel className="text-[9px] tracking-[0.3em] uppercase text-muted-foreground/60 font-semibold px-3">
+        {label}
+      </SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => (
@@ -62,11 +64,11 @@ function NavGroup({ label, items, location }: { label: string; items: typeof ope
               <SidebarMenuButton
                 asChild
                 data-active={location === item.url}
-                className="data-[active=true]:bg-sidebar-accent"
+                className="data-[active=true]:bg-primary/10 data-[active=true]:text-primary data-[active=true]:font-semibold h-8"
               >
                 <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
                   <item.icon className="w-4 h-4" />
-                  <span>{item.title}</span>
+                  <span className="text-xs">{item.title}</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -81,45 +83,47 @@ export function AppSidebar() {
   const [location] = useLocation();
   const { user, logoutMutation } = useAuth();
 
-  const userRole = user?.role || "readonly";
-  const filteredAdminItems = adminItems.filter((item) => !item.roles || item.roles.includes(userRole));
+  const isSuperAdmin = user?.isSuperAdmin === true;
+
+  const fullAdminItems = [
+    ...adminItems,
+    ...(isSuperAdmin ? [{ title: "Super Admin", url: "/super-admin", icon: Shield }] : []),
+  ];
 
   return (
     <Sidebar>
-      <SidebarHeader className="p-4">
+      <SidebarHeader className="p-3 border-b border-border/50">
         <Link href="/">
-          <div className="flex items-center gap-2 cursor-pointer" data-testid="link-home">
-            <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary">
-              <Shield className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-bold tracking-wider">AEGIS<span className="text-primary">AI</span></span>
-              <span className="text-[10px] text-muted-foreground tracking-widest uppercase">Command Center</span>
-            </div>
+          <div className="cursor-pointer" data-testid="link-home">
+            <AegisLogo size={32} />
           </div>
         </Link>
       </SidebarHeader>
 
-      <SidebarContent>
-        <NavGroup label="Operations" items={operationsItems} location={location} />
-        <NavGroup label="Detection" items={detectionItems} location={location} />
-        <NavGroup label="Response" items={responseItems} location={location} />
-        {filteredAdminItems.length > 0 && (
-          <NavGroup label="Admin" items={filteredAdminItems} location={location} />
-        )}
+      <SidebarContent className="py-1">
+        <NavGroup label="Command" items={commandItems} location={location} />
+        <NavGroup label="Detect" items={detectItems} location={location} />
+        <NavGroup label="Respond" items={respondItems} location={location} />
+        <NavGroup label="Intel" items={intelItems} location={location} />
+        <NavGroup label="Admin" items={fullAdminItems} location={location} />
       </SidebarContent>
 
-      <SidebarFooter className="p-4 space-y-3">
+      <SidebarFooter className="p-3 space-y-2 border-t border-border/50">
         <div className="flex items-center gap-2 p-2 rounded-md bg-sidebar-accent/50">
           <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/20">
             <User className="w-3.5 h-3.5 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium truncate" data-testid="text-username">{user?.username}</p>
-            <div className="flex items-center gap-1.5">
-              <Badge className={`text-[8px] ${planColors[userRole === "admin" ? "professional" : "starter"]} px-1 py-0`}>
-                {userRole}
+            <p className="text-[11px] font-medium truncate font-mono" data-testid="text-username">{user?.username}</p>
+            <div className="flex items-center gap-1">
+              <Badge variant="secondary" className="text-[8px] px-1 py-0 h-3.5">
+                {user?.role || "operator"}
               </Badge>
+              {isSuperAdmin && (
+                <Badge className="text-[8px] px-1 py-0 h-3.5 bg-severity-high text-white border-0">
+                  ADMIN
+                </Badge>
+              )}
             </div>
           </div>
           <Button
@@ -133,9 +137,9 @@ export function AppSidebar() {
           </Button>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-status-online animate-pulse-glow" />
-          <span className="text-xs text-muted-foreground">System Online</span>
-          <Badge variant="secondary" className="ml-auto text-[10px]">v2.0</Badge>
+          <div className="w-1.5 h-1.5 rounded-full bg-status-online animate-pulse-glow" />
+          <span className="text-[10px] text-muted-foreground font-mono">OPERATIONAL</span>
+          <Badge variant="secondary" className="ml-auto text-[9px] font-mono">v3.0</Badge>
         </div>
       </SidebarFooter>
     </Sidebar>

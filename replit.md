@@ -1,7 +1,7 @@
-# AegisAI - Security Operations Center Dashboard
+# AegisAI - Defensive Cybersecurity Platform
 
 ## Overview
-Multi-tenant SaaS SOC dashboard with AI-powered threat detection, real-time monitoring via WebSockets, Stripe billing, organization-based data separation, role-based access control, and expanded cybersecurity defense tools.
+Military-grade multi-tenant SaaS SOC platform with real-time threat monitoring, one-click defense response actions, firewall management, alert rules engine, super admin system, AI-powered threat detection, WebSocket live feeds, Stripe billing, organization-based data separation, and role-based access control.
 
 ## Tech Stack
 - **Frontend**: React + TypeScript, Vite, Tailwind CSS, shadcn/ui, Recharts, Wouter (routing), TanStack Query
@@ -13,27 +13,31 @@ Multi-tenant SaaS SOC dashboard with AI-powered threat detection, real-time moni
 
 ## Architecture
 ```
-shared/schema.ts          - Drizzle schema + Zod insert schemas + types (15 tables)
+shared/schema.ts          - Drizzle schema + Zod insert schemas + types (17+ tables)
 shared/models/chat.ts     - Conversations/messages tables
-server/index.ts           - Express app bootstrap, Stripe init, seed
-server/routes.ts          - All API routes + WebSocket + AI streaming + billing
+server/index.ts           - Express app bootstrap, Stripe init, super admin seed
+server/routes.ts          - All API routes + WebSocket + AI streaming + billing + response actions
 server/storage.ts         - DatabaseStorage implementing IStorage (org-scoped)
 server/auth.ts            - Passport-local, sessions, register/login/logout, RBAC
-server/seed.ts            - Initial seed data (org, events, incidents, assets, etc.)
+server/ingestion.ts       - Real data ingestion APIs (syslog, SIEM, generic)
+server/alertEngine.ts     - Alert rules evaluation engine
+server/superAdmin.ts      - Super admin middleware and platform management
+server/threatFeeds.ts     - Threat feed integration
+server/responseEngine.ts  - One-click defense response actions
 server/stripeClient.ts    - Stripe SDK client via Replit connector
 server/webhookHandlers.ts - Stripe webhook processing
 server/seed-products.ts   - Creates 3 Stripe pricing tiers
 server/db.ts              - Drizzle + pg pool setup
 server/replit_integrations/chat/storage.ts - Chat CRUD
-client/src/App.tsx         - Layout with sidebar, auth, theme toggle, 14 routes
-client/src/pages/          - 14 pages (see below)
-client/src/components/     - AppSidebar (grouped nav), ThemeProvider, shadcn components
+client/src/App.tsx         - Layout with sidebar, auth, notification bell, 17 routes
+client/src/pages/          - 17 pages (see below)
+client/src/components/     - AppSidebar (5 nav groups), Logo, NotificationBell, ThemeProvider, shadcn
 client/src/hooks/          - use-auth, use-toast, use-mobile
 ```
 
 ## Database Tables
 - `organizations` - Multi-tenant orgs (plan, slug, stripe IDs)
-- `users` - Auth (varchar UUID PK, org FK, role)
+- `users` - Auth (varchar UUID PK, org FK, role, isSuperAdmin)
 - `invites` - Invite codes (org FK, role, expiry)
 - `security_events` - Security alerts (org-scoped, ATT&CK technique/tactic)
 - `incidents` - Incident tracking with workflow statuses
@@ -44,55 +48,74 @@ client/src/hooks/          - use-auth, use-toast, use-mobile
 - `honeypot_events` - Attacker interactions (service, payload, country)
 - `quarantine_items` - Quarantined files (threat, source, status)
 - `response_playbooks` - Automated response procedures
+- `firewall_rules` - IP/domain/port/CIDR blocking rules with expiry
+- `alert_rules` - Custom alert rule conditions and actions
+- `response_actions` - Log of all response actions taken
+- `notifications` - User notifications with read status
 - `conversations` - AI chat conversations
 - `messages` - Chat messages with role
-- `stripe.*` - Auto-managed by stripe-replit-sync (products, prices, subscriptions, etc.)
+- `stripe.*` - Auto-managed by stripe-replit-sync
 
 ## Pages
-1. Dashboard - 7 stat cards, event trend chart, severity breakdown, recent alerts, live feed
-2. Security Events - Search, filter, detail sheet, status management
-3. Incidents - Card grid, create dialog, status workflow
-4. Threat Intel - IOC table, type icons, active toggle
+1. Dashboard (Command Center) - DEFCON indicator, 7 stat cards, emergency lockdown, event trends, live feed, response actions feed
+2. Security Events - Search, filter, detail sheet, status management, block IP, create incident buttons
+3. Incidents - Card grid, create dialog, status workflow, execute playbook
+4. Threat Intel - IOC table, type icons, active toggle, block IP, sinkhole domain
 5. AI Analysis - Streaming chat, conversation management
 6. Policies - Tier badges, enable/disable, create dialog
 7. Network Map - Asset inventory with risk scores, add asset
 8. ATT&CK Heatmap - MITRE matrix coverage, detection frequency
 9. Forensic Timeline - Audit log with filters, CSV export
-10. Honeypot Dashboard - Live attack feed, country origins, service breakdown
+10. Honeypot Dashboard - Live attack feed, country origins, service breakdown, block attacker IP
 11. Quarantine - File management with restore/delete actions
 12. Response Playbooks - Create/toggle automated response procedures
 13. Organization Settings - Team members, invite system, role management
 14. Billing - Pricing tiers (Starter $9, Professional $29, Enterprise $79)
+15. Firewall Management - Rules table, add/edit/toggle/delete rules, search/filter
+16. Alert Rules - Rules list, conditions builder, enable/disable, delete
+17. Super Admin - Platform stats, org management, user table, system health, audit log
 
 ## Auth & Multi-Tenancy
 - Passport-local with scrypt hashing, connect-pg-simple sessions
 - Registration creates new org (admin role) or uses invite code to join existing org
 - All data routes scoped by `organizationId`
 - Roles: admin, analyst, auditor, readonly
+- Super admin: username `admin`, password from `ADMIN_PASSWORD` env var (default: `aegis-admin-2024`)
 - `requireAuth` middleware on all `/api/*` data routes
 - `requireRole("admin")` on org management and billing routes
+- `requireSuperAdmin` on `/api/admin/*` routes
 
-## Stripe Integration
-- 3 products: Starter ($9/mo, 5 users), Professional ($29/mo, 25 users), Enterprise ($79/mo, unlimited)
-- Stripe connector via Replit integrations
-- stripe-replit-sync handles schema, webhooks, data sync
-- Webhook route registered BEFORE express.json() middleware
-- Products seeded via `npx tsx server/seed-products.ts`
+## Response Actions
+- Block IP (creates firewall rule, mitigates related events)
+- Create Incident from Event
+- Isolate Asset
+- Sinkhole Domain
+- Emergency Lockdown (blocks all critical event source IPs)
+- Execute Playbook (multi-step automated response)
 
-## Design Tokens
-- Primary: cyan (185 85% 48%)
-- Severity: critical (red), high (orange), medium (yellow), low (blue), info (slate)
-- Status: online (green), away (amber), busy (red), offline (slate)
+## Data Ingestion APIs
+- POST `/api/ingest/syslog` - Syslog format ingestion
+- POST `/api/ingest/siem` - SIEM integration (Splunk/QRadar format)
+- POST `/api/ingest/generic` - Generic event ingestion
 
-## Sidebar Navigation (Grouped)
-- Operations: Dashboard, Security Events, Incidents, AI Analysis
-- Detection: Threat Intel, Network Map, ATT&CK Heatmap, Honeypot
-- Response: Quarantine, Playbooks, Policies, Forensic Timeline
-- Admin: Settings, Billing (admin-only)
+## Visual Identity
+- Military-grade tactical dark theme (forced dark mode, no light toggle)
+- Background: `220 40% 4%`, Primary: `192 90% 40%`
+- Tactical grid background pattern, scanline animation
+- DEFCON-1 through DEFCON-5 CSS indicator classes
+- Severity colors: critical (red), high (orange), medium (yellow), low (blue), info (slate)
+
+## Sidebar Navigation (5 Groups)
+- COMMAND: Dashboard, AI Analysis
+- DETECT: Security Events, ATT&CK Map, Honeypot, Alert Rules
+- RESPOND: Incidents, Quarantine, Playbooks, Firewall, Policies
+- INTEL: Threat Intel, Network Map, Forensics
+- ADMIN: Settings, Billing, Super Admin (super admin only)
 
 ## Environment Variables
 - `DATABASE_URL` - PostgreSQL connection
 - `SESSION_SECRET` - Session encryption
+- `ADMIN_PASSWORD` - Super admin password (default: aegis-admin-2024)
 - `AI_INTEGRATIONS_OPENAI_API_KEY` - Auto-set by Replit integration
 - `AI_INTEGRATIONS_OPENAI_BASE_URL` - Auto-set by Replit integration
 - Stripe credentials managed by Replit connector

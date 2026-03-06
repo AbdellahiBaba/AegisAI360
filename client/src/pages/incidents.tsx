@@ -10,9 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Clock, User } from "lucide-react";
+import { Plus, Clock, User, ShieldBan, Loader2, Play } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { Incident } from "@shared/schema";
+import type { Incident, ResponsePlaybook } from "@shared/schema";
 
 const severityClasses: Record<string, string> = {
   critical: "bg-severity-critical text-white",
@@ -45,6 +45,24 @@ export default function Incidents() {
 
   const { data: incidents, isLoading } = useQuery<Incident[]>({
     queryKey: ["/api/incidents"],
+  });
+
+  const { data: playbooks } = useQuery<ResponsePlaybook[]>({
+    queryKey: ["/api/playbooks"],
+  });
+
+  const executePlaybook = useMutation({
+    mutationFn: async ({ playbookId, context }: { playbookId: number; context: Record<string, any> }) => {
+      const res = await apiRequest("POST", "/api/response/execute-playbook", { playbookId, context });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
+      toast({ title: "Playbook executed", description: `${data.results?.length || 0} steps completed` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Playbook failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const createIncident = useMutation({
@@ -183,17 +201,36 @@ export default function Incidents() {
                       </div>
                     )}
                   </div>
-                  {nextStatus && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => updateStatus.mutate({ id: incident.id, status: nextStatus })}
-                      disabled={updateStatus.isPending}
-                      data-testid={`button-advance-${incident.id}`}
-                    >
-                      Move to {nextStatus}
-                    </Button>
-                  )}
+                  <div className="flex gap-2 flex-wrap">
+                    {nextStatus && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => updateStatus.mutate({ id: incident.id, status: nextStatus })}
+                        disabled={updateStatus.isPending}
+                        data-testid={`button-advance-${incident.id}`}
+                      >
+                        Move to {nextStatus}
+                      </Button>
+                    )}
+                    {playbooks && playbooks.filter(p => p.enabled).length > 0 && incident.status !== "closed" && incident.status !== "resolved" && (
+                      <Select onValueChange={(pbId) => {
+                        if (window.confirm("Execute this playbook?")) {
+                          executePlaybook.mutate({ playbookId: parseInt(pbId), context: {} });
+                        }
+                      }}>
+                        <SelectTrigger className="h-8 w-[160px] text-xs" data-testid={`select-playbook-${incident.id}`}>
+                          <Play className="w-3 h-3 mr-1" />
+                          <SelectValue placeholder="Run Playbook" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {playbooks.filter(p => p.enabled).map(pb => (
+                            <SelectItem key={pb.id} value={String(pb.id)}>{pb.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             );

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -13,6 +13,7 @@ export const organizations = pgTable("organizations", {
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   maxUsers: integer("max_users").notNull().default(5),
+  suspended: boolean("suspended").notNull().default(false),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -22,6 +23,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   organizationId: integer("organization_id").references(() => organizations.id),
   role: text("role").notNull().default("analyst"),
+  isSuperAdmin: boolean("is_super_admin").notNull().default(false),
 });
 
 export const securityEvents = pgTable("security_events", {
@@ -39,6 +41,7 @@ export const securityEvents = pgTable("security_events", {
   rawData: text("raw_data"),
   techniqueId: text("technique_id"),
   tactic: text("tactic"),
+  mitigated: boolean("mitigated").notNull().default(false),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -152,89 +155,146 @@ export const responsePlaybooks = pgTable("response_playbooks", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
-export const insertOrganizationSchema = createInsertSchema(organizations).omit({
-  id: true,
-  createdAt: true,
+export const apiKeys = pgTable("api_keys", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  name: text("name").notNull(),
+  keyHash: text("key_hash").notNull(),
+  keyPrefix: text("key_prefix").notNull(),
+  permissions: text("permissions").notNull().default("ingest"),
+  lastUsed: timestamp("last_used"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
+
+export const firewallRules = pgTable("firewall_rules", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  ruleType: text("rule_type").notNull(),
+  value: text("value").notNull(),
+  action: text("action").notNull().default("block"),
+  reason: text("reason"),
+  createdBy: varchar("created_by"),
+  expiresAt: timestamp("expires_at"),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const alertRules = pgTable("alert_rules", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  name: text("name").notNull(),
+  conditions: text("conditions").notNull(),
+  severity: text("severity").notNull().default("medium"),
+  actions: text("actions").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  lastTriggered: timestamp("last_triggered"),
+  triggerCount: integer("trigger_count").notNull().default(0),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  userId: varchar("user_id"),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  type: text("type").notNull().default("info"),
+  read: boolean("read").notNull().default(false),
+  actionUrl: text("action_url"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const threatFeedConfigs = pgTable("threat_feed_configs", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  feedName: text("feed_name").notNull(),
+  apiKey: text("api_key"),
+  enabled: boolean("enabled").notNull().default(false),
+  lastSync: timestamp("last_sync"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const responseActions = pgTable("response_actions", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  actionType: text("action_type").notNull(),
+  target: text("target").notNull(),
+  status: text("status").notNull().default("pending"),
+  executedBy: varchar("executed_by"),
+  details: text("details"),
+  result: text("result"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertOrganizationSchema = createInsertSchema(organizations).omit({ id: true, createdAt: true });
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
+export const insertUserSchema = createInsertSchema(users).pick({ username: true, password: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-export const insertSecurityEventSchema = createInsertSchema(securityEvents).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertSecurityEventSchema = createInsertSchema(securityEvents).omit({ id: true, createdAt: true });
 export type InsertSecurityEvent = z.infer<typeof insertSecurityEventSchema>;
 export type SecurityEvent = typeof securityEvents.$inferSelect;
 
-export const insertIncidentSchema = createInsertSchema(incidents).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertIncidentSchema = createInsertSchema(incidents).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertIncident = z.infer<typeof insertIncidentSchema>;
 export type Incident = typeof incidents.$inferSelect;
 
-export const insertThreatIntelSchema = createInsertSchema(threatIntel).omit({
-  id: true,
-  firstSeen: true,
-  lastSeen: true,
-});
+export const insertThreatIntelSchema = createInsertSchema(threatIntel).omit({ id: true, firstSeen: true, lastSeen: true });
 export type InsertThreatIntel = z.infer<typeof insertThreatIntelSchema>;
 export type ThreatIntel = typeof threatIntel.$inferSelect;
 
-export const insertSecurityPolicySchema = createInsertSchema(securityPolicies).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertSecurityPolicySchema = createInsertSchema(securityPolicies).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSecurityPolicy = z.infer<typeof insertSecurityPolicySchema>;
 export type SecurityPolicy = typeof securityPolicies.$inferSelect;
 
-export const insertInviteSchema = createInsertSchema(invites).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertInviteSchema = createInsertSchema(invites).omit({ id: true, createdAt: true });
 export type InsertInvite = z.infer<typeof insertInviteSchema>;
 export type Invite = typeof invites.$inferSelect;
 
-export const insertAssetSchema = createInsertSchema(assets).omit({
-  id: true,
-  lastSeen: true,
-});
+export const insertAssetSchema = createInsertSchema(assets).omit({ id: true, lastSeen: true });
 export type InsertAsset = z.infer<typeof insertAssetSchema>;
 export type Asset = typeof assets.$inferSelect;
 
-export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
 
-export const insertHoneypotEventSchema = createInsertSchema(honeypotEvents).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertHoneypotEventSchema = createInsertSchema(honeypotEvents).omit({ id: true, createdAt: true });
 export type InsertHoneypotEvent = z.infer<typeof insertHoneypotEventSchema>;
 export type HoneypotEvent = typeof honeypotEvents.$inferSelect;
 
-export const insertQuarantineItemSchema = createInsertSchema(quarantineItems).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertQuarantineItemSchema = createInsertSchema(quarantineItems).omit({ id: true, createdAt: true });
 export type InsertQuarantineItem = z.infer<typeof insertQuarantineItemSchema>;
 export type QuarantineItem = typeof quarantineItems.$inferSelect;
 
-export const insertResponsePlaybookSchema = createInsertSchema(responsePlaybooks).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertResponsePlaybookSchema = createInsertSchema(responsePlaybooks).omit({ id: true, createdAt: true });
 export type InsertResponsePlaybook = z.infer<typeof insertResponsePlaybookSchema>;
 export type ResponsePlaybook = typeof responsePlaybooks.$inferSelect;
+
+export const insertApiKeySchema = createInsertSchema(apiKeys).omit({ id: true, createdAt: true, lastUsed: true });
+export type InsertApiKey = z.infer<typeof insertApiKeySchema>;
+export type ApiKey = typeof apiKeys.$inferSelect;
+
+export const insertFirewallRuleSchema = createInsertSchema(firewallRules).omit({ id: true, createdAt: true });
+export type InsertFirewallRule = z.infer<typeof insertFirewallRuleSchema>;
+export type FirewallRule = typeof firewallRules.$inferSelect;
+
+export const insertAlertRuleSchema = createInsertSchema(alertRules).omit({ id: true, createdAt: true, lastTriggered: true, triggerCount: true });
+export type InsertAlertRule = z.infer<typeof insertAlertRuleSchema>;
+export type AlertRule = typeof alertRules.$inferSelect;
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
+
+export const insertThreatFeedConfigSchema = createInsertSchema(threatFeedConfigs).omit({ id: true, createdAt: true, lastSync: true });
+export type InsertThreatFeedConfig = z.infer<typeof insertThreatFeedConfigSchema>;
+export type ThreatFeedConfig = typeof threatFeedConfigs.$inferSelect;
+
+export const insertResponseActionSchema = createInsertSchema(responseActions).omit({ id: true, createdAt: true, completedAt: true });
+export type InsertResponseAction = z.infer<typeof insertResponseActionSchema>;
+export type ResponseAction = typeof responseActions.$inferSelect;

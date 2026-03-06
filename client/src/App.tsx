@@ -5,10 +5,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { ThemeProvider, useTheme } from "@/components/theme-provider";
+import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
-import { Button } from "@/components/ui/button";
-import { Sun, Moon, Loader2 } from "lucide-react";
+import { NotificationBell } from "@/components/notification-bell";
+import { Loader2 } from "lucide-react";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Alerts from "@/pages/alerts";
@@ -25,17 +25,11 @@ import Quarantine from "@/pages/quarantine";
 import Playbooks from "@/pages/playbooks";
 import SettingsPage from "@/pages/settings";
 import Billing from "@/pages/billing";
+import Firewall from "@/pages/firewall";
+import AlertRules from "@/pages/alert-rules";
+import SuperAdmin from "@/pages/super-admin";
 
-function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme();
-  return (
-    <Button size="icon" variant="ghost" onClick={toggleTheme} data-testid="button-theme-toggle">
-      {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-    </Button>
-  );
-}
-
-function Router() {
+function AppRouter() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
@@ -52,6 +46,9 @@ function Router() {
       <Route path="/playbooks" component={Playbooks} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/billing" component={Billing} />
+      <Route path="/firewall" component={Firewall} />
+      <Route path="/alert-rules" component={AlertRules} />
+      <Route path="/super-admin" component={SuperAdmin} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -59,7 +56,7 @@ function Router() {
 
 function AppLayout() {
   const style = {
-    "--sidebar-width": "16rem",
+    "--sidebar-width": "15rem",
     "--sidebar-width-icon": "3rem",
   };
 
@@ -68,17 +65,22 @@ function AppLayout() {
       <div className="flex h-screen w-full">
         <AppSidebar />
         <div className="flex flex-col flex-1 min-w-0">
-          <header className="flex items-center justify-between gap-2 px-4 py-2 border-b h-12">
-            <div className="flex items-center gap-2">
+          <header className="flex items-center justify-between gap-2 px-4 py-1.5 border-b h-10">
+            <div className="flex items-center gap-3">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
-              <span className="text-xs font-mono text-muted-foreground tracking-wider uppercase hidden sm:inline">
-                Security Operations Center
-              </span>
+              <div className="hidden sm:flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-status-online animate-pulse-glow" />
+                <span className="text-[9px] font-mono text-muted-foreground tracking-[0.3em] uppercase">
+                  Live Operations
+                </span>
+              </div>
             </div>
-            <ThemeToggle />
+            <div className="flex items-center gap-1">
+              <NotificationBell />
+            </div>
           </header>
-          <main className="flex-1 overflow-auto">
-            <Router />
+          <main className="flex-1 overflow-auto tactical-grid">
+            <AppRouter />
           </main>
         </div>
       </div>
@@ -91,8 +93,13 @@ function AuthenticatedApp() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="flex items-center justify-center h-screen bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <span className="text-xs font-mono text-muted-foreground tracking-wider uppercase">
+            Initializing...
+          </span>
+        </div>
       </div>
     );
   }

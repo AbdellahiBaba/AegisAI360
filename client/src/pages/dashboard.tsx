@@ -1,13 +1,21 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { queryClient } from "@/lib/queryClient";
-import { ShieldAlert, AlertTriangle, Bug, Activity, ArrowUpRight, ArrowDownRight, Clock, Monitor, Lock, Radio } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import type { SecurityEvent } from "@shared/schema";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import {
+  ShieldAlert, AlertTriangle, Bug, Activity, ArrowUpRight, ArrowDownRight,
+  Clock, Monitor, Lock, Radio, ShieldOff, Flame, Crosshair, Zap
+} from "lucide-react";
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell
+} from "recharts";
+import type { SecurityEvent, ResponseAction } from "@shared/schema";
 
 interface DashboardStats {
   totalEvents: number;
@@ -19,6 +27,8 @@ interface DashboardStats {
   assetCount: number;
   quarantineCount: number;
   honeypotActivity: number;
+  blockedIps: number;
+  activeRules: number;
 }
 
 const severityColors: Record<string, string> = {
@@ -45,6 +55,44 @@ function SeverityBadge({ severity }: { severity: string }) {
   );
 }
 
+function getDefconLevel(stats: DashboardStats): number {
+  if (stats.criticalAlerts >= 5 || stats.activeIncidents >= 3) return 1;
+  if (stats.criticalAlerts >= 3) return 2;
+  if (stats.criticalAlerts >= 1 || stats.activeIncidents >= 1) return 3;
+  if (stats.totalEvents > 0) return 4;
+  return 5;
+}
+
+const defconDescriptions: Record<number, string> = {
+  1: "MAXIMUM READINESS — ACTIVE THREAT DETECTED",
+  2: "HIGH ALERT — ELEVATED THREAT LEVEL",
+  3: "INCREASED READINESS — THREATS PRESENT",
+  4: "ABOVE NORMAL — ACTIVITY DETECTED",
+  5: "ALL CLEAR — NOMINAL OPERATIONS",
+};
+
+function DefconIndicator({ stats }: { stats: DashboardStats }) {
+  const level = getDefconLevel(stats);
+  return (
+    <div className={`defcon-${level} rounded-md p-4 flex items-center justify-between gap-4 flex-wrap`} data-testid="defcon-indicator">
+      <div className="flex items-center gap-3">
+        <Crosshair className="w-6 h-6" />
+        <div>
+          <div className="text-lg font-bold font-mono tracking-widest uppercase" data-testid="defcon-level">
+            DEFCON {level}
+          </div>
+          <div className="text-xs font-mono tracking-wider opacity-90" data-testid="defcon-description">
+            {defconDescriptions[level]}
+          </div>
+        </div>
+      </div>
+      <div className="font-mono text-xs tracking-wider opacity-75">
+        THREAT SCORE: {stats.threatScore}/100
+      </div>
+    </div>
+  );
+}
+
 function StatCard({ title, value, icon: Icon, trend, trendLabel, accent }: {
   title: string;
   value: string | number;
@@ -59,7 +107,7 @@ function StatCard({ title, value, icon: Icon, trend, trendLabel, accent }: {
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-col gap-1">
-            <span className="text-xs text-muted-foreground uppercase tracking-wider">{title}</span>
+            <span className="text-xs text-muted-foreground uppercase tracking-wider font-mono">{title}</span>
             <span className={`text-2xl font-bold font-mono ${accent || ""}`} data-testid={`stat-${title.toLowerCase().replace(/\s+/g, '-')}`}>
               {value}
             </span>
@@ -90,7 +138,7 @@ function EventTrendChart({ data }: { data: { time: string; events: number }[] })
   return (
     <Card className="col-span-2">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium tracking-wider uppercase">Event Trend (24h)</CardTitle>
+        <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">Event Trend (24h)</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="h-[220px]">
@@ -133,7 +181,7 @@ function SeverityBreakdown({ data }: { data: { name: string; value: number }[] }
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium tracking-wider uppercase">Severity Breakdown</CardTitle>
+        <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">Severity Breakdown</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="h-[220px] flex items-center justify-center">
@@ -168,7 +216,7 @@ function SeverityBreakdown({ data }: { data: { name: string; value: number }[] }
           {data.map((entry) => (
             <div key={entry.name} className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: severityColors[entry.name] }} />
-              <span className="text-[10px] text-muted-foreground capitalize">{entry.name}</span>
+              <span className="text-[10px] text-muted-foreground capitalize font-mono">{entry.name}</span>
               <span className="text-[10px] font-mono font-bold">{entry.value}</span>
             </div>
           ))}
@@ -188,20 +236,64 @@ function formatTimeAgo(dateStr: string) {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
+function QuickActions() {
+  const { toast } = useToast();
+  const lockdownMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/response/emergency-lockdown");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "LOCKDOWN ACTIVATED", description: "Emergency lockdown has been initiated across all systems." });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/response/actions"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "LOCKDOWN FAILED", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleLockdown = () => {
+    if (window.confirm("CONFIRM EMERGENCY LOCKDOWN\n\nThis will activate all defensive measures and block all external traffic. Continue?")) {
+      lockdownMutation.mutate();
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">Quick Actions</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Button
+          variant="destructive"
+          className="w-full font-mono uppercase tracking-wider"
+          onClick={handleLockdown}
+          disabled={lockdownMutation.isPending}
+          data-testid="button-emergency-lockdown"
+        >
+          <Flame className="w-4 h-4 mr-2" />
+          {lockdownMutation.isPending ? "INITIATING..." : "EMERGENCY LOCKDOWN"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function RecentAlerts({ events }: { events: SecurityEvent[] }) {
   return (
     <Card className="col-span-2">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm font-medium tracking-wider uppercase">Recent Alerts</CardTitle>
-          <Badge variant="secondary" className="text-[10px]">{events.length} events</Badge>
+          <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">Recent Alerts</CardTitle>
+          <Badge variant="secondary" className="text-[10px] font-mono">{events.length} events</Badge>
         </div>
       </CardHeader>
       <CardContent className="p-0">
         <ScrollArea className="h-[260px]">
           <div className="px-4 pb-4">
             {events.length === 0 ? (
-              <div className="text-center text-sm text-muted-foreground py-8">No recent alerts</div>
+              <div className="text-center text-sm text-muted-foreground py-8 font-mono">No recent alerts</div>
             ) : (
               <div className="space-y-1">
                 {events.map((event) => (
@@ -239,10 +331,10 @@ function ActivityFeed({ events }: { events: SecurityEvent[] }) {
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm font-medium tracking-wider uppercase">Live Feed</CardTitle>
+          <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">Live Feed</CardTitle>
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full bg-status-online animate-pulse-glow" />
-            <span className="text-[10px] text-muted-foreground">Live</span>
+            <span className="text-[10px] text-muted-foreground font-mono">Live</span>
           </div>
         </div>
       </CardHeader>
@@ -270,6 +362,57 @@ function ActivityFeed({ events }: { events: SecurityEvent[] }) {
   );
 }
 
+function ResponseActionsFeed({ actions }: { actions: ResponseAction[] }) {
+  const actionStatusClasses: Record<string, string> = {
+    completed: "bg-status-online/20 text-status-online",
+    pending: "bg-severity-medium/20 text-severity-medium",
+    failed: "bg-severity-critical/20 text-severity-critical",
+    executing: "bg-severity-high/20 text-severity-high",
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">Response Actions</CardTitle>
+          <Zap className="w-4 h-4 text-muted-foreground" />
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <ScrollArea className="h-[260px]">
+          <div className="px-4 pb-4">
+            {actions.length === 0 ? (
+              <div className="text-center text-sm text-muted-foreground py-8 font-mono">No recent actions</div>
+            ) : (
+              <div className="space-y-2">
+                {actions.map((action) => (
+                  <div
+                    key={action.id}
+                    className="flex items-center gap-3 py-2 px-2 rounded-md"
+                    data-testid={`response-action-${action.id}`}
+                  >
+                    <ShieldOff className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-mono uppercase truncate">{action.actionType}</p>
+                      <span className="text-[10px] text-muted-foreground font-mono">{action.target}</span>
+                    </div>
+                    <Badge className={`text-[10px] font-mono ${actionStatusClasses[action.status] || actionStatusClasses.pending}`}>
+                      {action.status}
+                    </Badge>
+                    <span className="text-[10px] text-muted-foreground font-mono flex-shrink-0">
+                      {formatTimeAgo(action.createdAt as unknown as string)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
@@ -286,6 +429,11 @@ export default function Dashboard() {
     refetchInterval: 30000,
   });
 
+  const { data: responseActions } = useQuery<ResponseAction[]>({
+    queryKey: ["/api/response/actions"],
+    refetchInterval: 15000,
+  });
+
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -294,12 +442,14 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/trend"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/response/actions"] });
     };
     return () => socket.close();
   }, []);
 
   const recentEvents = events?.slice(0, 15) || [];
   const feedEvents = events?.slice(0, 10) || [];
+  const recentActions = responseActions?.slice(0, 10) || [];
 
   const severityData = events
     ? [
@@ -321,6 +471,7 @@ export default function Dashboard() {
   if (statsLoading || eventsLoading) {
     return (
       <div className="p-6 space-y-4">
+        <Skeleton className="h-16 w-full rounded-md" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i}><CardContent className="p-4"><Skeleton className="h-20 w-full" /></CardContent></Card>
@@ -335,7 +486,9 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className="p-4 md:p-6 space-y-4 tactical-grid">
+      <DefconIndicator stats={stats!} />
+
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
         <StatCard
           title="Events (24h)"
@@ -358,10 +511,10 @@ export default function Dashboard() {
           trendLabel="this week"
         />
         <StatCard
-          title="Threat Score"
-          value={`${stats?.threatScore ?? 0}/100`}
-          icon={Activity}
-          accent={getThreatScoreColor(stats?.threatScore ?? 0)}
+          title="Blocked IPs"
+          value={stats?.blockedIps ?? 0}
+          icon={ShieldOff}
+          accent={(stats?.blockedIps ?? 0) > 0 ? "text-severity-high" : undefined}
         />
         <StatCard
           title="Assets"
@@ -375,11 +528,13 @@ export default function Dashboard() {
           accent={(stats?.quarantineCount ?? 0) > 0 ? "text-severity-high" : undefined}
         />
         <StatCard
-          title="Honeypot"
-          value={stats?.honeypotActivity ?? 0}
-          icon={Radio}
+          title="Active Rules"
+          value={stats?.activeRules ?? 0}
+          icon={Activity}
         />
       </div>
+
+      <QuickActions />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <EventTrendChart data={trendData || []} />
@@ -389,6 +544,10 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <RecentAlerts events={recentEvents} />
         <ActivityFeed events={feedEvents} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <ResponseActionsFeed actions={recentActions} />
       </div>
     </div>
   );

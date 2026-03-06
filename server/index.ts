@@ -116,8 +116,37 @@ app.use((req, res, next) => {
 
   const { setupAuth } = await import("./auth");
   setupAuth(app);
-  const { seedDatabase } = await import("./seed");
-  await seedDatabase();
+
+  const { scrypt, randomBytes } = await import("crypto");
+  const { promisify } = await import("util");
+  const scryptAsync = promisify(scrypt);
+  const { storage: storageInstance } = await import("./storage");
+  try {
+    const existingAdmin = await storageInstance.getUserByUsername("admin");
+    if (!existingAdmin) {
+      const adminPassword = process.env.ADMIN_PASSWORD || "aegis-admin-2024";
+      const salt = randomBytes(16).toString("hex");
+      const buf = (await scryptAsync(adminPassword, salt, 64)) as Buffer;
+      const hashedPassword = `${buf.toString("hex")}.${salt}`;
+      const adminOrg = await storageInstance.createOrganization({
+        name: "Platform Administration",
+        slug: "platform-admin",
+        plan: "enterprise",
+        maxUsers: 100,
+      });
+      await storageInstance.createUser({
+        username: "admin",
+        password: hashedPassword,
+        organizationId: adminOrg.id,
+        role: "admin",
+        isSuperAdmin: true,
+      });
+      console.log("Super admin account created (username: admin)");
+    }
+  } catch (err) {
+    console.log("Admin seeding skipped (may already exist)");
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

@@ -1,18 +1,19 @@
-import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { queryClient } from "@/lib/queryClient";
-import { Bug, Globe, Terminal, Radio, MapPin, Wifi } from "lucide-react";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { Bug, Globe, Terminal, Radio, MapPin, Wifi, ShieldBan, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import type { HoneypotEvent } from "@shared/schema";
-import { useMemo } from "react";
 
-const countryFlags: Record<string, string> = {
-  CN: "🇨🇳", RU: "🇷🇺", US: "🇺🇸", KR: "🇰🇷", BR: "🇧🇷",
-  IN: "🇮🇳", DE: "🇩🇪", NL: "🇳🇱", UA: "🇺🇦", IR: "🇮🇷",
-  VN: "🇻🇳", RO: "🇷🇴",
+const countryCodes: Record<string, string> = {
+  CN: "CN", RU: "RU", US: "US", KR: "KR", BR: "BR",
+  IN: "IN", DE: "DE", NL: "NL", UA: "UA", IR: "IR",
+  VN: "VN", RO: "RO",
 };
 
 const serviceColors: Record<string, string> = {
@@ -37,9 +38,25 @@ function formatTimeAgo(dateStr: string) {
 }
 
 export default function Honeypot() {
+  const { toast } = useToast();
+
   const { data: events, isLoading } = useQuery<HoneypotEvent[]>({
     queryKey: ["/api/honeypot"],
     refetchInterval: 10000,
+  });
+
+  const blockIp = useMutation({
+    mutationFn: async ({ ip, reason }: { ip: string; reason: string }) => {
+      const res = await apiRequest("POST", "/api/response/block-ip", { ip, reason });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/firewall"] });
+      toast({ title: "Attacker IP blocked" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Block failed", description: err.message, variant: "destructive" });
+    },
   });
 
   useEffect(() => {
@@ -147,7 +164,7 @@ export default function Honeypot() {
             <div className="space-y-2">
               {Object.entries(stats.countries).sort((a, b) => b[1] - a[1]).map(([country, count]) => (
                 <div key={country} className="flex items-center gap-2" data-testid={`country-row-${country}`}>
-                  <span className="text-base">{countryFlags[country] || "🌐"}</span>
+                  <span className="text-[10px] font-mono font-bold text-muted-foreground">{countryCodes[country] || country}</span>
                   <span className="text-xs font-mono flex-1">{country}</span>
                   <span className="text-xs font-mono text-muted-foreground">{count}</span>
                 </div>
@@ -210,12 +227,28 @@ export default function Honeypot() {
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {event.country && (
-                        <span className="text-sm">{countryFlags[event.country] || "🌐"}</span>
+                        <span className="text-[10px] font-mono font-bold text-muted-foreground">{event.country ? (countryCodes[event.country] || event.country) : "--"}</span>
                       )}
                       <Badge variant="secondary" className="text-[10px]">{event.action.replace(/_/g, " ")}</Badge>
                       <span className="text-[10px] text-muted-foreground font-mono">
                         {formatTimeAgo(event.createdAt as unknown as string)}
                       </span>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="text-[9px]"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Block attacker IP ${event.attackerIp}?`)) {
+                            blockIp.mutate({ ip: event.attackerIp, reason: `Honeypot attacker: ${event.service} ${event.action}` });
+                          }
+                        }}
+                        disabled={blockIp.isPending}
+                        data-testid={`button-block-attacker-${event.id}`}
+                      >
+                        <ShieldBan className="w-3 h-3 mr-0.5" />
+                        Block
+                      </Button>
                     </div>
                   </div>
                 ))}

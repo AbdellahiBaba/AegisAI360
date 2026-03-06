@@ -5,6 +5,7 @@ import { storage } from "./storage";
 import OpenAI from "openai";
 import { chatStorage } from "./replit_integrations/chat/storage";
 import { z } from "zod";
+import { createHash, randomBytes } from "crypto";
 import {
   insertSecurityEventSchema,
   insertIncidentSchema,
@@ -16,8 +17,12 @@ import {
   type User,
 } from "@shared/schema";
 import { requireAuth, requireRole } from "./auth";
-import { randomBytes } from "crypto";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { createIngestionRouter } from "./ingestion";
+import { createSuperAdminRouter } from "./superAdmin";
+import { createThreatFeedsRouter } from "./threatFeeds";
+import { ResponseEngine } from "./responseEngine";
+import { AlertEngine } from "./alertEngine";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -50,76 +55,6 @@ function getUserId(req: Request): string {
   return (req.user as User).id;
 }
 
-const attackTechniques = [
-  { techniqueId: "T1078", tactic: "Initial Access", desc: "Valid Accounts" },
-  { techniqueId: "T1059", tactic: "Execution", desc: "Command and Scripting Interpreter" },
-  { techniqueId: "T1021", tactic: "Lateral Movement", desc: "Remote Services" },
-  { techniqueId: "T1048", tactic: "Exfiltration", desc: "Exfiltration Over Alternative Protocol" },
-  { techniqueId: "T1190", tactic: "Initial Access", desc: "Exploit Public-Facing Application" },
-  { techniqueId: "T1566", tactic: "Initial Access", desc: "Phishing" },
-  { techniqueId: "T1071", tactic: "Command and Control", desc: "Application Layer Protocol" },
-  { techniqueId: "T1486", tactic: "Impact", desc: "Data Encrypted for Impact" },
-  { techniqueId: "T1053", tactic: "Execution", desc: "Scheduled Task/Job" },
-  { techniqueId: "T1055", tactic: "Defense Evasion", desc: "Process Injection" },
-  { techniqueId: "T1003", tactic: "Credential Access", desc: "OS Credential Dumping" },
-  { techniqueId: "T1027", tactic: "Defense Evasion", desc: "Obfuscated Files or Information" },
-];
-
-const eventTemplates = [
-  { eventType: "intrusion_attempt", severity: "critical", source: "IDS", description: "SSH brute force attack detected", protocol: "SSH", port: 22, techniqueId: "T1078", tactic: "Initial Access" },
-  { eventType: "malware", severity: "critical", source: "Endpoint", description: "Trojan.GenericKD detected in executable download", protocol: "HTTPS", port: 443, techniqueId: "T1059", tactic: "Execution" },
-  { eventType: "anomaly", severity: "high", source: "ML Engine", description: "Anomalous outbound data transfer - potential exfiltration", protocol: "HTTPS", port: 443, techniqueId: "T1048", tactic: "Exfiltration" },
-  { eventType: "reconnaissance", severity: "medium", source: "Firewall", description: "Port scanning activity from external IP", protocol: "TCP", port: 0, techniqueId: "T1046", tactic: "Discovery" },
-  { eventType: "policy_violation", severity: "medium", source: "DLP", description: "Unauthorized file sharing to external cloud", protocol: "HTTPS", port: 443, techniqueId: "T1567", tactic: "Exfiltration" },
-  { eventType: "intrusion_attempt", severity: "high", source: "WAF", description: "SQL injection attempt blocked", protocol: "HTTP", port: 80, techniqueId: "T1190", tactic: "Initial Access" },
-  { eventType: "anomaly", severity: "low", source: "Network Monitor", description: "Unusual DNS query pattern - NXDOMAIN flood", protocol: "DNS", port: 53, techniqueId: "T1071", tactic: "Command and Control" },
-  { eventType: "malware", severity: "high", source: "Email Gateway", description: "Phishing email with malicious attachment quarantined", protocol: "SMTP", port: 25, techniqueId: "T1566", tactic: "Initial Access" },
-  { eventType: "intrusion_attempt", severity: "critical", source: "IDS", description: "C2 beacon activity - periodic encrypted connections", protocol: "HTTPS", port: 443, techniqueId: "T1071", tactic: "Command and Control" },
-  { eventType: "policy_violation", severity: "low", source: "Endpoint", description: "Unauthorized USB device connected", protocol: "N/A", port: 0, techniqueId: "T1091", tactic: "Initial Access" },
-  { eventType: "anomaly", severity: "medium", source: "SIEM", description: "Privilege escalation - unusual sudo usage", protocol: "N/A", port: 0, techniqueId: "T1548", tactic: "Privilege Escalation" },
-  { eventType: "data_exfiltration", severity: "critical", source: "DLP", description: "Large volume data transfer to external endpoint", protocol: "HTTPS", port: 443, techniqueId: "T1048", tactic: "Exfiltration" },
-  { eventType: "malware", severity: "high", source: "Sandbox", description: "Fileless malware - PowerShell encoded command", protocol: "N/A", port: 0, techniqueId: "T1059", tactic: "Execution" },
-];
-
-const honeypotTemplates = [
-  { honeypotName: "SSH-Trap-01", service: "SSH", action: "login_attempt", payload: "root:admin123" },
-  { honeypotName: "HTTP-Decoy-01", service: "HTTP", action: "directory_traversal", payload: "GET /../../etc/passwd" },
-  { honeypotName: "SMB-Honeypot-01", service: "SMB", action: "share_enumeration", payload: "net share /all" },
-  { honeypotName: "SSH-Trap-01", service: "SSH", action: "brute_force", payload: "admin:password" },
-  { honeypotName: "HTTP-Decoy-01", service: "HTTP", action: "sql_injection", payload: "' OR 1=1 --" },
-  { honeypotName: "RDP-Trap-01", service: "RDP", action: "login_attempt", payload: "Administrator:P@ssw0rd" },
-  { honeypotName: "FTP-Honeypot-01", service: "FTP", action: "anonymous_login", payload: "anonymous:guest" },
-];
-
-const countries = ["CN", "RU", "US", "KR", "BR", "IN", "DE", "NL", "UA", "IR", "VN", "RO"];
-
-function randomIp() {
-  const prefixes = ["185.220.101", "45.33.32", "192.168.1", "10.0.0", "172.16.0", "203.0.113", "198.51.100"];
-  return `${prefixes[Math.floor(Math.random() * prefixes.length)]}.${Math.floor(Math.random() * 254) + 1}`;
-}
-
-function generateRandomEvent(orgId: number) {
-  const template = eventTemplates[Math.floor(Math.random() * eventTemplates.length)];
-  return {
-    ...template,
-    organizationId: orgId,
-    sourceIp: randomIp(),
-    destinationIp: `10.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 254) + 1}`,
-    status: "new" as const,
-  };
-}
-
-function generateHoneypotEvent(orgId: number) {
-  const template = honeypotTemplates[Math.floor(Math.random() * honeypotTemplates.length)];
-  return {
-    ...template,
-    organizationId: orgId,
-    attackerIp: randomIp(),
-    country: countries[Math.floor(Math.random() * countries.length)],
-    sessionId: randomBytes(8).toString("hex"),
-  };
-}
-
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -134,25 +69,12 @@ export async function registerRoutes(
     });
   }
 
-  const orgEventIntervals = new Map<number, NodeJS.Timeout>();
+  const responseEngine = new ResponseEngine(broadcast);
+  const alertEngine = new AlertEngine(broadcast);
 
-  function startEventGeneration(orgId: number) {
-    if (orgEventIntervals.has(orgId)) return;
-    const interval = setInterval(async () => {
-      try {
-        const event = generateRandomEvent(orgId);
-        const stored = await storage.createSecurityEvent(event);
-        broadcast({ type: "new_event", event: stored, orgId });
-
-        if (Math.random() < 0.3) {
-          const hp = generateHoneypotEvent(orgId);
-          const storedHp = await storage.createHoneypotEvent(hp);
-          broadcast({ type: "new_honeypot_event", event: storedHp, orgId });
-        }
-      } catch {}
-    }, 25000);
-    orgEventIntervals.set(orgId, interval);
-  }
+  app.use("/api/ingest", createIngestionRouter(broadcast, (event) => alertEngine.evaluateEvent(event)));
+  app.use("/api/admin", createSuperAdminRouter());
+  app.use("/api/threat-feeds", createThreatFeedsRouter());
 
   app.use("/api/dashboard", requireAuth);
   app.use("/api/security-events", requireAuth);
@@ -168,11 +90,15 @@ export async function registerRoutes(
   app.use("/api/organization", requireAuth);
   app.use("/api/invites", requireAuth);
   app.use("/api/attack-map", requireAuth);
+  app.use("/api/firewall", requireAuth);
+  app.use("/api/alert-rules", requireAuth);
+  app.use("/api/notifications", requireAuth);
+  app.use("/api/api-keys", requireAuth);
+  app.use("/api/response", requireAuth);
 
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
       const orgId = getOrgId(req);
-      startEventGeneration(orgId);
       const stats = await storage.getDashboardStats(orgId);
       res.json(stats);
     } catch (error) {
@@ -206,6 +132,7 @@ export async function registerRoutes(
       const parsed = insertSecurityEventSchema.parse({ ...req.body, organizationId: orgId });
       const event = await storage.createSecurityEvent(parsed);
       broadcast({ type: "new_event", event, orgId });
+      alertEngine.evaluateEvent(event);
       res.status(201).json(event);
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
@@ -540,6 +467,309 @@ export async function registerRoutes(
     }
   });
 
+  // API Keys management
+  app.get("/api/api-keys", async (req, res) => {
+    try {
+      const keys = await storage.getApiKeys(getOrgId(req));
+      res.json(keys.map(k => ({ ...k, keyHash: undefined })));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch API keys" });
+    }
+  });
+
+  app.post("/api/api-keys", requireRole("admin"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { name, permissions } = z.object({ name: z.string().min(1), permissions: z.string().default("ingest") }).parse(req.body);
+      const rawKey = `aegis_${randomBytes(32).toString("hex")}`;
+      const keyHash = createHash("sha256").update(rawKey).digest("hex");
+      const keyPrefix = rawKey.slice(0, 12);
+
+      const key = await storage.createApiKey({ organizationId: orgId, name, keyHash, keyPrefix, permissions });
+      await storage.createAuditLog({ organizationId: orgId, userId: getUserId(req), action: "create_api_key", targetType: "api_key", targetId: String(key.id), details: name });
+      res.status(201).json({ ...key, rawKey, keyHash: undefined });
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to create API key" });
+    }
+  });
+
+  app.delete("/api/api-keys/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const deleted = await storage.deleteApiKey(id, orgId);
+      if (!deleted) return res.status(404).json({ error: "API key not found" });
+      await storage.createAuditLog({ organizationId: orgId, userId: getUserId(req), action: "revoke_api_key", targetType: "api_key", targetId: String(id) });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete API key" });
+    }
+  });
+
+  // Firewall rules management
+  app.get("/api/firewall", async (req, res) => {
+    try {
+      const rules = await storage.getFirewallRules(getOrgId(req));
+      res.json(rules);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch firewall rules" });
+    }
+  });
+
+  app.post("/api/firewall", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const parsed = z.object({
+        ruleType: z.enum(["ip_block", "domain_block", "port_block", "cidr_block"]),
+        value: z.string().min(1),
+        action: z.enum(["block", "allow", "sinkhole"]).default("block"),
+        reason: z.string().optional(),
+        expiresAt: z.string().optional(),
+      }).parse(req.body);
+
+      const rule = await storage.createFirewallRule({
+        organizationId: orgId,
+        ruleType: parsed.ruleType,
+        value: parsed.value,
+        action: parsed.action,
+        reason: parsed.reason || null,
+        createdBy: getUserId(req),
+        expiresAt: parsed.expiresAt ? new Date(parsed.expiresAt) : null,
+        status: "active",
+      });
+
+      await storage.createAuditLog({ organizationId: orgId, userId: getUserId(req), action: "create_firewall_rule", targetType: "firewall_rule", targetId: String(rule.id), details: `${parsed.ruleType}: ${parsed.value}` });
+      res.status(201).json(rule);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to create firewall rule" });
+    }
+  });
+
+  app.patch("/api/firewall/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const { status } = z.object({ status: z.enum(["active", "disabled"]) }).parse(req.body);
+      const updated = await storage.updateFirewallRule(id, orgId, { status });
+      if (!updated) return res.status(404).json({ error: "Rule not found" });
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to update firewall rule" });
+    }
+  });
+
+  app.delete("/api/firewall/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const deleted = await storage.deleteFirewallRule(id, orgId);
+      if (!deleted) return res.status(404).json({ error: "Rule not found" });
+      await storage.createAuditLog({ organizationId: orgId, userId: getUserId(req), action: "delete_firewall_rule", targetType: "firewall_rule", targetId: String(id) });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete firewall rule" });
+    }
+  });
+
+  // Alert rules management
+  app.get("/api/alert-rules", async (req, res) => {
+    try {
+      const rules = await storage.getAlertRules(getOrgId(req));
+      res.json(rules);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch alert rules" });
+    }
+  });
+
+  app.post("/api/alert-rules", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const parsed = z.object({
+        name: z.string().min(1),
+        conditions: z.string(),
+        severity: z.enum(["critical", "high", "medium", "low"]).default("medium"),
+        actions: z.string(),
+        enabled: z.boolean().default(true),
+      }).parse(req.body);
+
+      const rule = await storage.createAlertRule({ ...parsed, organizationId: orgId });
+      await storage.createAuditLog({ organizationId: orgId, userId: getUserId(req), action: "create_alert_rule", targetType: "alert_rule", targetId: String(rule.id), details: parsed.name });
+      res.status(201).json(rule);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to create alert rule" });
+    }
+  });
+
+  app.patch("/api/alert-rules/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const { enabled } = z.object({ enabled: z.boolean() }).parse(req.body);
+      const updated = await storage.updateAlertRule(id, orgId, { enabled });
+      if (!updated) return res.status(404).json({ error: "Rule not found" });
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to update alert rule" });
+    }
+  });
+
+  app.delete("/api/alert-rules/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const deleted = await storage.deleteAlertRule(id, orgId);
+      if (!deleted) return res.status(404).json({ error: "Rule not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete alert rule" });
+    }
+  });
+
+  // Notifications
+  app.get("/api/notifications", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+      const notifs = await storage.getNotifications(orgId, userId);
+      res.json(notifs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  app.get("/api/notifications/unread-count", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+      const count = await storage.getUnreadNotificationCount(orgId, userId);
+      res.json({ count });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch unread count" });
+    }
+  });
+
+  app.patch("/api/notifications/:id/read", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.markNotificationRead(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark notification read" });
+    }
+  });
+
+  app.post("/api/notifications/mark-all-read", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+      await storage.markAllNotificationsRead(orgId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark all read" });
+    }
+  });
+
+  // Response actions
+  app.post("/api/response/block-ip", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+      const { ip, reason } = z.object({ ip: z.string(), reason: z.string().default("Manual block") }).parse(req.body);
+      const result = await responseEngine.blockIP(orgId, ip, reason, userId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to block IP" });
+    }
+  });
+
+  app.post("/api/response/isolate-asset", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+      const { assetId } = z.object({ assetId: z.number() }).parse(req.body);
+      const result = await responseEngine.isolateAsset(orgId, assetId, userId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to isolate asset" });
+    }
+  });
+
+  app.post("/api/response/quarantine-file", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+      const { fileName, fileHash, threat, sourceAsset } = z.object({
+        fileName: z.string(), fileHash: z.string().default(""), threat: z.string(), sourceAsset: z.string().default(""),
+      }).parse(req.body);
+      const result = await responseEngine.quarantineFile(orgId, fileName, fileHash, threat, sourceAsset, userId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to quarantine file" });
+    }
+  });
+
+  app.post("/api/response/sinkhole-domain", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+      const { domain } = z.object({ domain: z.string() }).parse(req.body);
+      const result = await responseEngine.sinkholeDomain(orgId, domain, userId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to sinkhole domain" });
+    }
+  });
+
+  app.post("/api/response/create-incident-from-event", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+      const { eventId } = z.object({ eventId: z.number() }).parse(req.body);
+      const result = await responseEngine.createIncidentFromEvent(orgId, eventId, userId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to create incident" });
+    }
+  });
+
+  app.post("/api/response/execute-playbook", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+      const { playbookId, context } = z.object({ playbookId: z.number(), context: z.record(z.any()).default({}) }).parse(req.body);
+      const result = await responseEngine.executePlaybook(orgId, playbookId, context, userId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to execute playbook" });
+    }
+  });
+
+  app.post("/api/response/emergency-lockdown", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+      const result = await responseEngine.emergencyLockdown(orgId, userId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to initiate lockdown" });
+    }
+  });
+
+  app.get("/api/response/actions", async (req, res) => {
+    try {
+      const actions = await storage.getResponseActions(getOrgId(req));
+      res.json(actions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch response actions" });
+    }
+  });
+
+  // AI conversations
   app.get("/api/ai-conversations", async (req, res) => {
     try {
       const convs = await chatStorage.getAllConversations(getOrgId(req));
@@ -581,6 +811,7 @@ export async function registerRoutes(
     }
   });
 
+  // Billing
   app.use("/api/billing", requireAuth);
 
   app.get("/api/billing/config", async (_req, res) => {

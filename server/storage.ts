@@ -1,6 +1,7 @@
 import {
   users, organizations, securityEvents, incidents, threatIntel, securityPolicies,
   invites, assets, auditLogs, honeypotEvents, quarantineItems, responsePlaybooks,
+  apiKeys, firewallRules, alertRules, notifications, threatFeedConfigs, responseActions,
   type User, type InsertUser,
   type Organization, type InsertOrganization,
   type SecurityEvent, type InsertSecurityEvent,
@@ -13,23 +14,32 @@ import {
   type HoneypotEvent, type InsertHoneypotEvent,
   type QuarantineItem, type InsertQuarantineItem,
   type ResponsePlaybook, type InsertResponsePlaybook,
+  type ApiKey, type InsertApiKey,
+  type FirewallRule, type InsertFirewallRule,
+  type AlertRule, type InsertAlertRule,
+  type Notification, type InsertNotification,
+  type ThreatFeedConfig, type InsertThreatFeedConfig,
+  type ResponseAction, type InsertResponseAction,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, and, gte, count } from "drizzle-orm";
+import { eq, desc, sql, and, gte, count, lt, ne } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser & { organizationId?: number; role?: string }): Promise<User>;
+  createUser(user: InsertUser & { organizationId?: number; role?: string; isSuperAdmin?: boolean }): Promise<User>;
+  getAllUsers(): Promise<Omit<User, "password">[]>;
 
   createOrganization(org: InsertOrganization): Promise<Organization>;
   getOrganization(id: number): Promise<Organization | undefined>;
-  updateOrganization(id: number, data: Partial<InsertOrganization>): Promise<Organization | undefined>;
+  getAllOrganizations(): Promise<Organization[]>;
+  updateOrganization(id: number, data: Partial<InsertOrganization & { suspended: boolean }>): Promise<Organization | undefined>;
   getOrganizationUserCount(orgId: number): Promise<number>;
 
   getSecurityEvents(orgId: number): Promise<SecurityEvent[]>;
   createSecurityEvent(event: InsertSecurityEvent): Promise<SecurityEvent>;
   updateSecurityEventStatus(id: number, orgId: number, status: string): Promise<SecurityEvent | undefined>;
+  mitigateEventsByIp(orgId: number, ip: string): Promise<number>;
 
   getIncidents(orgId: number): Promise<Incident[]>;
   createIncident(incident: InsertIncident): Promise<Incident>;
@@ -53,6 +63,7 @@ export interface IStorage {
   updateAsset(id: number, orgId: number, data: Partial<InsertAsset>): Promise<Asset | undefined>;
 
   getAuditLogs(orgId: number): Promise<AuditLog[]>;
+  getAllAuditLogs(): Promise<AuditLog[]>;
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
 
   getHoneypotEvents(orgId: number): Promise<HoneypotEvent[]>;
@@ -69,6 +80,37 @@ export interface IStorage {
   getOrganizationUsers(orgId: number): Promise<Omit<User, "password">[]>;
   updateUserRole(userId: string, orgId: number, role: string): Promise<Omit<User, "password"> | undefined>;
 
+  getApiKeys(orgId: number): Promise<ApiKey[]>;
+  createApiKey(key: InsertApiKey): Promise<ApiKey>;
+  deleteApiKey(id: number, orgId: number): Promise<boolean>;
+  getApiKeyByHash(keyHash: string): Promise<ApiKey | undefined>;
+  touchApiKey(id: number): Promise<void>;
+
+  getFirewallRules(orgId: number): Promise<FirewallRule[]>;
+  createFirewallRule(rule: InsertFirewallRule): Promise<FirewallRule>;
+  updateFirewallRule(id: number, orgId: number, data: Partial<{ status: string }>): Promise<FirewallRule | undefined>;
+  deleteFirewallRule(id: number, orgId: number): Promise<boolean>;
+
+  getAlertRules(orgId: number): Promise<AlertRule[]>;
+  createAlertRule(rule: InsertAlertRule): Promise<AlertRule>;
+  updateAlertRule(id: number, orgId: number, data: Partial<{ enabled: boolean }>): Promise<AlertRule | undefined>;
+  deleteAlertRule(id: number, orgId: number): Promise<boolean>;
+  incrementAlertRuleTrigger(id: number): Promise<void>;
+
+  getNotifications(orgId: number, userId?: string): Promise<Notification[]>;
+  createNotification(n: InsertNotification): Promise<Notification>;
+  markNotificationRead(id: number): Promise<void>;
+  markAllNotificationsRead(orgId: number, userId: string): Promise<void>;
+  getUnreadNotificationCount(orgId: number, userId: string): Promise<number>;
+
+  getThreatFeedConfigs(orgId: number): Promise<ThreatFeedConfig[]>;
+  createThreatFeedConfig(config: InsertThreatFeedConfig): Promise<ThreatFeedConfig>;
+  updateThreatFeedConfig(id: number, orgId: number, data: Partial<InsertThreatFeedConfig & { lastSync: Date }>): Promise<ThreatFeedConfig | undefined>;
+
+  getResponseActions(orgId: number): Promise<ResponseAction[]>;
+  createResponseAction(action: InsertResponseAction): Promise<ResponseAction>;
+  updateResponseAction(id: number, data: Partial<{ status: string; result: string; completedAt: Date }>): Promise<ResponseAction | undefined>;
+
   getDashboardStats(orgId: number): Promise<{
     totalEvents: number;
     criticalAlerts: number;
@@ -79,9 +121,12 @@ export interface IStorage {
     assetCount: number;
     quarantineCount: number;
     honeypotActivity: number;
+    blockedIps: number;
+    activeRules: number;
   }>;
   getEventTrend(orgId: number): Promise<{ time: string; events: number }[]>;
   getEventCount(): Promise<number>;
+  getPlatformStats(): Promise<{ totalOrgs: number; totalUsers: number; totalEvents: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -95,9 +140,16 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
-  async createUser(insertUser: InsertUser & { organizationId?: number; role?: string }): Promise<User> {
+  async createUser(insertUser: InsertUser & { organizationId?: number; role?: string; isSuperAdmin?: boolean }): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
     return user;
+  }
+
+  async getAllUsers(): Promise<Omit<User, "password">[]> {
+    return db.select({
+      id: users.id, username: users.username, organizationId: users.organizationId,
+      role: users.role, isSuperAdmin: users.isSuperAdmin,
+    }).from(users).orderBy(desc(users.username));
   }
 
   async createOrganization(org: InsertOrganization): Promise<Organization> {
@@ -110,7 +162,11 @@ export class DatabaseStorage implements IStorage {
     return org || undefined;
   }
 
-  async updateOrganization(id: number, data: Partial<InsertOrganization>): Promise<Organization | undefined> {
+  async getAllOrganizations(): Promise<Organization[]> {
+    return db.select().from(organizations).orderBy(desc(organizations.createdAt));
+  }
+
+  async updateOrganization(id: number, data: Partial<InsertOrganization & { suspended: boolean }>): Promise<Organization | undefined> {
     const [updated] = await db.update(organizations).set(data).where(eq(organizations.id, id)).returning();
     return updated;
   }
@@ -123,7 +179,7 @@ export class DatabaseStorage implements IStorage {
   async getSecurityEvents(orgId: number): Promise<SecurityEvent[]> {
     return db.select().from(securityEvents)
       .where(eq(securityEvents.organizationId, orgId))
-      .orderBy(desc(securityEvents.createdAt)).limit(200);
+      .orderBy(desc(securityEvents.createdAt)).limit(500);
   }
 
   async createSecurityEvent(event: InsertSecurityEvent): Promise<SecurityEvent> {
@@ -136,6 +192,17 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(securityEvents.id, id), eq(securityEvents.organizationId, orgId)))
       .returning();
     return updated;
+  }
+
+  async mitigateEventsByIp(orgId: number, ip: string): Promise<number> {
+    const result = await db.update(securityEvents)
+      .set({ mitigated: true, status: "resolved" })
+      .where(and(
+        eq(securityEvents.organizationId, orgId),
+        eq(securityEvents.sourceIp, ip),
+        ne(securityEvents.status, "resolved"),
+      )).returning();
+    return result.length;
   }
 
   async getIncidents(orgId: number): Promise<Incident[]> {
@@ -238,6 +305,12 @@ export class DatabaseStorage implements IStorage {
       .limit(500);
   }
 
+  async getAllAuditLogs(): Promise<AuditLog[]> {
+    return db.select().from(auditLogs)
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(1000);
+  }
+
   async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
     const [created] = await db.insert(auditLogs).values(log).returning();
     return created;
@@ -293,10 +366,8 @@ export class DatabaseStorage implements IStorage {
 
   async getOrganizationUsers(orgId: number): Promise<Omit<User, "password">[]> {
     const result = await db.select({
-      id: users.id,
-      username: users.username,
-      organizationId: users.organizationId,
-      role: users.role,
+      id: users.id, username: users.username,
+      organizationId: users.organizationId, role: users.role, isSuperAdmin: users.isSuperAdmin,
     }).from(users).where(eq(users.organizationId, orgId));
     return result as Omit<User, "password">[];
   }
@@ -304,15 +375,171 @@ export class DatabaseStorage implements IStorage {
   async updateUserRole(userId: string, orgId: number, role: string): Promise<Omit<User, "password"> | undefined> {
     const [updated] = await db.update(users).set({ role })
       .where(and(eq(users.id, userId), eq(users.organizationId, orgId)))
-      .returning({ id: users.id, username: users.username, organizationId: users.organizationId, role: users.role });
+      .returning({ id: users.id, username: users.username, organizationId: users.organizationId, role: users.role, isSuperAdmin: users.isSuperAdmin });
     return updated as Omit<User, "password"> | undefined;
+  }
+
+  async getApiKeys(orgId: number): Promise<ApiKey[]> {
+    return db.select().from(apiKeys)
+      .where(eq(apiKeys.organizationId, orgId))
+      .orderBy(desc(apiKeys.createdAt));
+  }
+
+  async createApiKey(key: InsertApiKey): Promise<ApiKey> {
+    const [created] = await db.insert(apiKeys).values(key).returning();
+    return created;
+  }
+
+  async deleteApiKey(id: number, orgId: number): Promise<boolean> {
+    const result = await db.delete(apiKeys)
+      .where(and(eq(apiKeys.id, id), eq(apiKeys.organizationId, orgId)))
+      .returning();
+    return result.length > 0;
+  }
+
+  async getApiKeyByHash(keyHash: string): Promise<ApiKey | undefined> {
+    const [key] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash));
+    return key || undefined;
+  }
+
+  async touchApiKey(id: number): Promise<void> {
+    await db.update(apiKeys).set({ lastUsed: new Date() }).where(eq(apiKeys.id, id));
+  }
+
+  async getFirewallRules(orgId: number): Promise<FirewallRule[]> {
+    return db.select().from(firewallRules)
+      .where(eq(firewallRules.organizationId, orgId))
+      .orderBy(desc(firewallRules.createdAt));
+  }
+
+  async createFirewallRule(rule: InsertFirewallRule): Promise<FirewallRule> {
+    const [created] = await db.insert(firewallRules).values(rule).returning();
+    return created;
+  }
+
+  async updateFirewallRule(id: number, orgId: number, data: Partial<{ status: string }>): Promise<FirewallRule | undefined> {
+    const [updated] = await db.update(firewallRules).set(data)
+      .where(and(eq(firewallRules.id, id), eq(firewallRules.organizationId, orgId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteFirewallRule(id: number, orgId: number): Promise<boolean> {
+    const result = await db.delete(firewallRules)
+      .where(and(eq(firewallRules.id, id), eq(firewallRules.organizationId, orgId)))
+      .returning();
+    return result.length > 0;
+  }
+
+  async getAlertRules(orgId: number): Promise<AlertRule[]> {
+    return db.select().from(alertRules)
+      .where(eq(alertRules.organizationId, orgId))
+      .orderBy(desc(alertRules.createdAt));
+  }
+
+  async createAlertRule(rule: InsertAlertRule): Promise<AlertRule> {
+    const [created] = await db.insert(alertRules).values(rule).returning();
+    return created;
+  }
+
+  async updateAlertRule(id: number, orgId: number, data: Partial<{ enabled: boolean }>): Promise<AlertRule | undefined> {
+    const [updated] = await db.update(alertRules).set(data)
+      .where(and(eq(alertRules.id, id), eq(alertRules.organizationId, orgId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteAlertRule(id: number, orgId: number): Promise<boolean> {
+    const result = await db.delete(alertRules)
+      .where(and(eq(alertRules.id, id), eq(alertRules.organizationId, orgId)))
+      .returning();
+    return result.length > 0;
+  }
+
+  async incrementAlertRuleTrigger(id: number): Promise<void> {
+    await db.update(alertRules).set({
+      triggerCount: sql`${alertRules.triggerCount} + 1`,
+      lastTriggered: new Date(),
+    }).where(eq(alertRules.id, id));
+  }
+
+  async getNotifications(orgId: number, userId?: string): Promise<Notification[]> {
+    const conditions = [eq(notifications.organizationId, orgId)];
+    if (userId) conditions.push(eq(notifications.userId, userId));
+    return db.select().from(notifications)
+      .where(and(...conditions))
+      .orderBy(desc(notifications.createdAt))
+      .limit(100);
+  }
+
+  async createNotification(n: InsertNotification): Promise<Notification> {
+    const [created] = await db.insert(notifications).values(n).returning();
+    return created;
+  }
+
+  async markNotificationRead(id: number): Promise<void> {
+    await db.update(notifications).set({ read: true }).where(eq(notifications.id, id));
+  }
+
+  async markAllNotificationsRead(orgId: number, userId: string): Promise<void> {
+    await db.update(notifications).set({ read: true })
+      .where(and(eq(notifications.organizationId, orgId), eq(notifications.userId, userId)));
+  }
+
+  async getUnreadNotificationCount(orgId: number, userId: string): Promise<number> {
+    const [result] = await db.select({ count: count() }).from(notifications)
+      .where(and(
+        eq(notifications.organizationId, orgId),
+        eq(notifications.userId, userId),
+        eq(notifications.read, false),
+      ));
+    return result?.count ?? 0;
+  }
+
+  async getThreatFeedConfigs(orgId: number): Promise<ThreatFeedConfig[]> {
+    return db.select().from(threatFeedConfigs)
+      .where(eq(threatFeedConfigs.organizationId, orgId));
+  }
+
+  async createThreatFeedConfig(config: InsertThreatFeedConfig): Promise<ThreatFeedConfig> {
+    const [created] = await db.insert(threatFeedConfigs).values(config).returning();
+    return created;
+  }
+
+  async updateThreatFeedConfig(id: number, orgId: number, data: Partial<InsertThreatFeedConfig & { lastSync: Date }>): Promise<ThreatFeedConfig | undefined> {
+    const [updated] = await db.update(threatFeedConfigs).set(data)
+      .where(and(eq(threatFeedConfigs.id, id), eq(threatFeedConfigs.organizationId, orgId)))
+      .returning();
+    return updated;
+  }
+
+  async getResponseActions(orgId: number): Promise<ResponseAction[]> {
+    return db.select().from(responseActions)
+      .where(eq(responseActions.organizationId, orgId))
+      .orderBy(desc(responseActions.createdAt))
+      .limit(200);
+  }
+
+  async createResponseAction(action: InsertResponseAction): Promise<ResponseAction> {
+    const [created] = await db.insert(responseActions).values(action).returning();
+    return created;
+  }
+
+  async updateResponseAction(id: number, data: Partial<{ status: string; result: string; completedAt: Date }>): Promise<ResponseAction | undefined> {
+    const [updated] = await db.update(responseActions).set(data)
+      .where(eq(responseActions.id, id))
+      .returning();
+    return updated;
   }
 
   async getDashboardStats(orgId: number) {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
     const [totalResult] = await db.select({ count: count() }).from(securityEvents)
       .where(and(eq(securityEvents.organizationId, orgId), gte(securityEvents.createdAt, oneDayAgo)));
+    const [prevResult] = await db.select({ count: count() }).from(securityEvents)
+      .where(and(eq(securityEvents.organizationId, orgId), gte(securityEvents.createdAt, twoDaysAgo), lt(securityEvents.createdAt, oneDayAgo)));
     const [criticalResult] = await db.select({ count: count() }).from(securityEvents)
       .where(and(eq(securityEvents.organizationId, orgId), eq(securityEvents.severity, "critical"), gte(securityEvents.createdAt, oneDayAgo)));
     const [activeResult] = await db.select({ count: count() }).from(incidents)
@@ -323,22 +550,31 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(quarantineItems.organizationId, orgId), eq(quarantineItems.status, "quarantined")));
     const [honeypotResult] = await db.select({ count: count() }).from(honeypotEvents)
       .where(and(eq(honeypotEvents.organizationId, orgId), gte(honeypotEvents.createdAt, oneDayAgo)));
+    const [blockedResult] = await db.select({ count: count() }).from(firewallRules)
+      .where(and(eq(firewallRules.organizationId, orgId), eq(firewallRules.status, "active")));
+    const [rulesResult] = await db.select({ count: count() }).from(alertRules)
+      .where(and(eq(alertRules.organizationId, orgId), eq(alertRules.enabled, true)));
 
     const totalEvents = totalResult?.count ?? 0;
+    const prevEvents = prevResult?.count ?? 0;
     const criticalAlerts = criticalResult?.count ?? 0;
     const activeIncidents = activeResult?.count ?? 0;
     const threatScore = Math.min(100, Math.round(criticalAlerts * 15 + totalEvents * 0.5));
+
+    const eventTrend = prevEvents > 0 ? Math.round(((totalEvents - prevEvents) / prevEvents) * 100) : 0;
 
     return {
       totalEvents,
       criticalAlerts,
       activeIncidents,
       threatScore,
-      eventTrend: Math.round((Math.random() - 0.3) * 30),
-      incidentTrend: Math.round((Math.random() - 0.5) * 20),
+      eventTrend,
+      incidentTrend: 0,
       assetCount: assetResult?.count ?? 0,
       quarantineCount: quarantineResult?.count ?? 0,
       honeypotActivity: honeypotResult?.count ?? 0,
+      blockedIps: blockedResult?.count ?? 0,
+      activeRules: rulesResult?.count ?? 0,
     };
   }
 
@@ -369,6 +605,17 @@ export class DatabaseStorage implements IStorage {
   async getEventCount(): Promise<number> {
     const [result] = await db.select({ count: count() }).from(securityEvents);
     return result?.count ?? 0;
+  }
+
+  async getPlatformStats(): Promise<{ totalOrgs: number; totalUsers: number; totalEvents: number }> {
+    const [orgs] = await db.select({ count: count() }).from(organizations);
+    const [usersCount] = await db.select({ count: count() }).from(users);
+    const [events] = await db.select({ count: count() }).from(securityEvents);
+    return {
+      totalOrgs: orgs?.count ?? 0,
+      totalUsers: usersCount?.count ?? 0,
+      totalEvents: events?.count ?? 0,
+    };
   }
 }
 

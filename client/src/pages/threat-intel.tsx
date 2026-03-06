@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Search, Globe, Hash, Link, Mail, Server } from "lucide-react";
+import { Plus, Search, Globe, Hash, Link, Mail, Server, ShieldBan, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { ThreatIntel } from "@shared/schema";
 
@@ -71,6 +71,34 @@ export default function ThreatIntelPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/threat-intel"] });
+    },
+  });
+
+  const blockIp = useMutation({
+    mutationFn: async ({ ip, reason }: { ip: string; reason: string }) => {
+      const res = await apiRequest("POST", "/api/response/block-ip", { ip, reason });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/firewall"] });
+      toast({ title: "IP blocked via firewall" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Block failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const sinkholeDomain = useMutation({
+    mutationFn: async ({ domain }: { domain: string }) => {
+      const res = await apiRequest("POST", "/api/response/sinkhole-domain", { domain });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/firewall"] });
+      toast({ title: "Domain sinkholed" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Sinkhole failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -200,7 +228,7 @@ export default function ThreatIntelPage() {
         <CardContent className="p-0">
           <ScrollArea className="h-[calc(100vh-230px)]">
             <div className="min-w-[600px]">
-              <div className="grid grid-cols-[40px_1fr_100px_80px_100px_80px_60px] gap-2 px-4 py-2 border-b text-[10px] text-muted-foreground uppercase tracking-wider font-medium sticky top-0 bg-card z-10">
+              <div className="grid grid-cols-[40px_1fr_100px_80px_100px_80px_60px_80px] gap-2 px-4 py-2 border-b text-[10px] text-muted-foreground uppercase tracking-wider font-medium sticky top-0 bg-card z-10">
                 <span></span>
                 <span>Value</span>
                 <span>Threat</span>
@@ -208,6 +236,7 @@ export default function ThreatIntelPage() {
                 <span>Source</span>
                 <span>Seen</span>
                 <span>Active</span>
+                <span>Actions</span>
               </div>
               {filtered.length === 0 ? (
                 <div className="text-center text-sm text-muted-foreground py-12">No indicators found</div>
@@ -217,7 +246,7 @@ export default function ThreatIntelPage() {
                   return (
                     <div
                       key={ind.id}
-                      className="grid grid-cols-[40px_1fr_100px_80px_100px_80px_60px] gap-2 px-4 py-2.5 border-b last:border-0 items-center"
+                      className="grid grid-cols-[40px_1fr_100px_80px_100px_80px_60px_80px] gap-2 px-4 py-2.5 border-b last:border-0 items-center"
                       data-testid={`intel-row-${ind.id}`}
                     >
                       <div className="flex items-center justify-center">
@@ -240,12 +269,48 @@ export default function ThreatIntelPage() {
                       <Button
                         size="sm"
                         variant={ind.active ? "default" : "secondary"}
-                        className="h-6 text-[10px] px-2"
+                        className="text-[10px]"
                         onClick={() => toggleActive.mutate({ id: ind.id, active: !ind.active })}
                         data-testid={`button-toggle-${ind.id}`}
                       >
                         {ind.active ? "On" : "Off"}
                       </Button>
+                      <div>
+                        {ind.indicatorType === "ip" && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="text-[9px]"
+                            onClick={() => {
+                              if (window.confirm(`Block IP ${ind.value}?`)) {
+                                blockIp.mutate({ ip: ind.value, reason: `Threat intel IOC: ${ind.threatType}` });
+                              }
+                            }}
+                            disabled={blockIp.isPending}
+                            data-testid={`button-block-indicator-${ind.id}`}
+                          >
+                            <ShieldBan className="w-3 h-3 mr-0.5" />
+                            Block
+                          </Button>
+                        )}
+                        {ind.indicatorType === "domain" && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="text-[9px]"
+                            onClick={() => {
+                              if (window.confirm(`Sinkhole domain ${ind.value}?`)) {
+                                sinkholeDomain.mutate({ domain: ind.value });
+                              }
+                            }}
+                            disabled={sinkholeDomain.isPending}
+                            data-testid={`button-sinkhole-indicator-${ind.id}`}
+                          >
+                            <ShieldBan className="w-3 h-3 mr-0.5" />
+                            Sinkhole
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   );
                 })
