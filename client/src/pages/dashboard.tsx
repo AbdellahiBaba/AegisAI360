@@ -58,7 +58,7 @@ function SeverityBadge({ severity }: { severity: string }) {
   );
 }
 
-function getDefconLevel(stats: DashboardStats): number {
+function getThreatLevel(stats: DashboardStats): number {
   if (stats.criticalAlerts >= 5 || stats.activeIncidents >= 3) return 1;
   if (stats.criticalAlerts >= 3) return 2;
   if (stats.criticalAlerts >= 1 || stats.activeIncidents >= 1) return 3;
@@ -66,10 +66,10 @@ function getDefconLevel(stats: DashboardStats): number {
   return 5;
 }
 
-function DefconIndicator({ stats }: { stats: DashboardStats }) {
+function ThreatLevelIndicator({ stats }: { stats: DashboardStats }) {
   const { t } = useTranslation();
-  const level = getDefconLevel(stats);
-  const defconDescriptions: Record<number, string> = {
+  const level = getThreatLevel(stats);
+  const levelDescriptions: Record<number, string> = {
     1: t("dashboard.defcon1"),
     2: t("dashboard.defcon2"),
     3: t("dashboard.defcon3"),
@@ -77,15 +77,15 @@ function DefconIndicator({ stats }: { stats: DashboardStats }) {
     5: t("dashboard.defcon5"),
   };
   return (
-    <div className={`defcon-${level} rounded-md p-4 flex items-center justify-between gap-4 flex-wrap`} data-testid="defcon-indicator">
+    <div className={`threat-level-${level} rounded-md p-4 flex items-center justify-between gap-4 flex-wrap`} data-testid="threat-level-indicator">
       <div className="flex items-center gap-3">
         <Crosshair className="w-6 h-6" />
         <div>
-          <div className="text-lg font-bold font-mono tracking-widest uppercase" data-testid="defcon-level">
+          <div className="text-lg font-bold font-mono tracking-widest uppercase" data-testid="threat-level">
             {t("dashboard.defcon")} {level}
           </div>
-          <div className="text-xs font-mono tracking-wider opacity-90" data-testid="defcon-description">
-            {defconDescriptions[level]}
+          <div className="text-xs font-mono tracking-wider opacity-90" data-testid="threat-level-description">
+            {levelDescriptions[level]}
           </div>
         </div>
       </div>
@@ -511,7 +511,7 @@ export default function Dashboard() {
   const showUpgradeBanner = user?.role === "admin" && billingStatus && !billingStatus.stripeSubscriptionId;
 
   return (
-    <div className="p-4 md:p-6 space-y-4 tactical-grid">
+    <div className="p-4 md:p-6 space-y-4 grid-pattern">
       {showUpgradeBanner && (
         <Card className="border-primary/30 bg-primary/5" data-testid="upgrade-banner">
           <CardContent className="p-4 flex items-center justify-between gap-4 flex-wrap">
@@ -536,7 +536,7 @@ export default function Dashboard() {
         </Card>
       )}
 
-      <DefconIndicator stats={stats!} />
+      <ThreatLevelIndicator stats={stats!} />
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
         <StatCard

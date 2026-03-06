@@ -12,6 +12,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import type { SupportTicket } from "@shared/schema";
 import {
   Shield,
   Building2,
@@ -26,6 +29,17 @@ import {
   CheckCircle,
   Lock,
   AlertTriangle,
+  LifeBuoy,
+  MessageSquare,
+  Send,
+  Wifi,
+  ArrowLeft,
+  Wrench,
+  UserCog,
+  Key,
+  Settings,
+  Flame,
+  LayoutDashboard,
 } from "lucide-react";
 
 interface PlatformStats {
@@ -85,7 +99,6 @@ const planColors: Record<string, string> = {
   starter: "bg-muted text-muted-foreground",
   professional: "bg-blue-500/20 text-blue-400",
   enterprise: "bg-purple-500/20 text-purple-400",
-  government: "bg-severity-critical/20 text-severity-critical",
 };
 
 function formatUptime(seconds: number) {
@@ -145,6 +158,7 @@ export default function SuperAdmin() {
           <TabsTrigger value="users" data-testid="tab-users">{t("superAdmin.users")}</TabsTrigger>
           <TabsTrigger value="system" data-testid="tab-system">{t("superAdmin.system")}</TabsTrigger>
           <TabsTrigger value="security" data-testid="tab-security">{t("superAdmin.security", "Security")}</TabsTrigger>
+          <TabsTrigger value="support" data-testid="tab-support"><LifeBuoy className="w-3.5 h-3.5 ltr:mr-1 rtl:ml-1" />{t("sidebar.support")}</TabsTrigger>
           <TabsTrigger value="audit" data-testid="tab-audit">{t("superAdmin.auditLog")}</TabsTrigger>
         </TabsList>
 
@@ -166,6 +180,10 @@ export default function SuperAdmin() {
 
         <TabsContent value="security" className="mt-4">
           <SecurityPanel />
+        </TabsContent>
+
+        <TabsContent value="support" className="mt-4">
+          <SupportPanel />
         </TabsContent>
 
         <TabsContent value="audit" className="mt-4">
@@ -313,7 +331,6 @@ function OrganizationsTable() {
                           <SelectItem value="starter">{t("superAdmin.starter")}</SelectItem>
                           <SelectItem value="professional">{t("superAdmin.professional")}</SelectItem>
                           <SelectItem value="enterprise">{t("superAdmin.enterprise")}</SelectItem>
-                          <SelectItem value="government">{t("superAdmin.government")}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -613,6 +630,379 @@ function SecurityPanel() {
                 </div>
               )}
             </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SupportPanel() {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [replyContent, setReplyContent] = useState("");
+
+  const { data: tickets, isLoading } = useQuery<SupportTicket[]>({
+    queryKey: ["/api/admin/support/tickets"],
+    refetchInterval: 10000,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      const res = await apiRequest("PATCH", `/api/admin/support/tickets/${id}`, data);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: t("support.ticketUpdated") });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/support/tickets"] });
+      if (selectedTicket) setSelectedTicket(data);
+    },
+  });
+
+  const replyMutation = useMutation({
+    mutationFn: async ({ id, content }: { id: number; content: string }) => {
+      const res = await apiRequest("POST", `/api/admin/support/tickets/${id}/messages`, { content });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setReplyContent("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/support/tickets"] });
+      if (selectedTicket) setSelectedTicket(data);
+    },
+  });
+
+  const remoteMutation = useMutation({
+    mutationFn: async ({ id, active }: { id: number; active: boolean }) => {
+      const res = await apiRequest("POST", `/api/admin/support/tickets/${id}/remote-session`, { active });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/support/tickets"] });
+      if (selectedTicket) setSelectedTicket(data);
+    },
+  });
+
+  const actionMutation = useMutation({
+    mutationFn: async ({ id, actionType, details }: { id: number; actionType: string; details: string }) => {
+      const res = await apiRequest("POST", `/api/admin/support/tickets/${id}/take-action`, { actionType, details });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: t("support.actionExecuted") });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/support/tickets"] });
+    },
+  });
+
+  if (selectedTicket) {
+    const messages = Array.isArray(selectedTicket.messages) ? (selectedTicket.messages as any[]) : [];
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => setSelectedTicket(null)} data-testid="button-back-admin">
+            <ArrowLeft className="w-4 h-4 ltr:mr-1 rtl:ml-1" />
+            {t("support.back")}
+          </Button>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold">{selectedTicket.subject}</h3>
+            <p className="text-[10px] text-muted-foreground">
+              Org #{selectedTicket.organizationId} | User: {selectedTicket.userId}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="md:col-span-2">
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="text-xs flex items-center gap-2">
+                <MessageSquare className="w-3.5 h-3.5" />
+                {t("support.messages")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <div className="space-y-3 max-h-[350px] overflow-y-auto mb-4">
+                {messages.map((msg: any, i: number) => (
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-start" : msg.role === "admin" ? "justify-end" : "justify-center"}`} data-testid={`admin-message-${i}`}>
+                    <div className={`max-w-[80%] rounded-lg p-3 text-xs ${
+                      msg.role === "user" ? "bg-muted" : msg.role === "admin" ? "bg-primary/10 border border-primary/20" : "bg-yellow-500/10 text-yellow-400 italic"
+                    }`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-[10px]">
+                          {msg.role === "user" ? "Customer" : msg.role === "admin" ? "Admin" : "System"}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground">{new Date(msg.timestamp).toLocaleString()}</span>
+                      </div>
+                      <p>{msg.content}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Textarea
+                  value={replyContent}
+                  onChange={(e) => setReplyContent(e.target.value)}
+                  placeholder={t("support.typeMessage")}
+                  className="text-xs min-h-[60px]"
+                  data-testid="input-admin-reply"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => replyContent.trim() && replyMutation.mutate({ id: selectedTicket.id, content: replyContent.trim() })}
+                  disabled={replyMutation.isPending || !replyContent.trim()}
+                  data-testid="button-admin-send"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-4">
+            <Card>
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-xs">{t("support.changeStatus")}</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-2">
+                <Select value={selectedTicket.status} onValueChange={(status) => updateMutation.mutate({ id: selectedTicket.id, data: { status } })}>
+                  <SelectTrigger className="text-xs" data-testid="select-ticket-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="open">Open</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
+                    <SelectItem value="resolved">Resolved</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={selectedTicket.priority} onValueChange={(priority) => updateMutation.mutate({ id: selectedTicket.id, data: { priority } })}>
+                  <SelectTrigger className="text-xs" data-testid="select-ticket-priority">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">{t("common.low")}</SelectItem>
+                    <SelectItem value="medium">{t("common.medium")}</SelectItem>
+                    <SelectItem value="high">{t("common.high")}</SelectItem>
+                    <SelectItem value="critical">{t("common.critical")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs"
+                  onClick={() => updateMutation.mutate({ id: selectedTicket.id, data: { assignedTo: "admin" } })}
+                  data-testid="button-assign-to-me"
+                >
+                  <UserCog className="w-3.5 h-3.5 ltr:mr-1 rtl:ml-1" />
+                  {t("support.assignToMe")}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-xs flex items-center gap-2">
+                  <Wifi className="w-3.5 h-3.5" />
+                  Remote Session
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-2">
+                {selectedTicket.remoteSessionRequested ? (
+                  <>
+                    <Badge className={`text-[10px] w-full justify-center py-1 ${selectedTicket.remoteSessionActive ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"}`}>
+                      {selectedTicket.remoteSessionActive ? t("support.remoteActive") : t("support.remotePending")}
+                    </Badge>
+                    {selectedTicket.remoteSessionActive ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full text-xs"
+                        onClick={() => remoteMutation.mutate({ id: selectedTicket.id, active: false })}
+                        data-testid="button-end-remote"
+                      >
+                        {t("support.endRemote")}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        className="w-full text-xs"
+                        onClick={() => remoteMutation.mutate({ id: selectedTicket.id, active: true })}
+                        data-testid="button-start-remote"
+                      >
+                        {t("support.startRemote")}
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground text-center py-2">No remote session requested</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-xs flex items-center gap-2">
+                  <Wrench className="w-3.5 h-3.5" />
+                  {t("support.takeAction")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-1.5">
+                {[
+                  { type: "view_dashboard", label: t("support.viewDashboard"), icon: LayoutDashboard },
+                  { type: "modify_firewall", label: t("support.modifyFirewall"), icon: Flame },
+                  { type: "manage_settings", label: t("support.manageSettings"), icon: Settings },
+                  { type: "reset_password", label: t("support.resetPassword"), icon: Key },
+                ].map((action) => (
+                  <Button
+                    key={action.type}
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs justify-start"
+                    onClick={() => actionMutation.mutate({ id: selectedTicket.id, actionType: action.type, details: `On behalf of org #${selectedTicket.organizationId}` })}
+                    disabled={actionMutation.isPending}
+                    data-testid={`button-action-${action.type}`}
+                  >
+                    <action.icon className="w-3.5 h-3.5 ltr:mr-2 rtl:ml-2" />
+                    {action.label}
+                  </Button>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const filtered = (tickets || []).filter(t => statusFilter === "all" || t.status === statusFilter);
+  const statusCounts = {
+    open: (tickets || []).filter(t => t.status === "open").length,
+    in_progress: (tickets || []).filter(t => t.status === "in_progress").length,
+    resolved: (tickets || []).filter(t => t.status === "resolved").length,
+  };
+
+  if (isLoading) return <Skeleton className="h-[400px] w-full" />;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setStatusFilter("open")}>
+          <CardContent className="p-3 flex items-center gap-3">
+            <div className="p-2 rounded bg-blue-500/10"><Clock className="w-4 h-4 text-blue-400" /></div>
+            <div>
+              <p className="text-lg font-bold" data-testid="admin-open-count">{statusCounts.open}</p>
+              <p className="text-[10px] text-muted-foreground">{t("support.openTickets")}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setStatusFilter("in_progress")}>
+          <CardContent className="p-3 flex items-center gap-3">
+            <div className="p-2 rounded bg-yellow-500/10"><AlertTriangle className="w-4 h-4 text-yellow-400" /></div>
+            <div>
+              <p className="text-lg font-bold" data-testid="admin-progress-count">{statusCounts.in_progress}</p>
+              <p className="text-[10px] text-muted-foreground">{t("support.inProgressTickets")}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setStatusFilter("resolved")}>
+          <CardContent className="p-3 flex items-center gap-3">
+            <div className="p-2 rounded bg-green-500/10"><CheckCircle className="w-4 h-4 text-green-400" /></div>
+            <div>
+              <p className="text-lg font-bold" data-testid="admin-resolved-count">{statusCounts.resolved}</p>
+              <p className="text-[10px] text-muted-foreground">{t("support.resolvedTickets")}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+          <CardTitle className="text-sm tracking-wider uppercase flex items-center gap-2">
+            <LifeBuoy className="w-4 h-4" />
+            {t("support.allTickets")}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[130px] text-xs" data-testid="select-status-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("common.all")}</SelectItem>
+                <SelectItem value="open">Open</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="resolved">Resolved</SelectItem>
+                <SelectItem value="closed">Closed</SelectItem>
+              </SelectContent>
+            </Select>
+            <Badge variant="secondary" className="font-mono text-xs">{filtered.length}</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <ScrollArea className="h-[calc(100vh-400px)]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-[10px] uppercase tracking-wider">ID</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">Subject</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">Org</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">{t("common.status")}</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">Priority</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">Category</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">Remote</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">{t("common.time")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((ticket) => (
+                  <TableRow
+                    key={ticket.id}
+                    className="cursor-pointer hover:bg-muted/30"
+                    onClick={() => setSelectedTicket(ticket)}
+                    data-testid={`admin-ticket-row-${ticket.id}`}
+                  >
+                    <TableCell className="text-xs font-mono">#{ticket.id}</TableCell>
+                    <TableCell className="text-xs max-w-[200px] truncate">{ticket.subject}</TableCell>
+                    <TableCell className="text-xs font-mono">#{ticket.organizationId}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] ${
+                        ticket.status === "open" ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                        : ticket.status === "in_progress" ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                        : ticket.status === "resolved" ? "bg-green-500/20 text-green-400 border-green-500/30"
+                        : "bg-zinc-500/20 text-zinc-400 border-zinc-500/30"
+                      }`}>{ticket.status.replace("_", " ").toUpperCase()}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-[9px] ${
+                        ticket.priority === "critical" ? "bg-red-500/20 text-red-400 border-red-500/30"
+                        : ticket.priority === "high" ? "bg-orange-500/20 text-orange-400 border-orange-500/30"
+                        : ticket.priority === "medium" ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                        : "bg-zinc-500/20 text-zinc-400 border-zinc-500/30"
+                      }`}>{ticket.priority.toUpperCase()}</Badge>
+                    </TableCell>
+                    <TableCell className="text-xs">{ticket.category}</TableCell>
+                    <TableCell>
+                      {ticket.remoteSessionActive ? (
+                        <Badge className="text-[9px] bg-green-500/20 text-green-400"><Wifi className="w-3 h-3 ltr:mr-1 rtl:ml-1" />Live</Badge>
+                      ) : ticket.remoteSessionRequested ? (
+                        <Badge className="text-[9px] bg-yellow-500/20 text-yellow-400">Requested</Badge>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">--</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-[10px] text-muted-foreground font-mono whitespace-nowrap">
+                      {formatDate(ticket.createdAt as unknown as string)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {filtered.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-12">
+                      {t("support.noTicketsAdmin")}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           </ScrollArea>
         </CardContent>
       </Card>

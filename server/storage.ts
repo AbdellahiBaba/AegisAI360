@@ -2,7 +2,7 @@ import {
   users, organizations, securityEvents, incidents, threatIntel, securityPolicies,
   invites, assets, auditLogs, honeypotEvents, quarantineItems, responsePlaybooks,
   apiKeys, firewallRules, alertRules, notifications, threatFeedConfigs, responseActions,
-  scanResults,
+  scanResults, supportTickets,
   type User, type InsertUser,
   type Organization, type InsertOrganization,
   type SecurityEvent, type InsertSecurityEvent,
@@ -22,6 +22,7 @@ import {
   type ThreatFeedConfig, type InsertThreatFeedConfig,
   type ResponseAction, type InsertResponseAction,
   type ScanResult, type InsertScanResult,
+  type SupportTicket, type InsertSupportTicket,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, gte, count, lt, ne } from "drizzle-orm";
@@ -133,6 +134,12 @@ export interface IStorage {
   getScanResults(orgId: number): Promise<ScanResult[]>;
   createScanResult(result: InsertScanResult): Promise<ScanResult>;
   updateScanResult(id: number, data: Partial<{ status: string; results: string; findings: number; severity: string; completedAt: Date }>): Promise<ScanResult | undefined>;
+
+  getSupportTickets(orgId: number): Promise<SupportTicket[]>;
+  getAllSupportTickets(): Promise<SupportTicket[]>;
+  getSupportTicket(id: number): Promise<SupportTicket | undefined>;
+  createSupportTicket(ticket: InsertSupportTicket): Promise<SupportTicket>;
+  updateSupportTicket(id: number, data: Partial<{ status: string; priority: string; assignedTo: string | null; remoteSessionRequested: boolean; remoteSessionActive: boolean; messages: any }>): Promise<SupportTicket | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -635,6 +642,29 @@ export class DatabaseStorage implements IStorage {
 
   async updateScanResult(id: number, data: Partial<{ status: string; results: string; findings: number; severity: string; completedAt: Date }>): Promise<ScanResult | undefined> {
     const [updated] = await db.update(scanResults).set(data).where(eq(scanResults.id, id)).returning();
+    return updated;
+  }
+
+  async getSupportTickets(orgId: number): Promise<SupportTicket[]> {
+    return db.select().from(supportTickets).where(eq(supportTickets.organizationId, orgId)).orderBy(desc(supportTickets.createdAt));
+  }
+
+  async getAllSupportTickets(): Promise<SupportTicket[]> {
+    return db.select().from(supportTickets).orderBy(desc(supportTickets.createdAt));
+  }
+
+  async getSupportTicket(id: number): Promise<SupportTicket | undefined> {
+    const [ticket] = await db.select().from(supportTickets).where(eq(supportTickets.id, id));
+    return ticket || undefined;
+  }
+
+  async createSupportTicket(ticket: InsertSupportTicket): Promise<SupportTicket> {
+    const [created] = await db.insert(supportTickets).values(ticket).returning();
+    return created;
+  }
+
+  async updateSupportTicket(id: number, data: Partial<{ status: string; priority: string; assignedTo: string | null; remoteSessionRequested: boolean; remoteSessionActive: boolean; messages: any }>): Promise<SupportTicket | undefined> {
+    const [updated] = await db.update(supportTickets).set({ ...data, updatedAt: new Date() }).where(eq(supportTickets.id, id)).returning();
     return updated;
   }
 }

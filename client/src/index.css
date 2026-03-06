@@ -227,7 +227,7 @@ html[dir="rtl"] body {
     inset: -1px;
   }
 
-  .tactical-grid {
+  .grid-pattern {
     background-image:
       linear-gradient(rgba(212, 175, 55, 0.025) 1px, transparent 1px),
       linear-gradient(90deg, rgba(212, 175, 55, 0.025) 1px, transparent 1px);
@@ -284,9 +284,9 @@ html[dir="rtl"] body {
     pointer-events: none;
   }
 
-  .defcon-1 { background: linear-gradient(90deg, hsl(0 80% 50%), hsl(0 80% 40%)); }
-  .defcon-2 { background: linear-gradient(90deg, hsl(25 90% 50%), hsl(25 90% 40%)); }
-  .defcon-3 { background: linear-gradient(90deg, hsl(38 92% 50%), hsl(38 92% 40%)); }
-  .defcon-4 { background: linear-gradient(90deg, hsl(42 90% 50%), hsl(42 90% 40%)); }
-  .defcon-5 { background: linear-gradient(90deg, hsl(155 72% 40%), hsl(155 72% 30%)); }
+  .threat-level-1 { background: linear-gradient(90deg, hsl(0 80% 50%), hsl(0 80% 40%)); }
+  .threat-level-2 { background: linear-gradient(90deg, hsl(25 90% 50%), hsl(25 90% 40%)); }
+  .threat-level-3 { background: linear-gradient(90deg, hsl(38 92% 50%), hsl(38 92% 40%)); }
+  .threat-level-4 { background: linear-gradient(90deg, hsl(42 90% 50%), hsl(42 90% 40%)); }
+  .threat-level-5 { background: linear-gradient(90deg, hsl(155 72% 40%), hsl(155 72% 30%)); }
 }

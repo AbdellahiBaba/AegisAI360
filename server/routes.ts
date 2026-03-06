@@ -42,7 +42,7 @@ Your capabilities include:
 - Explaining attack patterns and threat actor tactics
 
 Guidelines:
-- Communicate clearly and professionally, suitable for SOC analysts
+- Communicate clearly and professionally, suitable for security analysts and IT teams
 - When analyzing threats, provide severity assessment and recommended actions
 - Reference relevant MITRE ATT&CK techniques when applicable
 - Focus exclusively on defensive cybersecurity - never provide offensive guidance
@@ -100,6 +100,90 @@ export async function registerRoutes(
   app.use("/api/scan", requireAuth);
   app.use("/api/settings", requireAuth);
   app.use("/api/simulate", requireAuth);
+  app.use("/api/support", requireAuth);
+
+  app.post("/api/support/tickets", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      if (!orgId) return res.status(400).json({ error: "Organization required" });
+      const userId = getUserId(req);
+      const { subject, description, priority, category } = z.object({
+        subject: z.string().min(1),
+        description: z.string().min(1),
+        priority: z.enum(["low", "medium", "high", "critical"]).optional().default("medium"),
+        category: z.enum(["technical", "billing", "account", "security"]).optional().default("technical"),
+      }).parse(req.body);
+      const ticket = await storage.createSupportTicket({
+        organizationId: orgId,
+        userId,
+        subject,
+        description,
+        priority,
+        category,
+        messages: [{ role: "user", userId, content: description, timestamp: new Date().toISOString() }],
+      });
+      res.status(201).json(ticket);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create ticket" });
+    }
+  });
+
+  app.get("/api/support/tickets", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const tickets = await storage.getSupportTickets(orgId);
+      res.json(tickets);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch tickets" });
+    }
+  });
+
+  app.get("/api/support/tickets/:id", async (req, res) => {
+    try {
+      const ticket = await storage.getSupportTicket(parseInt(req.params.id));
+      if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+      const orgId = getOrgId(req);
+      const user = req.user as any;
+      if (ticket.organizationId !== orgId && !user?.isSuperAdmin) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      res.json(ticket);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch ticket" });
+    }
+  });
+
+  app.post("/api/support/tickets/:id/messages", async (req, res) => {
+    try {
+      const ticket = await storage.getSupportTicket(parseInt(req.params.id));
+      if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+      const orgId = getOrgId(req);
+      const user = req.user as any;
+      if (ticket.organizationId !== orgId && !user?.isSuperAdmin) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const { content } = z.object({ content: z.string().min(1) }).parse(req.body);
+      const messages = Array.isArray(ticket.messages) ? [...(ticket.messages as any[])] : [];
+      messages.push({ role: user?.isSuperAdmin ? "admin" : "user", userId: getUserId(req), content, timestamp: new Date().toISOString() });
+      const updated = await storage.updateSupportTicket(ticket.id, { messages });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to add message" });
+    }
+  });
+
+  app.post("/api/support/tickets/:id/request-remote", async (req, res) => {
+    try {
+      const ticket = await storage.getSupportTicket(parseInt(req.params.id));
+      if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+      const orgId = getOrgId(req);
+      if (ticket.organizationId !== orgId) return res.status(403).json({ error: "Access denied" });
+      const updated = await storage.updateSupportTicket(ticket.id, { remoteSessionRequested: true });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to request remote session" });
+    }
+  });
 
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
@@ -882,8 +966,8 @@ export async function registerRoutes(
         payment_method_types: ['card'],
         line_items: [{ price: priceId, quantity: 1 }],
         mode: 'subscription',
-        success_url: `${req.protocol}://${req.get('host')}/billing?success=true`,
-        cancel_url: `${req.protocol}://${req.get('host')}/billing?canceled=true`,
+        success_url: `https://${req.get('host')}/billing?success=true`,
+        cancel_url: `https://${req.get('host')}/billing?canceled=true`,
         metadata: { organizationId: String(orgId) },
       });
 
@@ -905,7 +989,7 @@ export async function registerRoutes(
       const stripe = await getUncachableStripeClient();
       const session = await stripe.billingPortal.sessions.create({
         customer: org.stripeCustomerId,
-        return_url: `${req.protocol}://${req.get('host')}/billing`,
+        return_url: `https://${req.get('host')}/billing`,
       });
 
       res.json({ url: session.url });

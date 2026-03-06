@@ -317,3 +317,24 @@ export const scanResults = pgTable("scan_results", {
 export const insertScanResultSchema = createInsertSchema(scanResults).omit({ id: true, createdAt: true, completedAt: true });
 export type InsertScanResult = z.infer<typeof insertScanResultSchema>;
 export type ScanResult = typeof scanResults.$inferSelect;
+
+export const supportTickets = pgTable("support_tickets", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id),
+  userId: varchar("user_id"),
+  subject: text("subject").notNull(),
+  description: text("description").notNull(),
+  status: text("status").notNull().default("open"),
+  priority: text("priority").notNull().default("medium"),
+  category: text("category").notNull().default("technical"),
+  assignedTo: varchar("assigned_to"),
+  remoteSessionRequested: boolean("remote_session_requested").notNull().default(false),
+  remoteSessionActive: boolean("remote_session_active").notNull().default(false),
+  messages: jsonb("messages").notNull().default([]),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
+export type SupportTicket = typeof supportTickets.$inferSelect;

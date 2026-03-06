@@ -37,7 +37,7 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background tactical-grid p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background grid-pattern p-4">
       <div className="absolute top-0 start-0 end-0 h-8 bg-primary/10 border-b border-primary/20 flex items-center justify-center">
         <span className="text-[10px] font-mono text-primary/60 tracking-[0.4em] uppercase">
           {t("auth.authorizedOnly")}

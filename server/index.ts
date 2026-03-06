@@ -9,6 +9,7 @@ import xss from "xss";
 import { intrusionDetectionMiddleware, trackRateLimitViolation } from "./securityMiddleware";
 
 const app = express();
+app.set("trust proxy", 1);
 const httpServer = createServer(app);
 
 declare module "http" {

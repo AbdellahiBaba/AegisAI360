@@ -31,6 +31,7 @@ import Firewall from "@/pages/firewall";
 import AlertRules from "@/pages/alert-rules";
 import SuperAdmin from "@/pages/super-admin";
 import ScannerPage from "@/pages/scanner";
+import SupportPage from "@/pages/support";
 import AboutPage from "@/pages/public/about";
 import FeaturesPage from "@/pages/public/features";
 import PricingPage from "@/pages/public/pricing";
@@ -59,6 +60,7 @@ function AppRouter() {
       <Route path="/firewall" component={Firewall} />
       <Route path="/alert-rules" component={AlertRules} />
       <Route path="/scanner" component={ScannerPage} />
+      <Route path="/support" component={SupportPage} />
       <Route path="/super-admin" component={SuperAdmin} />
       <Route component={NotFound} />
     </Switch>
@@ -92,7 +94,7 @@ function AppLayout() {
               <NotificationBell />
             </div>
           </header>
-          <main className="flex-1 overflow-auto tactical-grid">
+          <main className="flex-1 overflow-auto grid-pattern">
             <AppRouter />
           </main>
         </div>

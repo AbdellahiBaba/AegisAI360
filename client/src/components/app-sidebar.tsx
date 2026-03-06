@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard, ShieldAlert, Bug, Brain, Database,
   Network, Target, Clock, Radio, Lock, BookOpen, FileText,
-  Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar,
+  Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar, LifeBuoy,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -87,6 +87,7 @@ export function AppSidebar() {
   const adminItems: NavItem[] = [
     { title: t("sidebar.settings"), testId: "settings", url: "/settings", icon: Settings },
     { title: t("sidebar.billing"), testId: "billing", url: "/billing", icon: CreditCard },
+    { title: t("sidebar.support"), testId: "support", url: "/support", icon: LifeBuoy },
   ];
 
   const fullAdminItems = [
@@ -121,7 +122,7 @@ export function AppSidebar() {
             <p className="text-[11px] font-medium truncate font-mono" data-testid="text-username">{user?.username}</p>
             <div className="flex items-center gap-1">
               <Badge variant="secondary" className="text-[8px] px-1 py-0 h-3.5">
-                {user?.role || "operator"}
+                {user?.role || "user"}
               </Badge>
               {isSuperAdmin && (
                 <Badge className="text-[8px] px-1 py-0 h-3.5 bg-severity-high text-white border-0">
