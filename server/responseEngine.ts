@@ -154,7 +154,7 @@ export class ResponseEngine {
       value: domain,
       threatType: "malware",
       severity: "high",
-      source: "AegisAI Response",
+      source: "AegisAI360 Response",
       description: `Domain sinkholed via response action`,
       active: true,
     });
