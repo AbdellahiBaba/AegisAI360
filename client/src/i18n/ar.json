@@ -378,7 +378,10 @@
     "starterDesc": "مراقبة أمنية أساسية للفرق الصغيرة",
     "professionalDesc": "منصة SOC كاملة للفرق النامية",
     "enterpriseDesc": "عمليات أمنية غير محدودة",
-    "unlimited": "غير محدود"
+    "unlimited": "غير محدود",
+    "welcomeTitle": "اختر خطتك",
+    "welcomeSubtitle": "اختر خطة اشتراك لفتح جميع إمكانيات المنصة",
+    "viewPlans": "عرض الخطط"
   },
   "quarantine": {
     "title": "إدارة الحجر",

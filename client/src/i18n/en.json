@@ -378,7 +378,10 @@
     "starterDesc": "Basic security monitoring for small teams",
     "professionalDesc": "Full-featured SOC platform for growing teams",
     "enterpriseDesc": "Unlimited security operations",
-    "unlimited": "Unlimited"
+    "unlimited": "Unlimited",
+    "welcomeTitle": "Choose Your Plan",
+    "welcomeSubtitle": "Select a subscription plan to unlock the full platform capabilities",
+    "viewPlans": "View Plans"
   },
   "quarantine": {
     "title": "Quarantine Management",

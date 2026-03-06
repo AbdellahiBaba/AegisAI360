@@ -80,7 +80,7 @@ export default function AuthPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={t("auth.enterPassphrase")}
                   required
-                  minLength={6}
+                  minLength={8}
                   className="font-mono"
                   data-testid="input-password"
                 />

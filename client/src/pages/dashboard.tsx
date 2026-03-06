@@ -1,6 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,9 +9,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import {
   ShieldAlert, AlertTriangle, Bug, Activity, ArrowUpRight, ArrowDownRight,
-  Clock, Monitor, Lock, Radio, ShieldOff, Flame, Crosshair, Zap
+  Clock, Monitor, Lock, Radio, ShieldOff, Flame, Crosshair, Zap, CreditCard
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -420,8 +422,21 @@ function ResponseActionsFeed({ actions }: { actions: ResponseAction[] }) {
   );
 }
 
+interface BillingStatus {
+  plan: string;
+  stripeSubscriptionId: string | null;
+}
+
 export default function Dashboard() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const [, navigate] = useLocation();
+
+  const { data: billingStatus } = useQuery<BillingStatus>({
+    queryKey: ["/api/billing/status"],
+    enabled: user?.role === "admin",
+  });
+
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
     refetchInterval: 10000,
@@ -493,8 +508,34 @@ export default function Dashboard() {
     );
   }
 
+  const showUpgradeBanner = user?.role === "admin" && billingStatus && !billingStatus.stripeSubscriptionId;
+
   return (
     <div className="p-4 md:p-6 space-y-4 tactical-grid">
+      {showUpgradeBanner && (
+        <Card className="border-primary/30 bg-primary/5" data-testid="upgrade-banner">
+          <CardContent className="p-4 flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-md bg-primary/10">
+                <CreditCard className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-bold">{t("billing.welcomeTitle", "Choose Your Plan")}</p>
+                <p className="text-xs text-muted-foreground">{t("billing.welcomeSubtitle", "Select a subscription plan to unlock the full platform capabilities")}</p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => navigate("/billing")}
+              className="tracking-wider uppercase text-xs"
+              data-testid="button-upgrade-plan"
+            >
+              {t("billing.viewPlans", "View Plans")}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <DefconIndicator stats={stats!} />
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
