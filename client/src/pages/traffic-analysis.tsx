@@ -21,10 +21,67 @@ interface CaptureData {
 interface PacketCapture {
   id: number;
   agentId: number;
-  captureData: CaptureData;
-  status: string;
+  captureData: any;
+  packetCount: number;
   createdAt: string;
   duration: number;
+}
+
+function normalizeCaptureData(raw: any): CaptureData | null {
+  if (!raw) return null;
+  const protocols = { tcp: 0, udp: 0, icmp: 0, other: 0 };
+  if (raw.protocolStats || raw.protocols) {
+    const ps = raw.protocolStats || raw.protocols;
+    if (typeof ps === "object") {
+      for (const [key, val] of Object.entries(ps)) {
+        const k = key.toLowerCase();
+        if (k === "tcp") protocols.tcp = Number(val) || 0;
+        else if (k === "udp") protocols.udp = Number(val) || 0;
+        else if (k === "icmp") protocols.icmp = Number(val) || 0;
+        else protocols.other += Number(val) || 0;
+      }
+    }
+  }
+
+  let topSourceIPs: string[] = [];
+  if (raw.topSourceIPs) {
+    if (Array.isArray(raw.topSourceIPs)) {
+      topSourceIPs = raw.topSourceIPs;
+    } else if (typeof raw.topSourceIPs === "object") {
+      topSourceIPs = Object.entries(raw.topSourceIPs)
+        .sort((a: any, b: any) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([ip, count]) => `${ip} (${count})`);
+    }
+  }
+
+  let topDestIPs: string[] = [];
+  if (raw.topDestIPs) {
+    if (Array.isArray(raw.topDestIPs)) {
+      topDestIPs = raw.topDestIPs;
+    } else if (typeof raw.topDestIPs === "object") {
+      topDestIPs = Object.entries(raw.topDestIPs)
+        .sort((a: any, b: any) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([ip, count]) => `${ip} (${count})`);
+    }
+  }
+
+  const dnsQueries = raw.dnsQueries || [];
+
+  let suspiciousConnections: CaptureData["suspiciousConnections"] = [];
+  if (raw.suspiciousConnections && Array.isArray(raw.suspiciousConnections)) {
+    suspiciousConnections = raw.suspiciousConnections.map((c: any) => ({
+      ip: c.ip || c.source || c.destination || c.Source || c.Destination || "",
+      port: c.port || c.Port || 0,
+      reason: c.reason || c.Reason || "unknown",
+    }));
+  }
+
+  const totalPackets = raw.totalPackets || raw.packetCount || raw.PacketCount ||
+    protocols.tcp + protocols.udp + protocols.icmp + protocols.other;
+
+  return { protocols, topSourceIPs, topDestIPs, dnsQueries, suspiciousConnections, totalPackets };
 }
 
 const DURATIONS = [
@@ -93,6 +150,7 @@ export default function TrafficAnalysis() {
 
   const { data: captures, isLoading: capturesLoading } = useQuery<PacketCapture[]>({
     queryKey: ["/api/packet-captures", agentId],
+    queryFn: () => fetch(`/api/packet-captures/${agentId}`).then(r => r.json()),
     enabled: !!agentId,
     refetchInterval: 5000,
   });
@@ -117,7 +175,7 @@ export default function TrafficAnalysis() {
   });
 
   const latestCapture = captures?.length ? captures[0] : null;
-  const captureData = latestCapture?.captureData;
+  const captureData = latestCapture ? normalizeCaptureData(latestCapture.captureData) : null;
 
   return (
     <div className="p-6 space-y-6">
@@ -376,16 +434,14 @@ export default function TrafficAnalysis() {
                 </thead>
                 <tbody>
                   {captures.map((capture, i) => {
-                    const data = capture.captureData;
+                    const data = normalizeCaptureData(capture.captureData);
                     return (
                       <tr key={capture.id} className="border-b border-border/50" data-testid={`row-capture-${capture.id}`}>
                         <td className="py-2 pe-4 text-xs">{new Date(capture.createdAt).toLocaleString()}</td>
                         <td className="py-2 pe-4">
-                          <Badge variant={capture.status === "completed" ? "default" : capture.status === "failed" ? "destructive" : "secondary"}>
-                            {capture.status}
-                          </Badge>
+                          <Badge variant="default">{capture.duration}s</Badge>
                         </td>
-                        <td className="py-2 pe-4 font-mono text-xs">{data?.totalPackets?.toLocaleString() || "—"}</td>
+                        <td className="py-2 pe-4 font-mono text-xs">{data?.totalPackets?.toLocaleString() || capture.packetCount?.toLocaleString() || "—"}</td>
                         <td className="py-2 pe-4 font-mono text-xs">{data?.protocols?.tcp?.toLocaleString() || "—"}</td>
                         <td className="py-2 pe-4 font-mono text-xs">{data?.protocols?.udp?.toLocaleString() || "—"}</td>
                         <td className="py-2 pe-4">

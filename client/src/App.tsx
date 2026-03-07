@@ -50,7 +50,7 @@ import DownloadAgent from "@/pages/download-agent";
 import AgentTerminal from "@/pages/agent-terminal";
 import DocsAgent from "@/pages/docs-agent";
 import TrafficAnalysis from "@/pages/traffic-analysis";
-import NetworkSecurity from "@/pages/network-security";
+import NetworkSecurityPage from "@/pages/network-security";
 
 function AppRouter() {
   return (
@@ -84,7 +84,7 @@ function AppRouter() {
       <Route path="/endpoints/:agentId/terminal" component={AgentTerminal} />
       <Route path="/docs/agent" component={DocsAgent} />
       <Route path="/traffic-analysis" component={TrafficAnalysis} />
-      <Route path="/network-security" component={NetworkSecurity} />
+      <Route path="/network-security" component={NetworkSecurityPage} />
       <Route component={NotFound} />
     </Switch>
   );

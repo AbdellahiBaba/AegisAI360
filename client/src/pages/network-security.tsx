@@ -127,6 +127,7 @@ function RogueDetectionTab() {
 
   const { data: commands } = useQuery<any[]>({
     queryKey: ["/api/agent", agentId, "commands"],
+    queryFn: () => fetch(`/api/agent/${agentId}/commands`).then(r => r.json()),
     enabled: !!agentId,
     refetchInterval: 5000,
   });

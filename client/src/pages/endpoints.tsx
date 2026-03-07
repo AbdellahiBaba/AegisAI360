@@ -8,17 +8,23 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Monitor, Cpu, MemoryStick, Wifi, WifiOff, Terminal, Send, RefreshCw, Clock } from "lucide-react";
+import { Loader2, Monitor, Cpu, MemoryStick, Wifi, WifiOff, Terminal, Send, RefreshCw, Clock, Activity, ArrowDown, ArrowUp } from "lucide-react";
 import { useLocation } from "wouter";
 
 const COMMANDS = [
   { value: "run_system_scan", label: "System Scan" },
-  { value: "list_processes", label: "List Processes" },
-  { value: "scan_directory", label: "Scan Directory" },
+  { value: "security_scan", label: "Security Audit" },
   { value: "ping", label: "Ping Test" },
-  { value: "kill_process", label: "Kill Process" },
-  { value: "isolate_network", label: "Isolate Network" },
-  { value: "restore_network", label: "Restore Network" },
+  { value: "process_list", label: "List Processes" },
+  { value: "service_list", label: "List Services" },
+  { value: "wifi_list", label: "WiFi Networks" },
+  { value: "network_scan", label: "Network Scan" },
+  { value: "disk_usage", label: "Disk Usage" },
+  { value: "packet_capture", label: "Packet Capture" },
+  { value: "arp_monitor", label: "ARP Monitor" },
+  { value: "rogue_scan", label: "Rogue Scan" },
+  { value: "bandwidth_stats", label: "Bandwidth Stats" },
+  { value: "vuln_scan", label: "Vuln Scan" },
 ];
 
 export default function Endpoints() {
@@ -44,6 +50,13 @@ export default function Endpoints() {
     queryKey: ["/api/agent", selectedAgent, "commands"],
     enabled: !!selectedAgent,
     refetchInterval: 5000,
+  });
+
+  const { data: bandwidthLogs } = useQuery<any[]>({
+    queryKey: ["/api/bandwidth", selectedAgent],
+    queryFn: () => fetch(`/api/bandwidth/${selectedAgent}`).then(r => r.json()),
+    enabled: !!selectedAgent,
+    refetchInterval: 10000,
   });
 
   const sendCommandMutation = useMutation({
@@ -165,6 +178,44 @@ export default function Endpoints() {
                   </div>
                 </CardContent>
               </Card>
+
+              {bandwidthLogs && bandwidthLogs.length > 0 && (
+                <Card data-testid="card-bandwidth">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Activity className="w-4 h-4" />
+                      Bandwidth Monitor
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {bandwidthLogs.slice(0, 6).map((log: any, i: number) => {
+                        const formatBytes = (b: number) => {
+                          if (b > 1073741824) return `${(b / 1073741824).toFixed(1)} GB`;
+                          if (b > 1048576) return `${(b / 1048576).toFixed(1)} MB`;
+                          if (b > 1024) return `${(b / 1024).toFixed(1)} KB`;
+                          return `${b} B`;
+                        };
+                        return (
+                          <div key={i} className="flex items-center justify-between p-2 rounded bg-muted/30" data-testid={`row-bandwidth-${i}`}>
+                            <span className="text-sm font-mono">{log.interfaceName}</span>
+                            <div className="flex items-center gap-4 text-xs">
+                              <span className="flex items-center gap-1 text-green-500">
+                                <ArrowDown className="w-3 h-3" />
+                                {formatBytes(Number(log.bytesIn))}
+                              </span>
+                              <span className="flex items-center gap-1 text-blue-500">
+                                <ArrowUp className="w-3 h-3" />
+                                {formatBytes(Number(log.bytesOut))}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               <Card data-testid="card-send-command">
                 <CardHeader>
