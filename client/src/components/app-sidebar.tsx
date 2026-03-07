@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard, ShieldAlert, Bug, Brain, Database,
   Network, Target, Clock, Radio, Lock, BookOpen, FileText,
-  Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar, LifeBuoy, Server,
+  Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar, LifeBuoy, Server, Key,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -70,6 +70,7 @@ export function AppSidebar() {
     { title: t("sidebar.networkMonitor"), testId: "network-monitor", url: "/network-monitor", icon: Server },
     { title: t("sidebar.honeypot"), testId: "honeypot", url: "/honeypot", icon: Radio },
     { title: t("sidebar.alertRules"), testId: "alert-rules", url: "/alert-rules", icon: Bell },
+    { title: t("sidebar.hashTools"), testId: "hash-tools", url: "/hash-tools", icon: Key },
   ];
 
   const respondItems: NavItem[] = [

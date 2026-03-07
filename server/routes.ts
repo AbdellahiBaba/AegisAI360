@@ -25,6 +25,7 @@ import { createThreatFeedsRouter } from "./threatFeeds";
 import { ResponseEngine } from "./responseEngine";
 import { AlertEngine } from "./alertEngine";
 import { scanPorts, lookupDNS, checkSSL, scanHeaders, scanVulnerabilities, isPrivateTarget } from "./scanEngine";
+import { enumerateSubdomains, bruteforceDirectories, fingerprintTechnology, detectWAF, whoisLookup, testSQLInjection, testXSS, identifyHash, crackHash, analyzePassword } from "./pentestEngine";
 import { SCENARIOS } from "./threatSimulator";
 
 const openai = new OpenAI({
@@ -1858,6 +1859,399 @@ export async function registerRoutes(
       res.json(results);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch scan history" });
+    }
+  });
+
+  app.post("/api/scan/subdomains", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      const domain = target.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+      if (isPrivateTarget(domain)) {
+        return res.status(400).json({ error: "Scanning private/internal addresses is not allowed" });
+      }
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "subdomain_enum",
+        target: domain,
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      res.json({ id: scanRecord.id, status: "running" });
+      try {
+        const results = await enumerateSubdomains(domain);
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: results.totalFound,
+          severity: results.totalFound > 20 ? "medium" : "info",
+          completedAt: new Date(),
+        });
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Scan failed" });
+    }
+  });
+
+  app.post("/api/scan/dirbrute", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      const cleanTarget = target.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+      if (isPrivateTarget(cleanTarget)) {
+        return res.status(400).json({ error: "Scanning private/internal addresses is not allowed" });
+      }
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "dir_bruteforce",
+        target,
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      res.json({ id: scanRecord.id, status: "running" });
+      try {
+        const results = await bruteforceDirectories(target);
+        const highSeverityCount = results.foundPaths.filter((p: any) => p.severity === "critical" || p.severity === "high").length;
+        let severity = "info";
+        if (results.foundPaths.some((p: any) => p.severity === "critical")) severity = "critical";
+        else if (results.foundPaths.some((p: any) => p.severity === "high")) severity = "high";
+        else if (results.foundPaths.some((p: any) => p.severity === "medium")) severity = "medium";
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: results.foundPaths.length,
+          severity,
+          completedAt: new Date(),
+        });
+        if (highSeverityCount > 0) {
+          await storage.createSecurityEvent({
+            organizationId: orgId,
+            eventType: "reconnaissance",
+            severity,
+            source: "Directory Bruteforce",
+            sourceIp: cleanTarget,
+            description: `Directory bruteforce on ${target}: ${results.foundPaths.length} paths found (${highSeverityCount} high/critical severity)`,
+          });
+        }
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Scan failed" });
+    }
+  });
+
+  app.post("/api/scan/techfp", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      const cleanTarget = target.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+      if (isPrivateTarget(cleanTarget)) {
+        return res.status(400).json({ error: "Scanning private/internal addresses is not allowed" });
+      }
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "tech_fingerprint",
+        target,
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      res.json({ id: scanRecord.id, status: "running" });
+      try {
+        const results = await fingerprintTechnology(target);
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: results.technologies.length,
+          severity: "info",
+          completedAt: new Date(),
+        });
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Scan failed" });
+    }
+  });
+
+  app.post("/api/scan/waf", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      const cleanTarget = target.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+      if (isPrivateTarget(cleanTarget)) {
+        return res.status(400).json({ error: "Scanning private/internal addresses is not allowed" });
+      }
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "waf_detection",
+        target,
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      res.json({ id: scanRecord.id, status: "running" });
+      try {
+        const results = await detectWAF(target);
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: results.wafDetected ? 1 : 0,
+          severity: results.wafDetected ? "info" : "medium",
+          completedAt: new Date(),
+        });
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Scan failed" });
+    }
+  });
+
+  app.post("/api/scan/whois", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      const domain = target.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+      if (isPrivateTarget(domain)) {
+        return res.status(400).json({ error: "Scanning private/internal addresses is not allowed" });
+      }
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "whois_lookup",
+        target: domain,
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      res.json({ id: scanRecord.id, status: "running" });
+      try {
+        const results = await whoisLookup(domain);
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: 1,
+          severity: "info",
+          completedAt: new Date(),
+        });
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Scan failed" });
+    }
+  });
+
+  app.post("/api/scan/sqli", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      const cleanTarget = target.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+      if (isPrivateTarget(cleanTarget)) {
+        return res.status(400).json({ error: "Scanning private/internal addresses is not allowed" });
+      }
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "sqli_test",
+        target,
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      res.json({ id: scanRecord.id, status: "running" });
+      try {
+        const results = await testSQLInjection(target);
+        const vulnCount = results.findings.length;
+        let severity = "info";
+        if (vulnCount > 0) {
+          severity = results.findings.some((v: any) => v.severity === "critical") ? "critical" : "high";
+        }
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: vulnCount,
+          severity,
+          completedAt: new Date(),
+        });
+        if (vulnCount > 0) {
+          await storage.createSecurityEvent({
+            organizationId: orgId,
+            eventType: "vulnerability",
+            severity,
+            source: "SQL Injection Tester",
+            sourceIp: cleanTarget,
+            description: `SQL Injection test on ${target}: ${vulnCount} potential vulnerability/ies detected (Risk: ${results.riskLevel})`,
+            status: "new",
+          });
+        }
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Scan failed" });
+    }
+  });
+
+  app.post("/api/scan/xss", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      const cleanTarget = target.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+      if (isPrivateTarget(cleanTarget)) {
+        return res.status(400).json({ error: "Scanning private/internal addresses is not allowed" });
+      }
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "xss_test",
+        target,
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      res.json({ id: scanRecord.id, status: "running" });
+      try {
+        const results = await testXSS(target);
+        const vulnCount = results.findings.length;
+        let severity = "info";
+        if (vulnCount > 0) {
+          severity = results.findings.some((v: any) => v.severity === "critical") ? "critical" : "high";
+        }
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: vulnCount,
+          severity,
+          completedAt: new Date(),
+        });
+        if (vulnCount > 0) {
+          await storage.createSecurityEvent({
+            organizationId: orgId,
+            eventType: "vulnerability",
+            severity,
+            source: "XSS Tester",
+            sourceIp: cleanTarget,
+            description: `XSS test on ${target}: ${vulnCount} potential vulnerability/ies detected (Risk: ${results.riskLevel})`,
+            status: "new",
+          });
+        }
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Scan failed" });
+    }
+  });
+
+  app.post("/api/scan/hash-id", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { hash } = z.object({ hash: z.string().min(1) }).parse(req.body);
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "hash_identify",
+        target: hash.substring(0, 64),
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      try {
+        const results = identifyHash(hash);
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: results.possibleTypes.length,
+          severity: "info",
+          completedAt: new Date(),
+        });
+        res.json({ id: scanRecord.id, ...results });
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+        res.status(500).json({ error: "Hash identification failed" });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Hash identification failed" });
+    }
+  });
+
+  app.post("/api/scan/hash-crack", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { hash, hashType } = z.object({
+        hash: z.string().min(1),
+        hashType: z.string().optional(),
+      }).parse(req.body);
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "hash_crack",
+        target: hash.substring(0, 64),
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      try {
+        const results = crackHash(hash, hashType);
+        const severity = results.cracked ? "critical" : "info";
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: results.cracked ? 1 : 0,
+          severity,
+          completedAt: new Date(),
+        });
+        if (results.cracked) {
+          await storage.createSecurityEvent({
+            organizationId: orgId,
+            eventType: "vulnerability",
+            severity: "critical",
+            source: "Hash Cracker",
+            description: `Hash successfully cracked using dictionary attack (${results.hashType} hash). This indicates a weak password is in use.`,
+            status: "new",
+          });
+        }
+        res.json({ id: scanRecord.id, ...results });
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+        res.status(500).json({ error: "Hash cracking failed" });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Hash cracking failed" });
+    }
+  });
+
+  app.post("/api/scan/password-analyze", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { password } = z.object({ password: z.string().min(1) }).parse(req.body);
+      const scanRecord = await storage.createScanResult({
+        organizationId: orgId,
+        scanType: "password_analyze",
+        target: "password-analysis",
+        status: "running",
+        executedBy: getUserId(req),
+      });
+      try {
+        const results = analyzePassword(password);
+        const severity = results.score <= 20 ? "critical" : results.score <= 40 ? "high" : results.score <= 60 ? "medium" : "info";
+        await storage.updateScanResult(scanRecord.id, {
+          status: "completed",
+          results: JSON.stringify(results),
+          findings: results.weaknesses.length,
+          severity,
+          completedAt: new Date(),
+        });
+        res.json({ id: scanRecord.id, ...results });
+      } catch (err) {
+        await storage.updateScanResult(scanRecord.id, { status: "failed", results: JSON.stringify({ error: (err as Error).message }) });
+        res.status(500).json({ error: "Password analysis failed" });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Password analysis failed" });
     }
   });
 

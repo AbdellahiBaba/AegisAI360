@@ -41,6 +41,7 @@ import PrivacyPage from "@/pages/public/privacy";
 import TermsPage from "@/pages/public/terms";
 import RefundPage from "@/pages/public/refund";
 import LandingPage from "@/pages/landing";
+import HashToolsPage from "@/pages/hash-tools";
 
 function AppRouter() {
   return (
@@ -63,6 +64,7 @@ function AppRouter() {
       <Route path="/firewall" component={Firewall} />
       <Route path="/alert-rules" component={AlertRules} />
       <Route path="/scanner" component={ScannerPage} />
+      <Route path="/hash-tools" component={HashToolsPage} />
       <Route path="/support" component={SupportPage} />
       <Route path="/network-monitor" component={NetworkMonitorPage} />
       <Route path="/super-admin" component={SuperAdmin} />

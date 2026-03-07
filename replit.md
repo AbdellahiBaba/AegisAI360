@@ -27,6 +27,8 @@ The frontend is built with React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Rec
 - **Firewall Management**: Allows creation, editing, and management of firewall rules.
 - **Alert Rules Engine**: Configurable engine to define custom alert conditions and actions.
 - **Security Scanning**: Includes port, DNS, SSL/TLS, header, and vulnerability scanning capabilities.
+- **Penetration Testing Tools**: Advanced offensive security suite including subdomain enumeration (DNS brute-force + crt.sh), directory bruteforce (500+ paths), technology fingerprinting, WAF detection (12 WAF types), WHOIS/RDAP lookup, SQL injection testing (18 payloads), and XSS testing (20 payloads). All tools work against real targets with SSRF protection.
+- **Hash & Password Tools**: Standalone page with hash identifier (MD5/SHA-1/SHA-256/SHA-512/bcrypt), hash cracker (dictionary attack with 200+ common passwords), and password strength analyzer (entropy, crack time estimation, weakness analysis).
 - **Threat Simulation Engine**: Offers 6 attack scenarios (SSH Brute Force, Ransomware, Phishing, Port Scan Sweep, Data Exfiltration, APT Kill Chain) to test defenses.
 - **Automation Defense Modes**: Three modes (Full Auto, Semi-Auto, Manual) control the level of automated response.
 - **Network/Infrastructure Monitor**: Real infrastructure scanning (port scan, SSL check, header audit, vulnerability path scan) for user-provided servers/domains/IPs, with device management and real-time monitoring.
