@@ -13,7 +13,10 @@ Unicode True
 !define MUI_HEADERIMAGE_BITMAP "AegisAI360-Header.bmp"
 !define MUI_WELCOMEFINISHPAGE_BITMAP "AegisAI360-Banner.bmp"
 
+Var DEVICE_TOKEN
+
 !insertmacro MUI_PAGE_WELCOME
+Page custom TokenPageCreate TokenPageLeave
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -23,14 +26,51 @@ Unicode True
 
 !insertmacro MUI_LANGUAGE "English"
 
+Function TokenPageCreate
+  !insertmacro MUI_HEADER_TEXT "Device Token" "Enter your AegisAI360 device token"
+  nsDialogs::Create 1018
+  Pop $0
+
+  ${NSD_CreateLabel} 0 0 100% 36u "Enter the device token generated from your AegisAI360 dashboard.$\n$\nGo to: Dashboard > Endpoints > Generate Device Token"
+  Pop $0
+
+  ${NSD_CreateLabel} 0 46u 100% 12u "Device Token:"
+  Pop $0
+
+  ${NSD_CreateText} 0 60u 100% 14u ""
+  Pop $1
+
+  nsDialogs::Show
+FunctionEnd
+
+Function TokenPageLeave
+  ${NSD_GetText} $1 $DEVICE_TOKEN
+  StrCmp $DEVICE_TOKEN "" 0 +3
+    MessageBox MB_ICONEXCLAMATION "Please enter a device token. You can generate one from the AegisAI360 dashboard."
+    Abort
+FunctionEnd
+
 Section "Install"
   SetOutPath "$INSTDIR"
 
   File "agent.exe"
   File "AegisAI360Agent.exe"
   File "AegisAI360Agent.xml"
+  File "config.json"
 
   CreateDirectory "$INSTDIR\logs"
+
+  FileOpen $0 "$INSTDIR\config.json" w
+  FileWrite $0 '{$\n'
+  FileWrite $0 '  "serverUrl": "https://aegisai360.com",$\n'
+  FileWrite $0 '  "apiKey": "$DEVICE_TOKEN",$\n'
+  FileWrite $0 '  "agentVersion": "1.0.0",$\n'
+  FileWrite $0 '  "heartbeatInterval": 30,$\n'
+  FileWrite $0 '  "commandPollInterval": 5,$\n'
+  FileWrite $0 '  "logMaxSizeMB": 10,$\n'
+  FileWrite $0 '  "logMaxBackups": 5$\n'
+  FileWrite $0 '}$\n'
+  FileClose $0
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
@@ -39,7 +79,7 @@ Section "Install"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AegisAI360Agent" \
     "UninstallString" '"$INSTDIR\uninstall.exe"'
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AegisAI360Agent" \
-    "Publisher" "AegisAI360"
+    "Publisher" "AegisAI Cyber Defense"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AegisAI360Agent" \
     "DisplayVersion" "1.0.0"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AegisAI360Agent" \
@@ -68,6 +108,7 @@ Section "Uninstall"
   Delete "$INSTDIR\agent.exe"
   Delete "$INSTDIR\AegisAI360Agent.exe"
   Delete "$INSTDIR\AegisAI360Agent.xml"
+  Delete "$INSTDIR\config.json"
   Delete "$INSTDIR\uninstall.exe"
   RMDir /r "$INSTDIR\logs"
   RMDir "$INSTDIR"

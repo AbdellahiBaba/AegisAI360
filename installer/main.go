@@ -1,394 +1,184 @@
 package main
 
 import (
-        "bytes"
-        "encoding/json"
+        "context"
         "fmt"
         "io"
-        "net"
-        "net/http"
+        "log"
         "os"
-        "os/exec"
-        "runtime"
+        "os/signal"
+        "path/filepath"
         "strings"
+        "sync"
+        "syscall"
         "time"
 )
 
-var (
-        serverURL   string
-        deviceToken string
-        agentID     float64
-        agentToken  string
-        httpClient  = &http.Client{Timeout: 10 * time.Second}
+const (
+        serviceName        = "AegisAI360Agent"
+        serviceDisplayName = "AegisAI360 Endpoint Agent"
+        serviceDescription = "Security agent for AegisAI360 SOC platform"
+        companyName        = "AegisAI Cyber Defense"
+        agentVersion       = "1.0.0"
+        logFolder          = "logs"
+        registryKey        = `Software\Microsoft\Windows\CurrentVersion\Uninstall\AegisAI360Agent`
 )
 
-var terminalWhitelistLinux = []string{
-        "whoami", "ifconfig", "ip a", "ip addr", "netstat", "ss",
-        "ps aux", "ps -ef", "ls", "cat /etc/os-release", "uname -a",
-        "df -h", "free -m", "uptime", "hostname", "w", "last", "top -bn1",
-}
-
-var terminalWhitelistWindows = []string{
-        "whoami", "ipconfig", "netstat", "tasklist", "dir",
-        "systeminfo", "hostname", "ver",
-}
-
-type RegisterRequest struct {
-        Token    string `json:"token"`
-        Hostname string `json:"hostname"`
-        OS       string `json:"os"`
-        IP       string `json:"ip"`
-}
-
-type RegisterResponse struct {
-        AgentID float64 `json:"agentId"`
-        Status  string  `json:"status"`
-}
-
-type HeartbeatRequest struct {
-        AgentID  float64 `json:"agentId"`
-        Token    string  `json:"token"`
-        CPUUsage float64 `json:"cpuUsage"`
-        RAMUsage float64 `json:"ramUsage"`
-        IP       string  `json:"ip"`
-}
-
-type LogEntry struct {
-        EventType   string `json:"eventType"`
-        Severity    string `json:"severity"`
-        Description string `json:"description"`
-        Source      string `json:"source"`
-}
-
-type LogRequest struct {
-        AgentID float64    `json:"agentId"`
-        Token   string     `json:"token"`
-        Logs    []LogEntry `json:"logs"`
-}
-
-type Command struct {
-        ID      float64 `json:"id"`
-        Command string  `json:"command"`
-        Params  string  `json:"params"`
-        Status  string  `json:"status"`
-}
-
-type CommandResultRequest struct {
-        CommandID float64 `json:"commandId"`
-        AgentID   float64 `json:"agentId"`
-        Token     string  `json:"token"`
-        Status    string  `json:"status"`
-        Result    string  `json:"result"`
-}
+var (
+        logger       *log.Logger
+        logMu        sync.Mutex
+        logFile      *os.File
+        logPath      string
+        logMaxBytes  int64
+        logMaxKeep   int
+)
 
 func main() {
-        serverURL = os.Getenv("AEGIS_SERVER_URL")
-        deviceToken = os.Getenv("AEGIS_DEVICE_TOKEN")
+        initLogger()
+        defer closeLogger()
 
-        if serverURL == "" || deviceToken == "" {
-                if len(os.Args) >= 3 {
-                        serverURL = os.Args[1]
-                        deviceToken = os.Args[2]
-                } else {
-                        fmt.Println("Usage: agent.exe <SERVER_URL> <DEVICE_TOKEN>")
-                        fmt.Println("  or set AEGIS_SERVER_URL and AEGIS_DEVICE_TOKEN environment variables")
-                        os.Exit(1)
-                }
-        }
+        logMessage("INFO", "========================================")
+        logMessage("INFO", " %s v%s", serviceDisplayName, agentVersion)
+        logMessage("INFO", " %s", companyName)
+        logMessage("INFO", "========================================")
 
-        serverURL = strings.TrimRight(serverURL, "/")
-        fmt.Printf("[AegisAI360] Connecting to %s\n", serverURL)
-
-        if err := register(); err != nil {
-                fmt.Printf("[AegisAI360] Registration failed: %v\n", err)
+        cfg, err := loadConfig()
+        if err != nil {
+                logMessage("FATAL", "Configuration error: %v", err)
+                fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
+                fmt.Fprintln(os.Stderr, "")
+                fmt.Fprintln(os.Stderr, "Setup options:")
+                fmt.Fprintln(os.Stderr, "  1. Edit config.json in the agent directory")
+                fmt.Fprintln(os.Stderr, "  2. Set AEGIS_SERVER_URL and AEGIS_DEVICE_TOKEN env vars")
+                fmt.Fprintln(os.Stderr, "  3. Pass as arguments: agent.exe <SERVER_URL> <DEVICE_TOKEN>")
                 os.Exit(1)
         }
 
-        fmt.Printf("[AegisAI360] Registered as agent %v\n", agentID)
+        applyConfigToLogger(cfg)
 
-        sendLog("agent_started", "info", "AegisAI360 Agent started on "+runtime.GOOS)
+        ctx, cancel := context.WithCancel(context.Background())
+        defer cancel()
 
-        go heartbeatLoop()
+        sigCh := make(chan os.Signal, 1)
+        signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-        commandLoop()
-}
-
-func register() error {
-        hostname, _ := os.Hostname()
-        ip := getLocalIP()
-
-        body := RegisterRequest{
-                Token:    deviceToken,
-                Hostname: hostname,
-                OS:       runtime.GOOS,
-                IP:       ip,
-        }
-
-        resp, err := postJSON("/api/agent/register", body)
-        if err != nil {
-                return fmt.Errorf("request failed: %w", err)
-        }
-        defer resp.Body.Close()
-
-        data, _ := io.ReadAll(resp.Body)
-        if resp.StatusCode != 201 {
-                return fmt.Errorf("server returned %d: %s", resp.StatusCode, string(data))
-        }
-
-        var result RegisterResponse
-        if err := json.Unmarshal(data, &result); err != nil {
-                return fmt.Errorf("parse response: %w", err)
-        }
-
-        agentID = result.AgentID
-        agentToken = deviceToken
-        return nil
-}
-
-func heartbeatLoop() {
-        ticker := time.NewTicker(30 * time.Second)
-        defer ticker.Stop()
-
-        for {
-                sendHeartbeat()
-                <-ticker.C
-        }
-}
-
-func sendHeartbeat() {
-        body := HeartbeatRequest{
-                AgentID:  agentID,
-                Token:    agentToken,
-                CPUUsage: 0,
-                RAMUsage: 0,
-                IP:       getLocalIP(),
-        }
-
-        resp, err := postJSON("/api/agent/heartbeat", body)
-        if err != nil {
-                fmt.Printf("[AegisAI360] Heartbeat error: %v\n", err)
-                return
-        }
-        resp.Body.Close()
-}
-
-func commandLoop() {
-        ticker := time.NewTicker(5 * time.Second)
-        defer ticker.Stop()
-
-        for {
-                pollCommands()
-                <-ticker.C
-        }
-}
-
-func pollCommands() {
-        url := fmt.Sprintf("%s/api/agent/commands?agentId=%v&token=%s", serverURL, agentID, agentToken)
-        resp, err := httpClient.Get(url)
-        if err != nil {
-                return
-        }
-        defer resp.Body.Close()
-
-        if resp.StatusCode != 200 {
-                return
-        }
-
-        data, _ := io.ReadAll(resp.Body)
-        var commands []Command
-        if err := json.Unmarshal(data, &commands); err != nil {
-                return
-        }
-
-        for _, cmd := range commands {
-                fmt.Printf("[AegisAI360] Executing command: %s (id=%v)\n", cmd.Command, cmd.ID)
-                result, status := executeCommand(cmd)
-                sendCommandResult(cmd.ID, status, result)
-        }
-}
-
-func executeCommand(cmd Command) (string, string) {
-        switch cmd.Command {
-        case "ping":
-                return fmt.Sprintf("pong from %s at %s", getHostname(), time.Now().Format(time.RFC3339)), "done"
-
-        case "run_system_scan":
-                return runSystemScan(), "done"
-
-        case "terminal_exec":
-                return executeTerminal(cmd.Params)
-
-        default:
-                return fmt.Sprintf("Unknown command: %s", cmd.Command), "failed"
-        }
-}
-
-func runSystemScan() string {
-        info := fmt.Sprintf("System Scan Report\n")
-        info += fmt.Sprintf("==================\n")
-        info += fmt.Sprintf("Hostname: %s\n", getHostname())
-        info += fmt.Sprintf("OS: %s/%s\n", runtime.GOOS, runtime.GOARCH)
-        info += fmt.Sprintf("CPUs: %d\n", runtime.NumCPU())
-        info += fmt.Sprintf("Go Version: %s\n", runtime.Version())
-        info += fmt.Sprintf("Time: %s\n", time.Now().Format(time.RFC3339))
-        return info
-}
-
-func executeTerminal(paramsJSON string) (string, string) {
-        var params struct {
-                Cmd string `json:"cmd"`
-        }
-        if err := json.Unmarshal([]byte(paramsJSON), &params); err != nil {
-                return "Failed to parse command parameters", "failed"
-        }
-
-        cmdStr := strings.TrimSpace(params.Cmd)
-        if cmdStr == "" {
-                return "Empty command", "failed"
-        }
-
-        if !isCommandAllowed(cmdStr) {
-                return fmt.Sprintf("Command not allowed: %s", cmdStr), "failed"
-        }
-
-        var execCmd *exec.Cmd
-        if runtime.GOOS == "windows" {
-                execCmd = exec.Command("cmd", "/C", cmdStr)
-        } else {
-                execCmd = exec.Command("sh", "-c", cmdStr)
-        }
-
-        var stdout, stderr bytes.Buffer
-        execCmd.Stdout = &stdout
-        execCmd.Stderr = &stderr
-
-        done := make(chan error, 1)
         go func() {
-                done <- execCmd.Run()
+                sig := <-sigCh
+                logMessage("INFO", "Received signal: %v, shutting down...", sig)
+                cancel()
         }()
 
-        select {
-        case err := <-done:
-                output := stdout.String()
-                if stderr.Len() > 0 {
-                        output += "\n" + stderr.String()
-                }
-                if err != nil {
-                        return output + "\nError: " + err.Error(), "failed"
-                }
-                return output, "done"
-        case <-time.After(30 * time.Second):
-                if execCmd.Process != nil {
-                        execCmd.Process.Kill()
-                }
-                return "Command timed out after 30 seconds", "failed"
+        if err := runAgent(ctx, cfg); err != nil {
+                logMessage("FATAL", "Agent error: %v", err)
+                os.Exit(1)
         }
+
+        logMessage("INFO", "Agent stopped")
 }
 
-func isCommandAllowed(cmd string) bool {
-        cmdLower := strings.ToLower(strings.TrimSpace(cmd))
+func initLogger() {
+        logMaxBytes = 10 * 1024 * 1024
+        logMaxKeep = 5
 
-        separators := []string{";", "&&", "||", "|", "`", "$(", "${", "\n", "\r"}
-        for _, sep := range separators {
-                if strings.Contains(cmdLower, sep) {
-                        return false
-                }
+        exePath, err := os.Executable()
+        logDir := logFolder
+        if err == nil {
+                logDir = filepath.Join(filepath.Dir(exePath), logFolder)
         }
 
-        blocked := []string{"rm ", "rm -", "del ", "format", "shutdown", "reboot", "halt",
-                "mkfs", "dd ", "fdisk", "wget ", "curl ", "chmod ", "chown ",
-                "sudo ", "su ", "passwd", "> /dev", "| bash", "| sh",
-                "eval ", "exec ", "kill ", "killall", "pkill"}
-        for _, b := range blocked {
-                if strings.Contains(cmdLower, b) {
-                        return false
-                }
-        }
+        os.MkdirAll(logDir, 0755)
 
-        baseCmd := strings.Fields(cmdLower)[0]
-        allWhitelists := append(terminalWhitelistLinux, terminalWhitelistWindows...)
-        for _, allowed := range allWhitelists {
-                allowedBase := strings.Fields(allowed)[0]
-                if baseCmd == allowedBase {
-                        return true
-                }
-        }
+        rotateLogFiles(logDir, logMaxKeep)
 
-        return false
-}
+        logFileName := fmt.Sprintf("agent_%s.log", time.Now().Format("20060102"))
+        logPath = filepath.Join(logDir, logFileName)
 
-func sendCommandResult(commandID float64, status, result string) {
-        body := CommandResultRequest{
-                CommandID: commandID,
-                AgentID:   agentID,
-                Token:     agentToken,
-                Status:    status,
-                Result:    result,
-        }
-
-        resp, err := postJSON("/api/agent/command-result", body)
+        f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
         if err != nil {
-                fmt.Printf("[AegisAI360] Failed to send result for command %v: %v\n", commandID, err)
+                logger = log.New(os.Stdout, "", 0)
+                fmt.Printf("WARN: Could not open log file %s: %v, logging to stdout only\n", logPath, err)
                 return
         }
-        resp.Body.Close()
+
+        logFile = f
+        multiWriter := io.MultiWriter(os.Stdout, f)
+        logger = log.New(multiWriter, "", 0)
 }
 
-func sendLog(eventType, severity, description string) {
-        body := LogRequest{
-                AgentID: agentID,
-                Token:   agentToken,
-                Logs: []LogEntry{
-                        {
-                                EventType:   eventType,
-                                Severity:    severity,
-                                Description: description,
-                                Source:      "agent",
-                        },
-                },
+func applyConfigToLogger(cfg *AgentConfig) {
+        logMaxBytes = int64(cfg.LogMaxSizeMB) * 1024 * 1024
+        logMaxKeep = cfg.LogMaxBackups
+        if logMaxKeep < 1 {
+                logMaxKeep = 5
+        }
+}
+
+func closeLogger() {
+        if logFile != nil {
+                logFile.Close()
+        }
+}
+
+func logMessage(level, format string, args ...interface{}) {
+        logMu.Lock()
+        defer logMu.Unlock()
+
+        timestamp := time.Now().Format("2006-01-02 15:04:05")
+        msg := fmt.Sprintf(format, args...)
+        line := fmt.Sprintf("[%s] [%s] %s", timestamp, level, msg)
+
+        if logger != nil {
+                logger.Println(line)
+        } else {
+                fmt.Println(line)
         }
 
-        resp, err := postJSON("/api/agent/logs", body)
-        if err != nil {
-                fmt.Printf("[AegisAI360] Failed to send log: %v\n", err)
+        checkLogRotation()
+}
+
+func checkLogRotation() {
+        if logFile == nil || logPath == "" || logMaxBytes <= 0 {
                 return
         }
-        resp.Body.Close()
+        info, err := logFile.Stat()
+        if err != nil || info.Size() < logMaxBytes {
+                return
+        }
+
+        logFile.Close()
+
+        logDir := filepath.Dir(logPath)
+        rotatedName := fmt.Sprintf("agent_%s_%d.log", time.Now().Format("20060102"), time.Now().UnixMilli())
+        os.Rename(logPath, filepath.Join(logDir, rotatedName))
+
+        rotateLogFiles(logDir, logMaxKeep)
+
+        f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+        if err != nil {
+                logFile = nil
+                logger = log.New(os.Stdout, "", 0)
+                return
+        }
+        logFile = f
+        logger = log.New(io.MultiWriter(os.Stdout, f), "", 0)
 }
 
-func postJSON(path string, body interface{}) (*http.Response, error) {
-        jsonData, err := json.Marshal(body)
+func rotateLogFiles(logDir string, maxBackups int) {
+        entries, err := os.ReadDir(logDir)
         if err != nil {
-                return nil, err
+                return
         }
 
-        url := serverURL + path
-        req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-        if err != nil {
-                return nil, err
-        }
-        req.Header.Set("Content-Type", "application/json")
-
-        return httpClient.Do(req)
-}
-
-func getHostname() string {
-        name, err := os.Hostname()
-        if err != nil {
-                return "unknown"
-        }
-        return name
-}
-
-func getLocalIP() string {
-        addrs, err := net.InterfaceAddrs()
-        if err != nil {
-                return "127.0.0.1"
-        }
-        for _, addr := range addrs {
-                if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() != nil {
-                        return ipnet.IP.String()
+        var logFiles []string
+        for _, e := range entries {
+                if !e.IsDir() && strings.HasPrefix(e.Name(), "agent_") && strings.HasSuffix(e.Name(), ".log") {
+                        logFiles = append(logFiles, filepath.Join(logDir, e.Name()))
                 }
         }
-        return "127.0.0.1"
+
+        if len(logFiles) > maxBackups {
+                for _, f := range logFiles[:len(logFiles)-maxBackups] {
+                        os.Remove(f)
+                }
+        }
 }

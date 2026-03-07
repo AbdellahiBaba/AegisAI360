@@ -15,6 +15,4 @@
   <resetfailure>1 hour</resetfailure>
   <startmode>Automatic</startmode>
   <delayedAutoStart>true</delayedAutoStart>
-  <env name="AEGIS_SERVER_URL" value="https://aegisai360.com"/>
-  <env name="AEGIS_DEVICE_TOKEN" value="REPLACE_WITH_YOUR_TOKEN"/>
 </service>
