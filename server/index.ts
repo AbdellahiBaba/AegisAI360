@@ -230,6 +230,60 @@ app.use((req, res, next) => {
   }
 
   try {
+    const existingPlans = await storageInstance.getPlans();
+    if (existingPlans.length === 0) {
+      await storageInstance.createPlan({
+        name: "starter",
+        price: 2900,
+        maxAgents: 5,
+        maxLogsPerDay: 1000,
+        maxCommandsPerDay: 50,
+        maxThreatIntelQueries: 10,
+        allowNetworkIsolation: false,
+        allowProcessKill: false,
+        allowFileScan: true,
+        allowEndpointDownload: true,
+        allowTerminalAccess: false,
+        allowThreatIntel: false,
+        allowAdvancedAnalytics: false,
+      });
+      await storageInstance.createPlan({
+        name: "professional",
+        price: 9900,
+        maxAgents: 25,
+        maxLogsPerDay: 10000,
+        maxCommandsPerDay: 200,
+        maxThreatIntelQueries: 100,
+        allowNetworkIsolation: true,
+        allowProcessKill: true,
+        allowFileScan: true,
+        allowEndpointDownload: true,
+        allowTerminalAccess: true,
+        allowThreatIntel: true,
+        allowAdvancedAnalytics: false,
+      });
+      await storageInstance.createPlan({
+        name: "enterprise",
+        price: 29900,
+        maxAgents: 100,
+        maxLogsPerDay: 100000,
+        maxCommandsPerDay: 1000,
+        maxThreatIntelQueries: 500,
+        allowNetworkIsolation: true,
+        allowProcessKill: true,
+        allowFileScan: true,
+        allowEndpointDownload: true,
+        allowTerminalAccess: true,
+        allowThreatIntel: true,
+        allowAdvancedAnalytics: true,
+      });
+      console.log("Plans seeded (starter, professional, enterprise)");
+    }
+  } catch (err) {
+    console.log("Plan seeding skipped (non-fatal)");
+  }
+
+  try {
     const { seedAllOrganizations } = await import("./seedRules");
     await seedAllOrganizations();
     console.log("Default rules and playbooks seeded");

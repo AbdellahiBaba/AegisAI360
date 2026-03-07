@@ -162,6 +162,7 @@ export interface IStorage {
   getPlans(): Promise<Plan[]>;
   getPlanById(id: number): Promise<Plan | undefined>;
   getPlanByName(name: string): Promise<Plan | undefined>;
+  createPlan(plan: InsertPlan): Promise<Plan>;
 
   createDeviceToken(token: InsertDeviceToken): Promise<DeviceToken>;
   getDeviceToken(token: string): Promise<DeviceToken | undefined>;
@@ -762,6 +763,11 @@ export class DatabaseStorage implements IStorage {
   async getPlanByName(name: string): Promise<Plan | undefined> {
     const [plan] = await db.select().from(plans).where(eq(plans.name, name));
     return plan || undefined;
+  }
+
+  async createPlan(plan: InsertPlan): Promise<Plan> {
+    const [created] = await db.insert(plans).values(plan).returning();
+    return created;
   }
 
   async createDeviceToken(token: InsertDeviceToken): Promise<DeviceToken> {
