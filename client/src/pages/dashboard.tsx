@@ -561,7 +561,9 @@ export default function Dashboard() {
     refetchInterval: 15000,
   });
 
+  const wsReady = !!stats;
   useEffect(() => {
+    if (!wsReady) return;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     const socket = new WebSocket(wsUrl);
@@ -571,8 +573,12 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/trend"] });
       queryClient.invalidateQueries({ queryKey: ["/api/response/actions"] });
     };
-    return () => socket.close();
-  }, []);
+    return () => {
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+        socket.close();
+      }
+    };
+  }, [wsReady]);
 
   const recentEvents = events?.slice(0, 15) || [];
   const feedEvents = events?.slice(0, 10) || [];

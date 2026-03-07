@@ -61,7 +61,9 @@ export default function Honeypot() {
     },
   });
 
+  const isReady = !!events;
   useEffect(() => {
+    if (!isReady) return;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
     socket.onmessage = (msg) => {
@@ -70,8 +72,12 @@ export default function Honeypot() {
         queryClient.invalidateQueries({ queryKey: ["/api/honeypot"] });
       }
     };
-    return () => socket.close();
-  }, []);
+    return () => {
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+        socket.close();
+      }
+    };
+  }, [isReady]);
 
   const stats = useMemo(() => {
     if (!events) return { total: 0, uniqueIps: 0, services: {}, countries: {}, topAttacker: null };
