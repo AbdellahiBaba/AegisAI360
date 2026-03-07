@@ -6,8 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Download, Copy, Key, Monitor, Apple, Terminal as LinuxIcon } from "lucide-react";
-import { SiWindows, SiLinux, SiApple } from "react-icons/si";
+import { Loader2, Download, Copy, Key, Monitor, Apple, Terminal as TerminalIcon } from "lucide-react";
 
 export default function DownloadAgent() {
   const { toast } = useToast();
@@ -105,7 +104,7 @@ export default function DownloadAgent() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card className="border-dashed" data-testid="card-download-windows">
               <CardContent className="pt-6 text-center">
-                <SiWindows className="w-10 h-10 mx-auto mb-3 text-blue-500" />
+                <Monitor className="w-10 h-10 mx-auto mb-3 text-blue-500" />
                 <h3 className="font-medium">Windows</h3>
                 <p className="text-xs text-muted-foreground mt-1">Windows 10/11, Server 2019+</p>
                 <Button className="mt-3 w-full" variant="outline" disabled data-testid="button-download-windows">
@@ -116,7 +115,7 @@ export default function DownloadAgent() {
 
             <Card className="border-dashed" data-testid="card-download-linux">
               <CardContent className="pt-6 text-center">
-                <SiLinux className="w-10 h-10 mx-auto mb-3 text-orange-500" />
+                <TerminalIcon className="w-10 h-10 mx-auto mb-3 text-orange-500" />
                 <h3 className="font-medium">Linux</h3>
                 <p className="text-xs text-muted-foreground mt-1">Ubuntu, CentOS, Debian</p>
                 <Button className="mt-3 w-full" variant="outline" disabled data-testid="button-download-linux">
@@ -127,7 +126,7 @@ export default function DownloadAgent() {
 
             <Card className="border-dashed" data-testid="card-download-macos">
               <CardContent className="pt-6 text-center">
-                <SiApple className="w-10 h-10 mx-auto mb-3 text-gray-500" />
+                <Apple className="w-10 h-10 mx-auto mb-3 text-gray-500" />
                 <h3 className="font-medium">macOS</h3>
                 <p className="text-xs text-muted-foreground mt-1">macOS 12 Monterey+</p>
                 <Button className="mt-3 w-full" variant="outline" disabled data-testid="button-download-macos">
