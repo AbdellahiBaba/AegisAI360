@@ -1407,7 +1407,7 @@ export async function registerRoutes(
   app.post("/api/billing/create-checkout", requireRole("admin"), async (req, res) => {
     try {
       const orgId = getOrgId(req);
-      const { priceId, planName } = z.object({ priceId: z.string(), planName: z.string().optional() }).parse(req.body);
+      const { priceId, planName } = z.object({ priceId: z.string().optional(), planName: z.string() }).parse(req.body);
       const org = await storage.getOrganization(orgId);
       if (!org) return res.status(404).json({ error: "Organization not found" });
 
@@ -1422,17 +1422,67 @@ export async function registerRoutes(
         await storage.updateOrganization(orgId, { stripeCustomerId: customerId });
       }
 
-      if (planName) {
-        const matchedPlan = await storage.getPlanByName(planName);
-        if (matchedPlan) {
-          await storage.updateOrganization(orgId, { planId: matchedPlan.id, plan: planName } as any);
+      const matchedPlan = await storage.getPlanByName(planName);
+      if (matchedPlan) {
+        await storage.updateOrganization(orgId, { planId: matchedPlan.id, plan: planName } as any);
+      }
+
+      let resolvedPriceId = priceId;
+
+      if (!resolvedPriceId) {
+        const planPrices: Record<string, number> = {
+          starter: 2900,
+          professional: 9900,
+          enterprise: 29900,
+        };
+        const planAmount = planPrices[planName];
+        if (!planAmount) {
+          return res.status(400).json({ error: "Invalid plan name" });
+        }
+
+        const displayName = planName.charAt(0).toUpperCase() + planName.slice(1);
+
+        const existingProducts = await stripe.products.search({
+          query: `metadata["plan"]:"${planName}"`,
+        });
+
+        let productId: string;
+        if (existingProducts.data.length > 0) {
+          productId = existingProducts.data[0].id;
+        } else {
+          const product = await stripe.products.create({
+            name: `AegisAI360 ${displayName}`,
+            description: `AegisAI360 SOC Platform - ${displayName} Plan`,
+            metadata: { plan: planName },
+          });
+          productId = product.id;
+        }
+
+        const existingPrices = await stripe.prices.list({
+          product: productId,
+          active: true,
+          type: "recurring",
+        });
+
+        const matchingPrice = existingPrices.data.find(p => p.unit_amount === planAmount && p.recurring?.interval === "month");
+
+        if (matchingPrice) {
+          resolvedPriceId = matchingPrice.id;
+        } else {
+          const newPrice = await stripe.prices.create({
+            product: productId,
+            unit_amount: planAmount,
+            currency: "usd",
+            recurring: { interval: "month" },
+          });
+          resolvedPriceId = newPrice.id;
         }
       }
 
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ['card'],
-        line_items: [{ price: priceId, quantity: 1 }],
+        line_items: [{ price: resolvedPriceId, quantity: 1 }],
         mode: 'subscription',
         success_url: `https://${req.get('host')}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `https://${req.get('host')}/billing/error`,

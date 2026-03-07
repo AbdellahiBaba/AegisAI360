@@ -19,13 +19,9 @@ export default function ChoosePlan() {
     queryKey: ["/api/plans"],
   });
 
-  const { data: products } = useQuery<any[]>({
-    queryKey: ["/api/billing/products"],
-  });
-
   const checkoutMutation = useMutation({
-    mutationFn: async ({ priceId, planName }: { priceId: string; planName: string }) => {
-      const res = await apiRequest("POST", "/api/billing/create-checkout", { priceId, planName });
+    mutationFn: async ({ planName, priceId }: { planName: string; priceId?: string }) => {
+      const res = await apiRequest("POST", "/api/billing/create-checkout", { planName, priceId });
       return res.json();
     },
     onSuccess: (data) => {
@@ -55,12 +51,6 @@ export default function ChoosePlan() {
     return features;
   };
 
-  const findPriceId = (planName: string) => {
-    if (!products?.length) return null;
-    const product = products.find((p: any) => p.name?.toLowerCase().includes(planName) || p.metadata?.plan === planName);
-    return product?.price_id || null;
-  };
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background" data-testid="loading-plans">
@@ -86,7 +76,6 @@ export default function ChoosePlan() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {plans?.map((plan: any) => {
             const Icon = planIcons[plan.name] || Shield;
-            const priceId = findPriceId(plan.name);
             return (
               <Card key={plan.id} className={`relative ${planColors[plan.name] || ""}`} data-testid={`card-plan-${plan.name}`}>
                 {plan.name === "professional" && (
@@ -114,11 +103,7 @@ export default function ChoosePlan() {
                     variant={plan.name === "professional" ? "default" : "outline"}
                     disabled={checkoutMutation.isPending}
                     onClick={() => {
-                      if (priceId) {
-                        checkoutMutation.mutate({ priceId, planName: plan.name });
-                      } else {
-                        toast({ title: "Stripe not configured", description: "Contact administrator to set up billing.", variant: "destructive" });
-                      }
+                      checkoutMutation.mutate({ planName: plan.name });
                     }}
                     data-testid={`button-subscribe-${plan.name}`}
                   >
