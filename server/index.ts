@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import path from "path";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -247,6 +248,15 @@ app.use((req, res, next) => {
     }
     return res.status(status).json({ message });
   });
+
+  app.use("/downloads", express.static(path.resolve(import.meta.dirname, "..", "public/downloads"), {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith(".exe")) {
+        res.setHeader("Content-Type", "application/octet-stream");
+        res.setHeader("Content-Disposition", "attachment; filename=" + path.basename(filePath));
+      }
+    }
+  }));
 
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
