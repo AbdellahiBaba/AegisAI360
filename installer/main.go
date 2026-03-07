@@ -25,12 +25,12 @@ const (
 )
 
 var (
-        logger       *log.Logger
-        logMu        sync.Mutex
-        logFile      *os.File
-        logPath      string
-        logMaxBytes  int64
-        logMaxKeep   int
+        logger      *log.Logger
+        logMu       sync.Mutex
+        logFile     *os.File
+        logPath     string
+        logMaxBytes int64
+        logMaxKeep  int
 )
 
 func main() {
@@ -41,6 +41,9 @@ func main() {
         logMessage("INFO", " %s v%s", serviceDisplayName, agentVersion)
         logMessage("INFO", " %s", companyName)
         logMessage("INFO", "========================================")
+
+        mode := detectMode()
+        logMessage("INFO", "Running in %s mode", mode)
 
         cfg, err := loadConfig()
         if err != nil {
@@ -68,12 +71,45 @@ func main() {
                 cancel()
         }()
 
-        if err := runAgent(ctx, cfg); err != nil {
-                logMessage("FATAL", "Agent error: %v", err)
-                os.Exit(1)
+        if mode == "tray" {
+                go func() {
+                        if err := runAgent(ctx, cfg); err != nil {
+                                logMessage("FATAL", "Agent error: %v", err)
+                                globalStatus.SetDisconnected(err.Error())
+                        }
+                }()
+                runTray(cfg)
+                logMessage("INFO", "Tray exited, stopping agent...")
+                cancel()
+                time.Sleep(2 * time.Second)
+        } else {
+                if err := runAgent(ctx, cfg); err != nil {
+                        logMessage("FATAL", "Agent error: %v", err)
+                        os.Exit(1)
+                }
         }
 
         logMessage("INFO", "Agent stopped")
+}
+
+func detectMode() string {
+        for _, arg := range os.Args[1:] {
+                switch strings.ToLower(arg) {
+                case "--tray", "-tray":
+                        return "tray"
+                case "--service", "-service", "--headless":
+                        return "service"
+                }
+        }
+
+        if os.Getenv("AEGIS_RUN_MODE") == "service" {
+                return "service"
+        }
+        if os.Getenv("AEGIS_RUN_MODE") == "tray" {
+                return "tray"
+        }
+
+        return "service"
 }
 
 func initLogger() {

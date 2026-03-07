@@ -35,6 +35,10 @@ function isCommandAllowed(command: string): { allowed: boolean; reason?: string 
 export function createAgentRouter(): Router {
   const router = Router();
 
+  router.get("/ping", (_req, res) => {
+    res.json({ status: "ok", timestamp: Date.now(), version: "1.0.0" });
+  });
+
   router.post("/device-token/create", requireAuth, async (req, res) => {
     try {
       const orgId = getOrgId(req);

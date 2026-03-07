@@ -87,11 +87,24 @@ Section "Install"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AegisAI360Agent" \
     "NoRepair" 1
 
+  CreateDirectory "$SMPROGRAMS\AegisAI360"
+  CreateShortcut "$SMPROGRAMS\AegisAI360\AegisAI360 Agent.lnk" "$INSTDIR\agent.exe" "--tray" \
+    "$INSTDIR\agent.exe" 0 SW_SHOWMINIMIZED "" "AegisAI360 Endpoint Agent"
+  CreateShortcut "$SMPROGRAMS\AegisAI360\Uninstall Agent.lnk" "$INSTDIR\uninstall.exe"
+  CreateShortcut "$DESKTOP\AegisAI360 Agent.lnk" "$INSTDIR\agent.exe" "--tray" \
+    "$INSTDIR\agent.exe" 0 SW_SHOWMINIMIZED "" "AegisAI360 Endpoint Agent"
+
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "AegisAI360Agent" \
+    '"$INSTDIR\agent.exe" --tray'
+
   DetailPrint "Installing AegisAI360 Agent service..."
   nsExec::ExecToLog '"$INSTDIR\AegisAI360Agent.exe" install'
 
   DetailPrint "Starting AegisAI360 Agent service..."
   nsExec::ExecToLog '"$INSTDIR\AegisAI360Agent.exe" start'
+
+  DetailPrint "Launching system tray agent..."
+  Exec '"$INSTDIR\agent.exe" --tray'
 
   DetailPrint "Installation complete."
 SectionEnd
@@ -105,6 +118,8 @@ Section "Uninstall"
 
   Sleep 2000
 
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "AegisAI360Agent"
+
   Delete "$INSTDIR\agent.exe"
   Delete "$INSTDIR\AegisAI360Agent.exe"
   Delete "$INSTDIR\AegisAI360Agent.xml"
@@ -112,6 +127,11 @@ Section "Uninstall"
   Delete "$INSTDIR\uninstall.exe"
   RMDir /r "$INSTDIR\logs"
   RMDir "$INSTDIR"
+
+  Delete "$SMPROGRAMS\AegisAI360\AegisAI360 Agent.lnk"
+  Delete "$SMPROGRAMS\AegisAI360\Uninstall Agent.lnk"
+  RMDir "$SMPROGRAMS\AegisAI360"
+  Delete "$DESKTOP\AegisAI360 Agent.lnk"
 
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AegisAI360Agent"
 SectionEnd
