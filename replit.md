@@ -29,7 +29,9 @@ The frontend is built with React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Rec
 - **Security Scanning**: Includes port, DNS, SSL/TLS, header, and vulnerability scanning capabilities.
 - **Threat Simulation Engine**: Offers 6 attack scenarios (SSH Brute Force, Ransomware, Phishing, Port Scan Sweep, Data Exfiltration, APT Kill Chain) to test defenses.
 - **Automation Defense Modes**: Three modes (Full Auto, Semi-Auto, Manual) control the level of automated response.
-- **Network Monitor**: Cloud-based WiFi/LAN device monitoring, discovery, authorization, traffic monitoring, and vulnerability scanning.
+- **Network/Infrastructure Monitor**: Real infrastructure scanning (port scan, SSL check, header audit, vulnerability path scan) for user-provided servers/domains/IPs, with device management and real-time monitoring.
+- **Protection Center**: One-click "Protect Me" page with protection score, checklist, and auto-activation of all defenses.
+- **Smart Remediation**: Scan results include one-click fix buttons that create real firewall rules and alert rules.
 - **Data Ingestion**: APIs for Syslog, SIEM, and generic event ingestion.
 - **Super Admin System**: Provides platform-level management, organization oversight, and system health monitoring.
 

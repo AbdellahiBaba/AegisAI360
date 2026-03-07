@@ -7,12 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
 import {
   Radar, Globe, ShieldCheck, FileSearch, Bug, Loader2, Clock,
-  CheckCircle2, XCircle, AlertTriangle, Search,
+  CheckCircle2, XCircle, AlertTriangle, Search, ShieldBan, Bell, Info, Lock,
 } from "lucide-react";
 import type { ScanResult } from "@shared/schema";
 
@@ -32,6 +33,65 @@ function SeverityBadge({ severity }: { severity: string }) {
   );
 }
 
+function useRemediation() {
+  const { toast } = useToast();
+  const { t } = useTranslation();
+
+  const mutation = useMutation({
+    mutationFn: async (payload: { actionType: string; target: string; details: Record<string, any> }) => {
+      const res = await apiRequest("POST", "/api/scan/remediate", payload);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: t("scanner.remediationApplied"), description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/firewall"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/alert-rules"] });
+    },
+    onError: () => {
+      toast({ title: t("scanner.remediationFailed"), variant: "destructive" });
+    },
+  });
+
+  return mutation;
+}
+
+function RemediationButton({
+  icon: Icon,
+  label,
+  explanation,
+  onClick,
+  isPending,
+  testId,
+}: {
+  icon: React.ElementType;
+  label: string;
+  explanation: string;
+  onClick: () => void;
+  isPending: boolean;
+  testId: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onClick}
+          disabled={isPending}
+          data-testid={testId}
+          className="text-[10px] gap-1"
+        >
+          {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Icon className="w-3 h-3" />}
+          {label}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-[250px] text-xs">
+        {explanation}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function ScannerTab({
   title,
   icon: Icon,
@@ -45,12 +105,13 @@ function ScannerTab({
   placeholder: string;
   scanType: string;
   endpoint: string;
-  renderResults: (data: any) => React.ReactNode;
+  renderResults: (data: any, target: string) => React.ReactNode;
 }) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [target, setTarget] = useState("");
   const [scanResults, setScanResults] = useState<any>(null);
+  const [lastTarget, setLastTarget] = useState("");
   const [polling, setPolling] = useState(false);
 
   const scanMutation = useMutation({
@@ -61,6 +122,7 @@ function ScannerTab({
     onSuccess: (data) => {
       toast({ title: t("scanner.scanStarted"), description: `${title} - ${target}` });
       setPolling(true);
+      setLastTarget(target);
       pollForResults(data.id);
     },
     onError: () => {
@@ -125,14 +187,18 @@ function ScannerTab({
           </CardContent>
         </Card>
       )}
-      {scanResults && !polling && renderResults(scanResults)}
+      {scanResults && !polling && renderResults(scanResults, lastTarget)}
     </div>
   );
 }
 
-function PortScanResults({ data }: { data: any }) {
+function PortScanResults({ data, target }: { data: any; target: string }) {
   const { t } = useTranslation();
+  const remediation = useRemediation();
   if (data.error) return <Card><CardContent className="p-4 text-xs text-destructive">{data.error}</CardContent></Card>;
+
+  const dangerousPorts = data.openPorts?.filter((p: any) => p.risk === "high" || p.risk === "critical" || p.risk === "medium") || [];
+
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -153,6 +219,36 @@ function PortScanResults({ data }: { data: any }) {
           <SeverityBadge severity={data.riskLevel || "info"} />
         </CardContent></Card>
       </div>
+
+      {dangerousPorts.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
+              <ShieldBan className="w-4 h-4 text-severity-high" />
+              {t("scanner.remediationRecommendations")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3 space-y-2">
+            {dangerousPorts.map((p: any) => (
+              <div key={p.port} className="flex items-center justify-between gap-2 p-2 rounded bg-muted/50" data-testid={`remediation-port-${p.port}`}>
+                <div className="flex-1">
+                  <p className="text-xs font-medium">{t("scanner.portRiskExplanation", { port: p.port, service: p.service })}</p>
+                  <p className="text-[10px] text-muted-foreground">{t("scanner.portRiskWhy", { service: p.service })}</p>
+                </div>
+                <RemediationButton
+                  icon={ShieldBan}
+                  label={t("scanner.blockPort")}
+                  explanation={t("scanner.blockPortExplanation", { port: p.port })}
+                  onClick={() => remediation.mutate({ actionType: "block_port", target, details: { port: p.port, service: p.service } })}
+                  isPending={remediation.isPending}
+                  testId={`button-block-port-${p.port}`}
+                />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {data.openPorts?.length > 0 && (
         <Card>
           <CardContent className="p-0">
@@ -163,6 +259,7 @@ function PortScanResults({ data }: { data: any }) {
                   <TableHead className="text-[10px] uppercase">{t("scanner.service")}</TableHead>
                   <TableHead className="text-[10px] uppercase">{t("common.status")}</TableHead>
                   <TableHead className="text-[10px] uppercase">{t("scanner.risk")}</TableHead>
+                  <TableHead className="text-[10px] uppercase">{t("common.action")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -172,6 +269,21 @@ function PortScanResults({ data }: { data: any }) {
                     <TableCell className="text-xs">{p.service}</TableCell>
                     <TableCell><Badge variant="outline" className="text-[10px] text-severity-high border-severity-high">OPEN</Badge></TableCell>
                     <TableCell><SeverityBadge severity={p.risk} /></TableCell>
+                    <TableCell>
+                      {(p.risk === "high" || p.risk === "critical" || p.risk === "medium") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-[10px] gap-1"
+                          onClick={() => remediation.mutate({ actionType: "block_port", target, details: { port: p.port, service: p.service } })}
+                          disabled={remediation.isPending}
+                          data-testid={`button-block-port-inline-${p.port}`}
+                        >
+                          <ShieldBan className="w-3 h-3" />
+                          {t("scanner.blockPort")}
+                        </Button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -216,10 +328,14 @@ function DNSResults({ data }: { data: any }) {
   );
 }
 
-function SSLResults({ data }: { data: any }) {
+function SSLResults({ data, target }: { data: any; target: string }) {
   const { t } = useTranslation();
+  const remediation = useRemediation();
   if (data.error) return <Card><CardContent className="p-4 text-xs text-destructive">{data.error}</CardContent></Card>;
   const gradeColor = data.grade === "A" ? "text-green-500" : data.grade === "B" ? "text-blue-500" : data.grade === "C" ? "text-yellow-500" : "text-red-500";
+
+  const hasIssues = data.expired || data.expiringSoon || data.selfSigned || data.grade !== "A";
+
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -240,6 +356,68 @@ function SSLResults({ data }: { data: any }) {
           {data.valid ? <CheckCircle2 className="w-5 h-5 text-green-500 mx-auto" /> : <XCircle className="w-5 h-5 text-red-500 mx-auto" />}
         </CardContent></Card>
       </div>
+
+      {hasIssues && (
+        <Card>
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
+              <ShieldBan className="w-4 h-4 text-severity-high" />
+              {t("scanner.remediationRecommendations")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3 space-y-2">
+            {data.expired && (
+              <div className="flex items-center justify-between gap-2 p-2 rounded bg-muted/50" data-testid="remediation-ssl-expired">
+                <div className="flex-1">
+                  <p className="text-xs font-medium">{t("scanner.sslExpiredExplanation")}</p>
+                  <p className="text-[10px] text-muted-foreground">{t("scanner.sslExpiredWhy")}</p>
+                </div>
+                <RemediationButton
+                  icon={Bell}
+                  label={t("scanner.monitorSSL")}
+                  explanation={t("scanner.monitorSSLExplanation")}
+                  onClick={() => remediation.mutate({ actionType: "monitor_ssl", target, details: { daysUntilExpiry: data.daysUntilExpiry, expired: true } })}
+                  isPending={remediation.isPending}
+                  testId="button-monitor-ssl-expired"
+                />
+              </div>
+            )}
+            {data.expiringSoon && !data.expired && (
+              <div className="flex items-center justify-between gap-2 p-2 rounded bg-muted/50" data-testid="remediation-ssl-expiring">
+                <div className="flex-1">
+                  <p className="text-xs font-medium">{t("scanner.sslExpiringExplanation", { days: data.daysUntilExpiry })}</p>
+                  <p className="text-[10px] text-muted-foreground">{t("scanner.sslExpiringWhy")}</p>
+                </div>
+                <RemediationButton
+                  icon={Bell}
+                  label={t("scanner.monitorSSL")}
+                  explanation={t("scanner.monitorSSLExplanation")}
+                  onClick={() => remediation.mutate({ actionType: "monitor_ssl", target, details: { daysUntilExpiry: data.daysUntilExpiry } })}
+                  isPending={remediation.isPending}
+                  testId="button-monitor-ssl-expiring"
+                />
+              </div>
+            )}
+            {data.selfSigned && (
+              <div className="flex items-center justify-between gap-2 p-2 rounded bg-muted/50" data-testid="remediation-ssl-selfsigned">
+                <div className="flex-1">
+                  <p className="text-xs font-medium">{t("scanner.sslSelfSignedExplanation")}</p>
+                  <p className="text-[10px] text-muted-foreground">{t("scanner.sslSelfSignedWhy")}</p>
+                </div>
+                <RemediationButton
+                  icon={Bell}
+                  label={t("scanner.monitorSSL")}
+                  explanation={t("scanner.monitorSSLExplanation")}
+                  onClick={() => remediation.mutate({ actionType: "monitor_ssl", target, details: { daysUntilExpiry: data.daysUntilExpiry, selfSigned: true } })}
+                  isPending={remediation.isPending}
+                  testId="button-monitor-ssl-selfsigned"
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="p-4 space-y-2">
           <div className="flex justify-between text-xs"><span className="text-muted-foreground">{t("scanner.issuer")}</span><span className="font-mono" data-testid="text-ssl-issuer">{data.issuer}</span></div>
@@ -256,10 +434,24 @@ function SSLResults({ data }: { data: any }) {
   );
 }
 
-function HeaderResults({ data }: { data: any }) {
+function HeaderResults({ data, target }: { data: any; target: string }) {
   const { t } = useTranslation();
   if (data.error) return <Card><CardContent className="p-4 text-xs text-destructive">{data.error}</CardContent></Card>;
   const gradeColor = data.grade === "A" ? "text-green-500" : data.grade === "B" ? "text-blue-500" : data.grade === "C" ? "text-yellow-500" : "text-red-500";
+
+  const missingHeaders = data.headers?.filter((h: any) => h.status === "fail") || [];
+
+  const headerRecommendations: Record<string, string> = {
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "X-XSS-Protection": "1; mode=block",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "X-Permitted-Cross-Domain-Policies": "none",
+  };
+
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -280,6 +472,32 @@ function HeaderResults({ data }: { data: any }) {
           <p className="text-xs font-mono truncate" data-testid="text-header-server">{data.serverInfo}</p>
         </CardContent></Card>
       </div>
+
+      {missingHeaders.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
+              <Info className="w-4 h-4 text-primary" />
+              {t("scanner.remediationRecommendations")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3 space-y-2">
+            {missingHeaders.map((h: any) => (
+              <div key={h.header} className="p-2 rounded bg-muted/50 space-y-1" data-testid={`remediation-header-${h.header}`}>
+                <p className="text-xs font-medium">{t("scanner.missingHeaderExplanation", { header: h.header })}</p>
+                <p className="text-[10px] text-muted-foreground">{t("scanner.headerWhyImportant", { description: h.description })}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <Lock className="w-3 h-3 text-muted-foreground shrink-0" />
+                  <code className="text-[10px] font-mono bg-background p-1 rounded flex-1 overflow-x-auto">
+                    {h.header}: {headerRecommendations[h.header] || "recommended-value"}
+                  </code>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -313,9 +531,13 @@ function HeaderResults({ data }: { data: any }) {
   );
 }
 
-function VulnResults({ data }: { data: any }) {
+function VulnResults({ data, target }: { data: any; target: string }) {
   const { t } = useTranslation();
+  const remediation = useRemediation();
   if (data.error) return <Card><CardContent className="p-4 text-xs text-destructive">{data.error}</CardContent></Card>;
+
+  const dangerousVulns = data.vulnerabilities?.filter((v: any) => v.found && v.severity !== "info") || [];
+
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -332,6 +554,36 @@ function VulnResults({ data }: { data: any }) {
           <SeverityBadge severity={data.riskLevel || "info"} />
         </CardContent></Card>
       </div>
+
+      {dangerousVulns.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
+              <ShieldBan className="w-4 h-4 text-severity-high" />
+              {t("scanner.remediationRecommendations")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3 space-y-2">
+            {dangerousVulns.map((v: any) => (
+              <div key={v.path} className="flex items-center justify-between gap-2 p-2 rounded bg-muted/50" data-testid={`remediation-vuln-${v.path}`}>
+                <div className="flex-1">
+                  <p className="text-xs font-medium">{t("scanner.vulnPathExplanation", { name: v.name, path: v.path })}</p>
+                  <p className="text-[10px] text-muted-foreground">{t("scanner.vulnPathWhy", { name: v.name })}</p>
+                </div>
+                <RemediationButton
+                  icon={ShieldBan}
+                  label={t("scanner.blockPath")}
+                  explanation={t("scanner.blockPathExplanation", { path: v.path })}
+                  onClick={() => remediation.mutate({ actionType: "block_path", target, details: { path: v.path, name: v.name, severity: v.severity } })}
+                  isPending={remediation.isPending}
+                  testId={`button-block-path-${v.path}`}
+                />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -341,6 +593,7 @@ function VulnResults({ data }: { data: any }) {
                 <TableHead className="text-[10px] uppercase">{t("common.name")}</TableHead>
                 <TableHead className="text-[10px] uppercase">{t("common.status")}</TableHead>
                 <TableHead className="text-[10px] uppercase">{t("common.severity")}</TableHead>
+                <TableHead className="text-[10px] uppercase">{t("common.action")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -353,6 +606,21 @@ function VulnResults({ data }: { data: any }) {
                       <Badge variant="secondary" className="text-[10px]">{t("scanner.notFound")}</Badge>}
                   </TableCell>
                   <TableCell><SeverityBadge severity={v.severity} /></TableCell>
+                  <TableCell>
+                    {v.found && v.severity !== "info" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-[10px] gap-1"
+                        onClick={() => remediation.mutate({ actionType: "block_path", target, details: { path: v.path, name: v.name, severity: v.severity } })}
+                        disabled={remediation.isPending}
+                        data-testid={`button-block-path-inline-${v.path}`}
+                      >
+                        <ShieldBan className="w-3 h-3" />
+                        {t("scanner.blockPath")}
+                      </Button>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -400,7 +668,7 @@ export default function ScannerPage() {
             placeholder={t("scanner.portPlaceholder")}
             scanType="ports"
             endpoint="/api/scan/ports"
-            renderResults={(data) => <PortScanResults data={data} />}
+            renderResults={(data, target) => <PortScanResults data={data} target={target} />}
           />
         </TabsContent>
 
@@ -422,7 +690,7 @@ export default function ScannerPage() {
             placeholder={t("scanner.sslPlaceholder")}
             scanType="ssl"
             endpoint="/api/scan/ssl"
-            renderResults={(data) => <SSLResults data={data} />}
+            renderResults={(data, target) => <SSLResults data={data} target={target} />}
           />
         </TabsContent>
 
@@ -433,7 +701,7 @@ export default function ScannerPage() {
             placeholder={t("scanner.headerPlaceholder")}
             scanType="headers"
             endpoint="/api/scan/headers"
-            renderResults={(data) => <HeaderResults data={data} />}
+            renderResults={(data, target) => <HeaderResults data={data} target={target} />}
           />
         </TabsContent>
 
@@ -444,7 +712,7 @@ export default function ScannerPage() {
             placeholder={t("scanner.vulnPlaceholder")}
             scanType="vuln"
             endpoint="/api/scan/vulnerabilities"
-            renderResults={(data) => <VulnResults data={data} />}
+            renderResults={(data, target) => <VulnResults data={data} target={target} />}
           />
         </TabsContent>
       </Tabs>

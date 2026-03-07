@@ -33,6 +33,7 @@ import SuperAdmin from "@/pages/super-admin";
 import ScannerPage from "@/pages/scanner";
 import SupportPage from "@/pages/support";
 import NetworkMonitorPage from "@/pages/network-monitor";
+import ProtectionCenter from "@/pages/protection-center";
 import AboutPage from "@/pages/public/about";
 import FeaturesPage from "@/pages/public/features";
 import PricingPage from "@/pages/public/pricing";
@@ -45,6 +46,7 @@ function AppRouter() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/protection-center" component={ProtectionCenter} />
       <Route path="/alerts" component={Alerts} />
       <Route path="/incidents" component={Incidents} />
       <Route path="/threat-intel" component={ThreatIntel} />

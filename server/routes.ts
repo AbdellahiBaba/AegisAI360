@@ -17,7 +17,7 @@ import {
   type User,
 } from "@shared/schema";
 import { requireAuth, requireRole } from "./auth";
-import { generateNetworkDevices, runNetworkVulnerabilityScan } from "./networkMonitor";
+import { generateNetworkDevices, runNetworkVulnerabilityScan, scanInfrastructureAsset, resolveHostToIp } from "./networkMonitor";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { createIngestionRouter } from "./ingestion";
 import { createSuperAdminRouter } from "./superAdmin";
@@ -103,6 +103,7 @@ export async function registerRoutes(
   app.use("/api/simulate", requireAuth);
   app.use("/api/support", requireAuth);
   app.use("/api/network", requireAuth);
+  app.use("/api/protection", requireAuth);
 
   app.post("/api/support/tickets", async (req, res) => {
     try {
@@ -469,6 +470,170 @@ export async function registerRoutes(
       res.json({ totalIn, totalOut, totalDevices: devices.length, topDevices });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch traffic data" });
+    }
+  });
+
+  app.post("/api/network/assets", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { target } = z.object({
+        target: z.string().min(1).max(253),
+      }).parse(req.body);
+
+      const cleanTarget = target.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+
+      if (isPrivateTarget(cleanTarget)) {
+        return res.status(400).json({ error: "Private/internal targets cannot be scanned from the cloud" });
+      }
+
+      const resolvedIp = await resolveHostToIp(cleanTarget);
+      const macPlaceholder = `00:00:00:${Math.floor(Math.random() * 256).toString(16).padStart(2, "0").toUpperCase()}:${Math.floor(Math.random() * 256).toString(16).padStart(2, "0").toUpperCase()}:${Math.floor(Math.random() * 256).toString(16).padStart(2, "0").toUpperCase()}`;
+
+      const device = await storage.createNetworkDevice({
+        organizationId: orgId,
+        macAddress: macPlaceholder,
+        ipAddress: resolvedIp,
+        hostname: cleanTarget,
+        manufacturer: null,
+        deviceType: "server",
+        os: null,
+        status: "online",
+        authorization: "authorized",
+        dataIn: 0,
+        dataOut: 0,
+        networkName: null,
+        signalStrength: null,
+        location: null,
+        isCompanyDevice: true,
+        lastSeen: new Date(),
+        firstSeen: new Date(),
+        notes: null,
+      });
+
+      res.json({ device, status: "scanning" });
+
+      try {
+        const scanResult = await scanInfrastructureAsset(cleanTarget);
+
+        await storage.updateNetworkDevice(device.id, {
+          notes: JSON.stringify(scanResult),
+          lastSeen: new Date(),
+          os: scanResult.headers?.serverInfo || null,
+        });
+
+        const scan = await storage.createNetworkScan({
+          organizationId: orgId,
+          networkName: cleanTarget,
+          scanType: "infrastructure",
+          status: "completed",
+          devicesFound: 1,
+          unauthorizedCount: 0,
+          results: scanResult as any,
+          completedAt: new Date(),
+        });
+
+        if (scanResult.summary.criticalIssues > 0 || scanResult.summary.highIssues > 0) {
+          await storage.createSecurityEvent({
+            organizationId: orgId,
+            eventType: "infrastructure_scan",
+            severity: scanResult.summary.criticalIssues > 0 ? "critical" : "high",
+            source: "infrastructure-monitor",
+            description: `Infrastructure scan of ${cleanTarget} found ${scanResult.summary.totalIssues} issue(s): ${scanResult.summary.plainLanguage.slice(0, 3).join("; ")}`,
+            sourceIp: resolvedIp,
+            status: "new",
+          });
+        }
+      } catch (err) {
+        console.error("Infrastructure scan error:", err);
+        await storage.updateNetworkDevice(device.id, {
+          notes: JSON.stringify({ error: "Scan failed", scannedAt: new Date().toISOString(), target: cleanTarget }),
+        });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to add asset" });
+    }
+  });
+
+  app.post("/api/network/scan-asset/:id", async (req, res) => {
+    try {
+      const device = await storage.getNetworkDevice(parseInt(req.params.id));
+      if (!device) return res.status(404).json({ error: "Asset not found" });
+      const orgId = getOrgId(req);
+      if (device.organizationId !== orgId) return res.status(403).json({ error: "Access denied" });
+
+      const target = device.hostname || device.ipAddress;
+      if (isPrivateTarget(target)) {
+        return res.status(400).json({ error: "Private/internal targets cannot be scanned" });
+      }
+
+      res.json({ status: "scanning", deviceId: device.id });
+
+      try {
+        const scanResult = await scanInfrastructureAsset(target);
+        await storage.updateNetworkDevice(device.id, {
+          notes: JSON.stringify(scanResult),
+          lastSeen: new Date(),
+          os: scanResult.headers?.serverInfo || device.os,
+        });
+
+        await storage.createNetworkScan({
+          organizationId: orgId,
+          networkName: target,
+          scanType: "infrastructure",
+          status: "completed",
+          devicesFound: 1,
+          unauthorizedCount: 0,
+          results: scanResult as any,
+          completedAt: new Date(),
+        });
+      } catch (err) {
+        console.error("Asset re-scan error:", err);
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to scan asset" });
+    }
+  });
+
+  app.post("/api/network/scan-all-assets", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const devices = await storage.getNetworkDevices(orgId);
+      const infrastructureAssets = devices.filter(d => d.deviceType === "server");
+
+      if (infrastructureAssets.length === 0) {
+        return res.json({ status: "no_assets", message: "No infrastructure assets to scan" });
+      }
+
+      res.json({ status: "scanning", count: infrastructureAssets.length });
+
+      for (const device of infrastructureAssets) {
+        const target = device.hostname || device.ipAddress;
+        if (isPrivateTarget(target)) continue;
+        try {
+          const scanResult = await scanInfrastructureAsset(target);
+          await storage.updateNetworkDevice(device.id, {
+            notes: JSON.stringify(scanResult),
+            lastSeen: new Date(),
+            os: scanResult.headers?.serverInfo || device.os,
+          });
+
+          await storage.createNetworkScan({
+            organizationId: orgId,
+            networkName: target,
+            scanType: "infrastructure",
+            status: "completed",
+            devicesFound: 1,
+            unauthorizedCount: 0,
+            results: scanResult as any,
+            completedAt: new Date(),
+          });
+        } catch (err) {
+          console.error(`Scan error for ${target}:`, err);
+        }
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to scan assets" });
     }
   });
 
@@ -1585,6 +1750,107 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/scan/remediate", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+      const { actionType, target, details } = z.object({
+        actionType: z.enum(["block_port", "block_path", "monitor_ssl", "info_header"]),
+        target: z.string().min(1),
+        details: z.record(z.any()),
+      }).parse(req.body);
+
+      let result: any = { success: false };
+
+      switch (actionType) {
+        case "block_port": {
+          const port = details.port;
+          const service = details.service || "Unknown";
+          const rule = await storage.createFirewallRule({
+            organizationId: orgId,
+            ruleType: "port_block",
+            value: String(port),
+            action: "block",
+            reason: `Dangerous port ${port} (${service}) found open on ${target} — blocked via scan remediation`,
+            status: "active",
+            createdBy: userId,
+          });
+          await storage.createAuditLog({
+            organizationId: orgId,
+            userId,
+            action: "scan_remediate_block_port",
+            targetType: "firewall_rule",
+            targetId: String(rule.id),
+            details: `Blocked port ${port} (${service}) found on ${target}`,
+          });
+          result = { success: true, type: "firewall_rule", ruleId: rule.id, message: `Port ${port} (${service}) blocked` };
+          break;
+        }
+        case "block_path": {
+          const path = details.path;
+          const name = details.name || path;
+          const alertRule = await storage.createAlertRule({
+            organizationId: orgId,
+            name: `Block access to ${name} on ${target}`,
+            conditions: JSON.stringify({ path, target, type: "vuln_path_access" }),
+            severity: details.severity || "high",
+            actions: JSON.stringify(["notify", "block_source"]),
+            enabled: true,
+          });
+          const fwRule = await storage.createFirewallRule({
+            organizationId: orgId,
+            ruleType: "domain_block",
+            value: `${target}${path}`,
+            action: "block",
+            reason: `Vulnerable path ${path} (${name}) found accessible on ${target} — blocked via scan remediation`,
+            status: "active",
+            createdBy: userId,
+          });
+          await storage.createAuditLog({
+            organizationId: orgId,
+            userId,
+            action: "scan_remediate_block_path",
+            targetType: "alert_rule",
+            targetId: String(alertRule.id),
+            details: `Created alert rule and firewall rule for vulnerable path ${path} on ${target}`,
+          });
+          result = { success: true, type: "alert_rule_and_firewall", alertRuleId: alertRule.id, firewallRuleId: fwRule.id, message: `Path ${path} protected with alert rule and firewall rule` };
+          break;
+        }
+        case "monitor_ssl": {
+          const daysUntilExpiry = details.daysUntilExpiry;
+          const alertRule = await storage.createAlertRule({
+            organizationId: orgId,
+            name: `SSL certificate expiry monitor for ${target}`,
+            conditions: JSON.stringify({ target, type: "ssl_expiry", daysUntilExpiry }),
+            severity: daysUntilExpiry <= 7 ? "critical" : daysUntilExpiry <= 30 ? "high" : "medium",
+            actions: JSON.stringify(["notify"]),
+            enabled: true,
+          });
+          await storage.createAuditLog({
+            organizationId: orgId,
+            userId,
+            action: "scan_remediate_monitor_ssl",
+            targetType: "alert_rule",
+            targetId: String(alertRule.id),
+            details: `Created SSL expiry monitoring alert for ${target} (${daysUntilExpiry} days remaining)`,
+          });
+          result = { success: true, type: "alert_rule", ruleId: alertRule.id, message: `SSL expiry monitoring enabled for ${target}` };
+          break;
+        }
+        case "info_header": {
+          result = { success: true, type: "info", message: "Header recommendation noted" };
+          break;
+        }
+      }
+
+      res.json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Remediation failed" });
+    }
+  });
+
   app.get("/api/scan/history", async (req, res) => {
     try {
       const orgId = getOrgId(req);
@@ -1661,6 +1927,142 @@ export async function registerRoutes(
       }
     } catch (error) {
       res.status(500).json({ error: "Simulation failed" });
+    }
+  });
+
+  app.get("/api/protection/status", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const org = await storage.getOrganization(orgId);
+      const defenseMode = (org as any)?.defenseMode || "manual";
+
+      const firewallRulesAll = await storage.getFirewallRules(orgId);
+      const activeFirewallRules = firewallRulesAll.filter(r => r.status === "active").length;
+
+      const alertRulesAll = await storage.getAlertRules(orgId);
+      const activeAlertRules = alertRulesAll.filter(r => r.enabled).length;
+
+      const policiesAll = await storage.getSecurityPolicies(orgId);
+      const activePolicies = policiesAll.filter(p => p.enabled).length;
+
+      const events = await storage.getSecurityEvents(orgId);
+      const unresolvedAlerts = events.filter(e => e.status === "new" || e.status === "investigating").length;
+      const openThreats = events.filter(e =>
+        (e.status === "new" || e.status === "investigating") &&
+        (e.severity === "critical" || e.severity === "high")
+      ).length;
+
+      const scanResults = await storage.getScanResults(orgId);
+      const lastScan = scanResults.length > 0 ? scanResults[0].createdAt : null;
+
+      let score = 0;
+      if (defenseMode === "auto") score += 25;
+      else if (defenseMode === "semi-auto") score += 10;
+
+      if (activeFirewallRules > 0) score += Math.min(20, activeFirewallRules * 5);
+      if (activeAlertRules > 0) score += Math.min(20, activeAlertRules * 5);
+      if (activePolicies > 0) score += Math.min(15, activePolicies * 5);
+      if (lastScan) score += 10;
+      if (unresolvedAlerts === 0) score += 10;
+      else score += Math.max(0, 10 - Math.min(10, unresolvedAlerts));
+
+      score = Math.min(100, Math.max(0, score));
+
+      let level: "protected" | "issues" | "at_risk" = "at_risk";
+      if (score >= 80) level = "protected";
+      else if (score >= 50) level = "issues";
+
+      res.json({
+        score,
+        level,
+        defenseMode,
+        activeFirewallRules,
+        totalFirewallRules: firewallRulesAll.length,
+        activeAlertRules,
+        totalAlertRules: alertRulesAll.length,
+        activePolicies,
+        totalPolicies: policiesAll.length,
+        unresolvedAlerts,
+        lastScanDate: lastScan,
+        openThreats,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch protection status" });
+    }
+  });
+
+  app.post("/api/protection/activate", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+
+      await storage.updateOrganization(orgId, { defenseMode: "auto" } as any);
+
+      const policies = await storage.getSecurityPolicies(orgId);
+      let policiesActivated = 0;
+      for (const policy of policies) {
+        if (!policy.enabled) {
+          await storage.updateSecurityPolicy(policy.id, orgId, { enabled: true });
+          policiesActivated++;
+        }
+      }
+
+      const rules = await storage.getAlertRules(orgId);
+      let alertRulesActivated = 0;
+      for (const rule of rules) {
+        if (!rule.enabled) {
+          await storage.updateAlertRule(rule.id, orgId, { enabled: true });
+          alertRulesActivated++;
+        }
+      }
+
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId,
+        action: "activate_full_protection",
+        targetType: "organization",
+        targetId: String(orgId),
+        details: `Full protection activated: defense=auto, ${policiesActivated} policies enabled, ${alertRulesActivated} alert rules enabled`,
+      });
+
+      res.json({
+        defenseModeSet: true,
+        policiesActivated,
+        alertRulesActivated,
+        scansStarted: 0,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to activate protection" });
+    }
+  });
+
+  app.post("/api/protection/resolve-all", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const events = await storage.getSecurityEvents(orgId);
+      const unresolved = events.filter(e =>
+        (e.status === "new" || e.status === "investigating") &&
+        (e.severity === "critical" || e.severity === "high")
+      );
+
+      let resolved = 0;
+      for (const event of unresolved) {
+        await storage.updateSecurityEventStatus(event.id, orgId, "resolved");
+        resolved++;
+      }
+
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "resolve_all_threats",
+        targetType: "security_event",
+        targetId: "bulk",
+        details: `Resolved ${resolved} open threats via Protection Center`,
+      });
+
+      res.json({ resolved });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to resolve threats" });
     }
   });
 

@@ -12,7 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import {
   ShieldAlert, AlertTriangle, Bug, Activity, ArrowUpRight, ArrowDownRight,
-  Clock, Monitor, Lock, Radio, ShieldOff, Flame, Crosshair, Zap, CreditCard
+  Clock, Monitor, Lock, Radio, ShieldOff, Flame, Crosshair, Zap, CreditCard,
+  Shield, ScanLine, Ban, Eye, Info, Server,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -241,9 +242,40 @@ function formatTimeAgo(dateStr: string) {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
+function simplifyThreatDescription(description: string, eventType: string): string {
+  const patterns: [RegExp, string][] = [
+    [/sql injection/i, "Someone tried to hack your database"],
+    [/xss|cross.?site scripting/i, "Someone tried to inject malicious code into your website"],
+    [/brute.?force|multiple.*login.*attempt/i, "Someone is trying to guess passwords on your system"],
+    [/port scan/i, "Someone is probing your system for weaknesses"],
+    [/ransomware/i, "Ransomware activity detected on your system"],
+    [/phishing/i, "A phishing attack was detected targeting your users"],
+    [/malware/i, "Malicious software was detected"],
+    [/data exfiltration|data.*transfer.*unusual/i, "Unusual data transfer detected - possible data theft"],
+    [/c2|command.*control|beacon/i, "A device may be communicating with an attacker's server"],
+    [/unauthorized.*access/i, "Someone tried to access your system without permission"],
+    [/unauthorized.*device/i, "An unknown device was found on your network"],
+    [/lateral.*movement/i, "An attacker may be moving through your network"],
+    [/privilege.*escalation/i, "Someone tried to gain higher access on your system"],
+    [/dns.*tunnel/i, "Someone may be hiding data transfers in DNS traffic"],
+    [/vulnerability/i, "A security weakness was found in your system"],
+    [/expired.*ssl|ssl.*expir/i, "Your security certificate has expired or is expiring"],
+  ];
+
+  for (const [pattern, simple] of patterns) {
+    if (pattern.test(description) || pattern.test(eventType)) {
+      const ipMatch = description.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
+      return ipMatch ? `${simple} (from ${ipMatch[1]})` : simple;
+    }
+  }
+  return description;
+}
+
 function QuickActions() {
   const { toast } = useToast();
   const { t } = useTranslation();
+  const [, navigate] = useLocation();
+
   const lockdownMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/response/emergency-lockdown");
@@ -259,11 +291,35 @@ function QuickActions() {
     },
   });
 
-  const handleLockdown = () => {
-    if (window.confirm(t("dashboard.lockdownConfirm"))) {
-      lockdownMutation.mutate();
-    }
-  };
+  const protectMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/protection/activate");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: t("dashboard.protectionActivated") });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/protection/status"] });
+    },
+    onError: () => {
+      toast({ title: t("dashboard.protectionFailed"), variant: "destructive" });
+    },
+  });
+
+  const blockAllMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/response/emergency-lockdown");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: t("dashboard.threatsBlocked") });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
+    },
+    onError: () => {
+      toast({ title: t("dashboard.blockFailed"), variant: "destructive" });
+    },
+  });
 
   return (
     <Card>
@@ -271,16 +327,64 @@ function QuickActions() {
         <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">{t("dashboard.quickActions")}</CardTitle>
       </CardHeader>
       <CardContent>
-        <Button
-          variant="destructive"
-          className="w-full font-mono uppercase tracking-wider"
-          onClick={handleLockdown}
-          disabled={lockdownMutation.isPending}
-          data-testid="button-emergency-lockdown"
-        >
-          <Flame className="w-4 h-4 me-2" />
-          {lockdownMutation.isPending ? t("common.initiating") : t("dashboard.emergencyLockdown")}
-        </Button>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          <Button
+            className="h-auto py-3 flex flex-col items-center gap-1.5"
+            onClick={() => protectMutation.mutate()}
+            disabled={protectMutation.isPending}
+            data-testid="button-activate-protection"
+          >
+            <Shield className="w-5 h-5" />
+            <span className="text-[10px] font-mono uppercase tracking-wider">
+              {protectMutation.isPending ? t("common.activating") : t("dashboard.activateProtection")}
+            </span>
+          </Button>
+          <Button
+            variant="secondary"
+            className="h-auto py-3 flex flex-col items-center gap-1.5"
+            onClick={() => navigate("/network-monitor")}
+            data-testid="button-scan-systems"
+          >
+            <ScanLine className="w-5 h-5" />
+            <span className="text-[10px] font-mono uppercase tracking-wider">{t("dashboard.scanSystems")}</span>
+          </Button>
+          <Button
+            variant="secondary"
+            className="h-auto py-3 flex flex-col items-center gap-1.5"
+            onClick={() => { if (window.confirm(t("dashboard.blockAllConfirm"))) blockAllMutation.mutate(); }}
+            disabled={blockAllMutation.isPending}
+            data-testid="button-block-all-threats"
+          >
+            <Ban className="w-5 h-5" />
+            <span className="text-[10px] font-mono uppercase tracking-wider">
+              {blockAllMutation.isPending ? t("common.blocking") : t("dashboard.blockAllThreats")}
+            </span>
+          </Button>
+          <Button
+            variant="destructive"
+            className="h-auto py-3 flex flex-col items-center gap-1.5"
+            onClick={() => { if (window.confirm(t("dashboard.lockdownConfirm"))) lockdownMutation.mutate(); }}
+            disabled={lockdownMutation.isPending}
+            data-testid="button-emergency-lockdown"
+          >
+            <Flame className="w-5 h-5" />
+            <span className="text-[10px] font-mono uppercase tracking-wider">
+              {lockdownMutation.isPending ? t("common.initiating") : t("dashboard.emergencyLockdown")}
+            </span>
+          </Button>
+        </div>
+        <div className="mt-2 flex justify-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-[10px] text-muted-foreground"
+            onClick={() => navigate("/protection-center")}
+            data-testid="button-view-protection"
+          >
+            <Eye className="w-3 h-3 me-1" />
+            {t("dashboard.viewProtectionStatus")}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -311,7 +415,7 @@ function RecentAlerts({ events }: { events: SecurityEvent[] }) {
                   >
                     <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: severityColors[event.severity] }} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs truncate">{event.description}</p>
+                      <p className="text-xs truncate">{simplifyThreatDescription(event.description, event.eventType)}</p>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-[10px] text-muted-foreground font-mono">{event.sourceIp || t("common.noData")}</span>
                         <span className="text-[10px] text-muted-foreground">{event.source}</span>

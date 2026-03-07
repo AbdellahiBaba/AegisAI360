@@ -1,4 +1,196 @@
 import type { InsertNetworkDevice } from "@shared/schema";
+import { scanPorts, checkSSL, scanHeaders, scanVulnerabilities, isPrivateTarget } from "./scanEngine";
+import dns from "dns";
+
+export interface AssetScanResult {
+  ports?: {
+    openPorts: Array<{ port: number; service: string; status: string; risk: string }>;
+    totalScanned: number;
+    closedPorts: number;
+    filteredPorts: number;
+    riskLevel: string;
+  };
+  ssl?: {
+    valid: boolean;
+    issuer: string;
+    subject: string;
+    validFrom: string;
+    validTo: string;
+    daysUntilExpiry: number;
+    protocol: string;
+    grade: string;
+    selfSigned: boolean;
+    expired: boolean;
+    expiringSoon: boolean;
+  };
+  headers?: {
+    grade: string;
+    score: number;
+    serverInfo: string;
+    findings: number;
+    headers: Array<{ header: string; description: string; present: boolean; value: string; status: string }>;
+  };
+  vulnerabilities?: {
+    totalChecks: number;
+    findings: number;
+    riskLevel: string;
+    vulnerabilities: Array<{ path: string; name: string; severity: string; found: boolean; statusCode: number; details: string }>;
+  };
+  summary: {
+    totalIssues: number;
+    criticalIssues: number;
+    highIssues: number;
+    mediumIssues: number;
+    lowIssues: number;
+    overallRisk: string;
+    plainLanguage: string[];
+  };
+  scannedAt: string;
+  target: string;
+}
+
+export async function resolveHostToIp(host: string): Promise<string> {
+  const cleanHost = host.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+  try {
+    const addresses = await dns.promises.resolve4(cleanHost);
+    return addresses[0] || cleanHost;
+  } catch {
+    return cleanHost;
+  }
+}
+
+export async function scanInfrastructureAsset(target: string): Promise<AssetScanResult> {
+  const cleanTarget = target.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+  const plainLanguage: string[] = [];
+  let totalIssues = 0;
+  let criticalIssues = 0;
+  let highIssues = 0;
+  let mediumIssues = 0;
+  let lowIssues = 0;
+
+  const result: AssetScanResult = {
+    summary: { totalIssues: 0, criticalIssues: 0, highIssues: 0, mediumIssues: 0, lowIssues: 0, overallRisk: "info", plainLanguage: [] },
+    scannedAt: new Date().toISOString(),
+    target: cleanTarget,
+  };
+
+  try {
+    const portResult = await scanPorts(cleanTarget);
+    result.ports = {
+      openPorts: portResult.openPorts,
+      totalScanned: portResult.portsScanned,
+      closedPorts: portResult.closedPorts,
+      filteredPorts: portResult.filteredPorts,
+      riskLevel: portResult.riskLevel,
+    };
+    if (portResult.openPorts.length > 0) {
+      plainLanguage.push(`This server has ${portResult.openPorts.length} open port(s): ${portResult.openPorts.map(p => `${p.port} (${p.service})`).join(", ")}`);
+      for (const p of portResult.openPorts) {
+        if (p.risk === "high" || p.risk === "critical") {
+          highIssues++;
+          totalIssues++;
+          plainLanguage.push(`Port ${p.port} (${p.service}) is open and considered high risk`);
+        } else if (p.risk === "medium") {
+          mediumIssues++;
+          totalIssues++;
+        }
+      }
+    } else {
+      plainLanguage.push("No open ports were found on this server");
+    }
+  } catch (err: any) {
+    plainLanguage.push("Port scan could not be completed: " + (err.message || "connection error"));
+  }
+
+  try {
+    const sslResult = await checkSSL(cleanTarget);
+    result.ssl = {
+      valid: sslResult.valid,
+      issuer: sslResult.issuer,
+      subject: sslResult.subject,
+      validFrom: sslResult.validFrom,
+      validTo: sslResult.validTo,
+      daysUntilExpiry: sslResult.daysUntilExpiry,
+      protocol: sslResult.protocol,
+      grade: sslResult.grade,
+      selfSigned: sslResult.selfSigned,
+      expired: sslResult.expired,
+      expiringSoon: sslResult.expiringSoon,
+    };
+    if (sslResult.expired) {
+      criticalIssues++;
+      totalIssues++;
+      plainLanguage.push("SSL certificate has expired! Your site is not secure");
+    } else if (sslResult.expiringSoon) {
+      mediumIssues++;
+      totalIssues++;
+      plainLanguage.push(`SSL certificate expires in ${sslResult.daysUntilExpiry} days`);
+    } else if (sslResult.selfSigned) {
+      highIssues++;
+      totalIssues++;
+      plainLanguage.push("SSL certificate is self-signed and not trusted by browsers");
+    } else {
+      plainLanguage.push(`SSL certificate is valid (Grade: ${sslResult.grade}, expires in ${sslResult.daysUntilExpiry} days)`);
+    }
+  } catch {
+    plainLanguage.push("No SSL certificate found or SSL connection could not be established");
+  }
+
+  try {
+    const headerResult = await scanHeaders(cleanTarget);
+    result.headers = {
+      grade: headerResult.grade,
+      score: headerResult.score,
+      serverInfo: headerResult.serverInfo,
+      findings: headerResult.findings,
+      headers: headerResult.headers,
+    };
+    const missingRequired = headerResult.headers.filter(h => h.status === "fail");
+    if (missingRequired.length > 0) {
+      mediumIssues += missingRequired.length;
+      totalIssues += missingRequired.length;
+      plainLanguage.push(`Missing ${missingRequired.length} security header(s): ${missingRequired.map(h => h.description).join(", ")}`);
+    }
+    if (headerResult.score >= 75) {
+      plainLanguage.push(`Security headers score: ${headerResult.score}% (Grade: ${headerResult.grade})`);
+    }
+  } catch {
+    plainLanguage.push("Security headers could not be checked");
+  }
+
+  try {
+    const vulnResult = await scanVulnerabilities(cleanTarget);
+    const realFindings = vulnResult.vulnerabilities.filter(v => v.found && v.severity !== "info");
+    result.vulnerabilities = {
+      totalChecks: vulnResult.totalChecks,
+      findings: realFindings.length,
+      riskLevel: vulnResult.riskLevel,
+      vulnerabilities: vulnResult.vulnerabilities,
+    };
+    if (realFindings.length > 0) {
+      for (const v of realFindings) {
+        if (v.severity === "critical") { criticalIssues++; totalIssues++; }
+        else if (v.severity === "high") { highIssues++; totalIssues++; }
+        else if (v.severity === "medium") { mediumIssues++; totalIssues++; }
+        else { lowIssues++; totalIssues++; }
+      }
+      plainLanguage.push(`Found ${realFindings.length} exposed path(s): ${realFindings.map(v => v.name).join(", ")}`);
+    } else {
+      plainLanguage.push("No exposed sensitive paths were found");
+    }
+  } catch {
+    plainLanguage.push("Vulnerability path scan could not be completed");
+  }
+
+  let overallRisk = "info";
+  if (criticalIssues > 0) overallRisk = "critical";
+  else if (highIssues > 0) overallRisk = "high";
+  else if (mediumIssues > 0) overallRisk = "medium";
+  else if (lowIssues > 0) overallRisk = "low";
+
+  result.summary = { totalIssues, criticalIssues, highIssues, mediumIssues, lowIssues, overallRisk, plainLanguage };
+  return result;
+}
 
 const MANUFACTURERS = [
   { name: "Apple", macs: ["A4:83:E7", "F0:18:98", "DC:A6:32", "3C:22:FB"], devices: ["MacBook Pro", "iPhone 15", "iPad Air", "Apple TV"], os: ["macOS Sonoma", "iOS 17", "iPadOS 17", "tvOS 17"] },
@@ -144,36 +336,6 @@ export function runNetworkVulnerabilityScan(devices: Array<{ hostname: string | 
         affectedDevice: router.hostname || router.ipAddress,
       });
     }
-    if (Math.random() > 0.5) {
-      vulns.push({
-        id: `WIFI-${Date.now()}-2`,
-        severity: "critical",
-        title: "Default Admin Credentials Detected",
-        description: `Router ${router.hostname || router.ipAddress} appears to be using default manufacturer credentials.`,
-        recommendation: "Change the default admin password immediately.",
-        affectedDevice: router.hostname || router.ipAddress,
-      });
-    }
-    if (Math.random() > 0.6) {
-      vulns.push({
-        id: `WIFI-${Date.now()}-3`,
-        severity: "medium",
-        title: "UPnP Enabled",
-        description: `Router ${router.hostname || router.ipAddress} has UPnP enabled, which can be exploited.`,
-        recommendation: "Disable UPnP unless specifically required.",
-        affectedDevice: router.hostname || router.ipAddress,
-      });
-    }
-    if (Math.random() > 0.7) {
-      vulns.push({
-        id: `WIFI-${Date.now()}-4`,
-        severity: "medium",
-        title: "WPS Enabled",
-        description: `WPS is enabled on ${router.hostname || router.ipAddress}, susceptible to brute-force attacks.`,
-        recommendation: "Disable WPS and use WPA3 passphrase authentication.",
-        affectedDevice: router.hostname || router.ipAddress,
-      });
-    }
   }
 
   const unauthorized = devices.filter(d => d.authorization === "unauthorized");
@@ -182,51 +344,8 @@ export function runNetworkVulnerabilityScan(devices: Array<{ hostname: string | 
       id: `NET-${Date.now()}-5`,
       severity: "high",
       title: `${unauthorized.length} Unauthorized Device(s) Detected`,
-      description: `Found ${unauthorized.length} device(s) connected to the network without authorization: ${unauthorized.map(d => d.hostname || d.ipAddress).join(", ")}`,
+      description: `Found ${unauthorized.length} device(s) connected without authorization.`,
       recommendation: "Investigate and block unauthorized devices immediately.",
-    });
-  }
-
-  const unknownMfg = devices.filter(d => d.manufacturer === "Unknown");
-  if (unknownMfg.length > 0) {
-    vulns.push({
-      id: `NET-${Date.now()}-6`,
-      severity: "medium",
-      title: "Unidentified Device Manufacturer",
-      description: `${unknownMfg.length} device(s) with unknown manufacturers detected, which may indicate spoofed MAC addresses.`,
-      recommendation: "Verify device identity and consider MAC address filtering.",
-    });
-  }
-
-  const weakSignal = devices.filter(d => d.signalStrength !== null && d.signalStrength < -70);
-  if (weakSignal.length > 0) {
-    vulns.push({
-      id: `NET-${Date.now()}-7`,
-      severity: "low",
-      title: "Devices with Weak Signal Detected",
-      description: `${weakSignal.length} device(s) have weak WiFi signal, which may indicate they are connecting from outside the expected area.`,
-      recommendation: "Verify physical proximity of weak-signal devices.",
-    });
-  }
-
-  const iotDevices = devices.filter(d => d.deviceType === "iot");
-  if (iotDevices.length > 2) {
-    vulns.push({
-      id: `IOT-${Date.now()}-8`,
-      severity: "medium",
-      title: "Multiple IoT Devices on Main Network",
-      description: `${iotDevices.length} IoT devices are on the main network. IoT devices often lack security updates.`,
-      recommendation: "Isolate IoT devices on a separate VLAN or guest network.",
-    });
-  }
-
-  if (Math.random() > 0.5) {
-    vulns.push({
-      id: `NET-${Date.now()}-9`,
-      severity: "info",
-      title: "DNS Configuration Review",
-      description: "Network DNS is configured to use ISP defaults which may leak browsing data.",
-      recommendation: "Configure DNS to use encrypted DNS (DoH/DoT) with a privacy-focused provider.",
     });
   }
 
