@@ -54,6 +54,69 @@ func isSilentMode() bool {
         return false
 }
 
+func isInfoOnlyCommand() bool {
+        if len(os.Args) < 2 {
+                return false
+        }
+        cmd := strings.ToLower(os.Args[1])
+        switch cmd {
+        case "--help", "-help", "help", "-h", "/?", "--version", "-version", "version", "-v", "--status", "-status", "status":
+                return true
+        }
+        return false
+}
+
+func enforceAdminPrivilege() bool {
+        if isInfoOnlyCommand() {
+                return true
+        }
+
+        if isRunningAsAdmin() {
+                logMessage("INFO", "Running with Administrator privileges")
+                if !silentMode {
+                        fmt.Println("  Privilege: Administrator")
+                }
+                return true
+        }
+
+        logMessage("WARN", "Agent requires Administrator privileges")
+
+        if silentMode {
+                logMessage("FATAL", "Not running as Administrator in silent mode, exiting")
+                os.Exit(1)
+                return false
+        }
+
+        fmt.Println()
+        fmt.Println("  WARNING: AegisAI360 Agent requires Administrator privileges.")
+        fmt.Println("  Many features (WiFi control, firewall, services, process management)")
+        fmt.Println("  will not work without elevated permissions.")
+        fmt.Println()
+
+        if isInteractiveTerminal() {
+                fmt.Println("  Attempting to restart with Administrator privileges...")
+                fmt.Println()
+
+                if requestAdminElevation() {
+                        logMessage("INFO", "Elevated process launched, exiting current process")
+                        return false
+                }
+
+                fmt.Println()
+                fmt.Println("  Could not obtain Administrator privileges.")
+                fmt.Println("  Please right-click the agent and select 'Run as administrator'.")
+                fmt.Println()
+                waitForExit()
+                return false
+        }
+
+        fmt.Fprintln(os.Stderr, "  Error: Agent must be run as Administrator.")
+        fmt.Fprintln(os.Stderr, "  Right-click the .exe and select 'Run as administrator'")
+        fmt.Fprintln(os.Stderr, "  Or run from an elevated command prompt.")
+        os.Exit(1)
+        return false
+}
+
 func main() {
         silentMode = isSilentMode()
 
@@ -68,12 +131,16 @@ func main() {
                 printBanner()
         }
 
+        if !enforceAdminPrivilege() {
+                return
+        }
+
         if handleServiceCommands() {
                 return
         }
 
         mode := detectMode()
-        logMessage("INFO", "Running in %s mode (silent=%v)", mode, silentMode)
+        logMessage("INFO", "Running in %s mode (silent=%v, privilege=%s)", mode, silentMode, getPrivilegeLevel())
 
         cfg, err := loadConfig()
         if err != nil {

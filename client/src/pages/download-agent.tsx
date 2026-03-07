@@ -167,9 +167,13 @@ export default function DownloadAgent() {
               <h4 className="text-sm font-medium" data-testid="text-method-doubleclick">Option A: Double-Click (Easiest)</h4>
             </div>
             <p className="text-sm text-muted-foreground mb-2">
-              Simply double-click the downloaded <code className="text-primary">AegisAI360-Agent.exe</code> file. 
+              Right-click the downloaded <code className="text-primary">AegisAI360-Agent.exe</code> file and select <strong>"Run as administrator"</strong>. 
               The agent will launch an interactive setup wizard where you can enter your server URL and device token. 
               Your configuration will be saved automatically for future runs.
+            </p>
+            <p className="text-xs text-amber-500 font-medium">
+              Administrator privileges are required for full functionality (WiFi control, firewall, services, process management).
+              The agent will auto-request elevation via UAC if not run as admin.
             </p>
           </div>
 
@@ -179,7 +183,7 @@ export default function DownloadAgent() {
               <h4 className="text-sm font-medium" data-testid="text-method-cli">Option B: Command Line</h4>
             </div>
             <div className="bg-zinc-950 text-zinc-100 rounded-lg p-4 font-mono text-sm space-y-2" data-testid="code-run-command">
-              <p className="text-zinc-500">:: Navigate to your Downloads folder</p>
+              <p className="text-zinc-500">:: Open Command Prompt as Administrator, then:</p>
               <p>cd %USERPROFILE%\Downloads</p>
               <p className="text-zinc-500 mt-3">:: Run the agent with your server URL and device token</p>
               <p>AegisAI360-Agent.exe https://aegisai360.com {availableTokens.length > 0 ? availableTokens[0].token : "YOUR_DEVICE_TOKEN"}</p>
