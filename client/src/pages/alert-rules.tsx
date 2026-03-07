@@ -59,7 +59,7 @@ function summarizeConditions(conditionsStr: string): string {
 function parseActions(actionsStr: string): string[] {
   try {
     const parsed = JSON.parse(actionsStr);
-    if (Array.isArray(parsed)) return parsed.map((a: { type: string }) => a.type);
+    if (Array.isArray(parsed)) return parsed.map((a: any) => (typeof a === "string" ? a : a?.type || "")).filter(Boolean);
     return [];
   } catch {
     return [];
@@ -341,8 +341,8 @@ function AlertRulesContent() {
                         {rule.name}
                       </p>
                       <div className="flex gap-1 mt-0.5 flex-wrap">
-                        {parseActions(rule.actions).map((a) => (
-                          <Badge key={a} variant="outline" className="text-[8px] uppercase">
+                        {parseActions(rule.actions).map((a, idx) => (
+                          <Badge key={`${a}-${idx}`} variant="outline" className="text-[8px] uppercase">
                             {actionTypeLabels[a] || a.replace(/_/g, " ")}
                           </Badge>
                         ))}
