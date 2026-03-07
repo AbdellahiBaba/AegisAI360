@@ -208,7 +208,31 @@ export function createAgentRouter(): Router {
 
       const dt = await storage.getDeviceToken(token);
       if (!dt) return res.status(401).json({ error: "Invalid device token" });
-      if (dt.used) return res.status(400).json({ error: "Token already used" });
+
+      if (dt.used) {
+        if (dt.usedByAgentId) {
+          const existingAgent = await storage.getAgentById(dt.usedByAgentId);
+          if (existingAgent && existingAgent.deviceToken === token) {
+            await storage.updateAgentStatus(existingAgent.id, "online");
+            await storage.updateAgentHeartbeat(existingAgent.id, {
+              lastSeen: new Date(),
+              ip: ip || undefined,
+            });
+            return res.status(201).json({ agentId: existingAgent.id, status: "reconnected" });
+          }
+        }
+
+        const orgAgents = await storage.getAgentsByOrg(dt.organizationId);
+        const matchingAgent = orgAgents.find(a => a.deviceToken === token);
+        if (matchingAgent) {
+          await storage.updateAgentStatus(matchingAgent.id, "online");
+          await storage.updateAgentHeartbeat(matchingAgent.id, {
+            lastSeen: new Date(),
+            ip: ip || undefined,
+          });
+          return res.status(201).json({ agentId: matchingAgent.id, status: "reconnected" });
+        }
+      }
 
       const agent = await storage.createAgent({
         organizationId: dt.organizationId,
@@ -221,8 +245,10 @@ export function createAgentRouter(): Router {
         ramUsage: null,
       });
 
-      await storage.markTokenUsed(dt.id, agent.id);
-      await storage.incrementUsage(dt.organizationId, "agentsRegistered");
+      if (!dt.used) {
+        await storage.markTokenUsed(dt.id, agent.id);
+        await storage.incrementUsage(dt.organizationId, "agentsRegistered");
+      }
       res.status(201).json({ agentId: agent.id, status: "registered" });
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
