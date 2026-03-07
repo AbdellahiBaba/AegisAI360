@@ -98,6 +98,11 @@ export default function AiAnalysis() {
         body: JSON.stringify({ content: userMessage }),
       });
 
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({ error: "AI service unavailable" }));
+        throw new Error(errData.error || `Server error: ${response.status}`);
+      }
+
       if (!response.body) throw new Error("No response body");
 
       const reader = response.body.getReader();
@@ -130,11 +135,15 @@ export default function AiAnalysis() {
           } catch {}
         }
       }
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev.slice(0, -1),
-        { role: "assistant", content: t("aiAnalysis.errorMessage") },
-      ]);
+    } catch (error: any) {
+      const errorText = error?.message || t("aiAnalysis.errorMessage");
+      setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (last?.role === "assistant" && last.content === "") {
+          return [...prev.slice(0, -1), { role: "assistant", content: errorText }];
+        }
+        return [...prev, { role: "assistant", content: errorText }];
+      });
     } finally {
       setIsStreaming(false);
     }

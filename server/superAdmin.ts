@@ -215,14 +215,17 @@ export function createSuperAdminRouter() {
       const memUsage = process.memoryUsage();
       const loadAvg = os.loadavg();
 
+      const totalMem = os.totalmem();
+      const freeMem = os.freemem();
+      const usedMem = totalMem - freeMem;
       res.json({
         uptime: Math.floor(uptime),
         memory: {
-          heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
-          heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
-          rss: Math.round(memUsage.rss / 1024 / 1024),
+          used: usedMem,
+          total: totalMem,
+          percentage: (usedMem / totalMem) * 100,
         },
-        loadAvg: loadAvg.map(l => Math.round(l * 100) / 100),
+        load: loadAvg.map(l => Math.round(l * 100) / 100),
         platform: os.platform(),
         nodeVersion: process.version,
       });

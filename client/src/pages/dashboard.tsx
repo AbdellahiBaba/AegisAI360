@@ -612,7 +612,7 @@ export default function Dashboard() {
     );
   }
 
-  const showUpgradeBanner = user?.role === "admin" && billingStatus && !billingStatus.stripeSubscriptionId;
+  const showUpgradeBanner = user?.role === "admin" && !user?.isSuperAdmin && billingStatus && !billingStatus.stripeSubscriptionId;
 
   return (
     <div className="p-4 md:p-6 space-y-4 grid-pattern">
