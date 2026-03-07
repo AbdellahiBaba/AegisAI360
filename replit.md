@@ -35,14 +35,53 @@ The frontend is built with React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Rec
 - **Protection Center**: One-click "Protect Me" page with protection score, checklist, and auto-activation of all defenses.
 - **Smart Remediation**: Scan results include one-click fix buttons that create real firewall rules and alert rules.
 - **Data Ingestion**: APIs for Syslog, SIEM, and generic event ingestion.
-- **Super Admin System**: Provides platform-level management, organization oversight, and system health monitoring. Super admin (isSuperAdmin=true) has full unrestricted access with no billing plan restrictions, sees "Platform Administrator" on billing page, and no upgrade banners on dashboard.
+- **Super Admin System**: Provides platform-level management, organization oversight, and system health monitoring. Super admin (isSuperAdmin=true) has full unrestricted access with no billing plan restrictions.
+
+#### Endpoint Agent System (NEW)
+- **Device Token Management**: Generate single-use tokens via `/api/agent/device-token/create` to register endpoint agents.
+- **Agent Registration**: Agents register with hostname, OS, IP via `/api/agent/register` using device tokens.
+- **Heartbeat Monitoring**: Agents send periodic heartbeats with CPU/RAM metrics via `/api/agent/heartbeat`.
+- **Log Ingestion**: Agents send security events via `/api/agent/logs` with plan-based rate limiting.
+- **Command System**: SOC analysts send commands to agents (system scan, list processes, isolate network, etc.). Agents poll for pending commands and report results.
+- **Remote Terminal**: Built-in terminal UI for remote command execution on agents. Commands are validated against a whitelist (whoami, ifconfig, netstat, ps, ls, etc.). Destructive commands (rm, del, format, sudo) are always blocked. All terminal activity is logged in audit logs.
+- **Frontend Pages**: `/endpoints` (agent dashboard), `/download-agent` (token generation + agent download), `/endpoints/:agentId/terminal` (remote terminal).
+- **Files**: `server/agentApi.ts`, `client/src/pages/endpoints.tsx`, `client/src/pages/download-agent.tsx`, `client/src/pages/agent-terminal.tsx`
+
+#### Billing Paywall System (NEW)
+- **Plans Table**: Three tiers (starter $29/mo, professional $99/mo, enterprise $299/mo) with feature flags and usage limits.
+- **Subscription Enforcement**: New users are redirected to `/choose-plan` until they have an active subscription. Super admin bypasses all restrictions.
+- **Usage Tracking**: Daily usage tracked per organization (agents, logs, commands, terminal commands, threat intel queries).
+- **Plan Features**: `allowNetworkIsolation`, `allowProcessKill`, `allowFileScan`, `allowEndpointDownload`, `allowTerminalAccess`, `allowThreatIntel`, `allowAdvancedAnalytics`.
+- **Frontend Pages**: `/choose-plan` (plan selection), `/billing/success`, `/billing/error`.
+- **Organization Fields**: `subscription_status` (active/inactive/trial/canceled), `plan_id` (references plans table).
+
+#### Threat Intelligence API Integration (NEW)
+- **AbuseIPDB**: IP reputation lookup via `/api/threat-intel/ip`. Returns abuse confidence score, reports, country, ISP.
+- **AlienVault OTX**: Indicator lookup via `/api/threat-intel/otx-lookup`. Supports IP, domain, URL, hash types.
+- **URLScan.io**: URL analysis via `/api/threat-intel/urlscan`. Submits URLs for scanning.
+- **Google Safe Browsing**: URL safety check via `/api/threat-intel/safebrowsing`. Checks against malware/phishing lists.
+- **MalwareBazaar**: Hash lookup via `/api/threat-intel/hash`. No API key required (free API).
+- **Stub Data**: When API keys are not configured, returns realistic demo data with a "Demo Data" badge.
+- **Files**: `server/services/threatIntel/` directory with individual service files.
+
+#### Advanced Analytics (NEW)
+- **Anomaly Detection**: `/api/analytics/anomaly-detection` - heuristic analysis of security events, returns anomaly score and detected anomalies.
+- **Endpoint Risk Score**: `/api/analytics/endpoint-risk-score` - calculates risk scores based on agent status, CPU/RAM, last seen time.
+
+#### Documentation (NEW)
+- **Agent Documentation**: `/docs/agent` page with comprehensive documentation covering registration flow, command system, terminal usage, API reference, Go agent skeleton, and plan feature matrix.
+
+### Database Schema
+- **New Tables**: `plans`, `device_tokens`, `agents`, `agent_commands`, `terminal_audit_logs`, `usage_tracking`
+- **Modified Tables**: `organizations` (added `subscription_status`, `plan_id` columns)
+- **Total Tables**: 28+ tables covering all platform functionality
 
 ### System Design Choices
 - **Modular Architecture**: Codebase is organized into `server/`, `client/`, and `shared/` directories.
-- **Database Schema**: Comprehensive schema with over 20 tables covering organizations, users, security events, incidents, threat intelligence, assets, policies, audit logs, and more.
 - **Authentication**: Passport-local with scrypt hashing and session management.
 - **Organization Scoping**: All data access is scoped by `organizationId` to ensure multi-tenancy.
-- **API Endpoints**: Structured API for various functionalities including authentication, data ingestion, scanning, simulation, billing, and system management.
+- **Agent Auth**: Device token-based authentication for agent API endpoints (no user session required).
+- **Terminal Safety**: Command whitelist + blocked pattern list for remote terminal execution.
 
 ## External Dependencies
 - **OpenAI**: Integrated for AI-powered threat analysis (gpt-4o-mini).
@@ -52,3 +91,15 @@ The frontend is built with React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Rec
 - **i18next + react-i18next**: For internationalization and localization.
 - **Node.js `net` and `dns` modules**: Used for network scanning functionalities (Port Scanner, DNS Lookup).
 - **Node.js `tls` module**: Used for SSL/TLS certificate checking.
+- **AbuseIPDB API**: IP reputation (optional, needs ABUSEIPDB_API_KEY).
+- **AlienVault OTX API**: Threat intelligence (optional, needs OTX_API_KEY).
+- **URLScan.io API**: URL analysis (optional, needs URLSCAN_API_KEY).
+- **Google Safe Browsing API**: URL safety (optional, needs GOOGLE_SAFE_BROWSING_API_KEY).
+- **MalwareBazaar API**: Malware hash lookup (free, no key needed).
+
+## Key Technical Notes
+- **Session Cookie**: `secure: process.env.NODE_ENV === "production"` + `proxy: true` in `server/auth.ts`
+- **parseActions()**: Handles both `string[]` and `{type: string}[]` formats for alert rule actions
+- **DB Pattern**: Use `and()` with `eq(table.organizationId, orgId)` for all org-scoped queries
+- **Super Admin**: username=`admin`, bypasses all billing/plan restrictions via `isSuperAdmin` check
+- **Plans Seeded**: starter (id=1), professional (id=2), enterprise (id=3) in plans table

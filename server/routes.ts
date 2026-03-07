@@ -16,12 +16,14 @@ import {
   insertResponsePlaybookSchema,
   type User,
 } from "@shared/schema";
-import { requireAuth, requireRole } from "./auth";
+import { requireAuth, requireRole, requirePlanFeature } from "./auth";
 import { generateNetworkDevices, runNetworkVulnerabilityScan, scanInfrastructureAsset, resolveHostToIp } from "./networkMonitor";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { createIngestionRouter } from "./ingestion";
 import { createSuperAdminRouter } from "./superAdmin";
 import { createThreatFeedsRouter } from "./threatFeeds";
+import { createAgentRouter } from "./agentApi";
+import { abuseIpdbLookup, otxLookup, urlscanLookup, safeBrowsingLookup, malwareBazaarLookup } from "./services/threatIntel";
 import { ResponseEngine } from "./responseEngine";
 import { AlertEngine } from "./alertEngine";
 import { scanPorts, lookupDNS, checkSSL, scanHeaders, scanVulnerabilities, isPrivateTarget } from "./scanEngine";
@@ -79,6 +81,7 @@ export async function registerRoutes(
   app.use("/api/ingest", createIngestionRouter(broadcast, (event) => alertEngine.evaluateEvent(event)));
   app.use("/api/admin", createSuperAdminRouter());
   app.use("/api/threat-feeds", createThreatFeedsRouter());
+  app.use("/api/agent", createAgentRouter());
 
   app.use("/api/dashboard", requireAuth);
   app.use("/api/security-events", requireAuth);
@@ -1385,11 +1388,16 @@ export async function registerRoutes(
       const orgId = getOrgId(req);
       const org = await storage.getOrganization(orgId);
       if (!org) return res.status(404).json({ error: "Organization not found" });
+      let planDetails = null;
+      if (org.planId) planDetails = await storage.getPlanById(org.planId);
       res.json({
         plan: org.plan,
         maxUsers: org.maxUsers,
         stripeCustomerId: org.stripeCustomerId,
         stripeSubscriptionId: org.stripeSubscriptionId,
+        subscriptionStatus: org.subscriptionStatus,
+        planId: org.planId,
+        planDetails,
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch billing status" });
@@ -1399,7 +1407,7 @@ export async function registerRoutes(
   app.post("/api/billing/create-checkout", requireRole("admin"), async (req, res) => {
     try {
       const orgId = getOrgId(req);
-      const { priceId } = z.object({ priceId: z.string() }).parse(req.body);
+      const { priceId, planName } = z.object({ priceId: z.string(), planName: z.string().optional() }).parse(req.body);
       const org = await storage.getOrganization(orgId);
       if (!org) return res.status(404).json({ error: "Organization not found" });
 
@@ -1414,20 +1422,54 @@ export async function registerRoutes(
         await storage.updateOrganization(orgId, { stripeCustomerId: customerId });
       }
 
+      if (planName) {
+        const matchedPlan = await storage.getPlanByName(planName);
+        if (matchedPlan) {
+          await storage.updateOrganization(orgId, { planId: matchedPlan.id, plan: planName } as any);
+        }
+      }
+
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ['card'],
         line_items: [{ price: priceId, quantity: 1 }],
         mode: 'subscription',
-        success_url: `https://${req.get('host')}/billing?success=true`,
-        cancel_url: `https://${req.get('host')}/billing?canceled=true`,
-        metadata: { organizationId: String(orgId) },
+        success_url: `https://${req.get('host')}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `https://${req.get('host')}/billing/error`,
+        metadata: { organizationId: String(orgId), planName: planName || "" },
       });
 
       res.json({ url: session.url });
     } catch (error) {
       console.error("Checkout error:", error);
       res.status(500).json({ error: "Failed to create checkout session" });
+    }
+  });
+
+  app.post("/api/billing/confirm", requireAuth, async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { sessionId } = z.object({ sessionId: z.string().min(1) }).parse(req.body);
+      const org = await storage.getOrganization(orgId);
+      if (!org) return res.status(404).json({ error: "Organization not found" });
+
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      if (session.payment_status !== "paid" && session.status !== "complete") {
+        return res.status(400).json({ error: "Payment not completed" });
+      }
+      const sessionOrgId = session.metadata?.organizationId;
+      if (sessionOrgId && String(orgId) !== sessionOrgId) {
+        return res.status(403).json({ error: "Session does not belong to this organization" });
+      }
+
+      if (org.subscriptionStatus !== "active") {
+        await storage.updateOrganization(orgId, { subscriptionStatus: "active" } as any);
+      }
+      res.json({ status: "active" });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Session ID required" });
+      res.status(500).json({ error: "Failed to confirm subscription" });
     }
   });
 
@@ -1466,6 +1508,123 @@ export async function registerRoutes(
       res.json(result.rows);
     } catch (error) {
       res.json([]);
+    }
+  });
+
+  app.get("/api/plans", async (_req, res) => {
+    try {
+      const allPlans = await storage.getPlans();
+      res.json(allPlans);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch plans" });
+    }
+  });
+
+  app.get("/api/billing/usage", requireAuth, async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const usage = await storage.getUsageForToday(orgId);
+      const org = await storage.getOrganization(orgId);
+      let plan = null;
+      if (org?.planId) plan = await storage.getPlanById(org.planId);
+      res.json({ usage: usage || { agentsRegistered: 0, logsSent: 0, commandsExecuted: 0, terminalCommandsExecuted: 0, threatIntelQueries: 0 }, plan });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch usage" });
+    }
+  });
+
+  app.post("/api/threat-intel/ip", requireAuth, requirePlanFeature("allowThreatIntel"), async (req, res) => {
+    try {
+      const { ip } = z.object({ ip: z.string().min(1) }).parse(req.body);
+      await storage.incrementUsage(getOrgId(req), "threatIntelQueries");
+      const result = await abuseIpdbLookup(ip);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "IP lookup failed" });
+    }
+  });
+
+  app.post("/api/threat-intel/otx-lookup", requireAuth, requirePlanFeature("allowThreatIntel"), async (req, res) => {
+    try {
+      const { indicator, type } = z.object({ indicator: z.string().min(1), type: z.enum(["ip", "domain", "url", "hash"]).default("ip") }).parse(req.body);
+      await storage.incrementUsage(getOrgId(req), "threatIntelQueries");
+      const result = await otxLookup(indicator, type);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "OTX lookup failed" });
+    }
+  });
+
+  app.post("/api/threat-intel/urlscan", requireAuth, requirePlanFeature("allowThreatIntel"), async (req, res) => {
+    try {
+      const { url } = z.object({ url: z.string().min(1) }).parse(req.body);
+      await storage.incrementUsage(getOrgId(req), "threatIntelQueries");
+      const result = await urlscanLookup(url);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "URL scan failed" });
+    }
+  });
+
+  app.post("/api/threat-intel/safebrowsing", requireAuth, requirePlanFeature("allowThreatIntel"), async (req, res) => {
+    try {
+      const { url } = z.object({ url: z.string().min(1) }).parse(req.body);
+      await storage.incrementUsage(getOrgId(req), "threatIntelQueries");
+      const result = await safeBrowsingLookup(url);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Safe Browsing lookup failed" });
+    }
+  });
+
+  app.post("/api/threat-intel/hash", requireAuth, requirePlanFeature("allowThreatIntel"), async (req, res) => {
+    try {
+      const { hash } = z.object({ hash: z.string().min(1) }).parse(req.body);
+      await storage.incrementUsage(getOrgId(req), "threatIntelQueries");
+      const result = await malwareBazaarLookup(hash);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Hash lookup failed" });
+    }
+  });
+
+  app.post("/api/analytics/anomaly-detection", requireAuth, async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const events = await storage.getSecurityEvents(orgId);
+      const recentEvents = events.slice(0, 100);
+      const severityCounts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+      for (const e of recentEvents) (severityCounts as any)[e.severity] = ((severityCounts as any)[e.severity] || 0) + 1;
+      const anomalyScore = Math.min(100, severityCounts.critical * 20 + severityCounts.high * 10 + severityCounts.medium * 3);
+      const anomalies = [];
+      if (severityCounts.critical > 3) anomalies.push({ type: "spike", description: "Unusual spike in critical events", confidence: 0.85 });
+      if (recentEvents.length > 50) anomalies.push({ type: "volume", description: "Higher than normal event volume", confidence: 0.7 });
+      const sourceIps = new Set(recentEvents.map(e => e.sourceIp).filter(Boolean));
+      if (sourceIps.size > 20) anomalies.push({ type: "distributed", description: "Activity from many distinct source IPs", confidence: 0.6 });
+      res.json({ anomalyScore, anomalies, severityCounts, eventsAnalyzed: recentEvents.length });
+    } catch (error) {
+      res.status(500).json({ error: "Anomaly detection failed" });
+    }
+  });
+
+  app.post("/api/analytics/endpoint-risk-score", requireAuth, async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const agentList = await storage.getAgentsByOrg(orgId);
+      const scores = agentList.map(a => {
+        let risk = 0;
+        if (a.status === "offline") risk += 20;
+        if (a.cpuUsage && a.cpuUsage > 90) risk += 15;
+        if (a.ramUsage && a.ramUsage > 90) risk += 15;
+        const hoursSinceLastSeen = (Date.now() - new Date(a.lastSeen).getTime()) / (1000 * 60 * 60);
+        if (hoursSinceLastSeen > 24) risk += 30;
+        else if (hoursSinceLastSeen > 1) risk += 10;
+        return { agentId: a.id, hostname: a.hostname, os: a.os, riskScore: Math.min(100, risk), status: a.status, lastSeen: a.lastSeen };
+      });
+      const avgRisk = scores.length > 0 ? Math.round(scores.reduce((s, a) => s + a.riskScore, 0) / scores.length) : 0;
+      res.json({ endpoints: scores, averageRisk: avgRisk, totalEndpoints: scores.length });
+    } catch (error) {
+      res.status(500).json({ error: "Risk score calculation failed" });
     }
   });
 

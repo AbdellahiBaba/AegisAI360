@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,8 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Search, Globe, Hash, Link, Mail, Server, ShieldBan, Loader2 } from "lucide-react";
+import { Plus, Search, Globe, Hash, Link, Mail, Server, ShieldBan, Loader2, Scan, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { ThreatIntel } from "@shared/schema";
 
@@ -32,6 +33,107 @@ const typeIcons: Record<string, React.ElementType> = {
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function ThreatLookupSection() {
+  const [lookupType, setLookupType] = useState("ip");
+  const [lookupValue, setLookupValue] = useState("");
+  const [lookupResult, setLookupResult] = useState<any>(null);
+  const { toast } = useToast();
+
+  const lookupMutation = useMutation({
+    mutationFn: async () => {
+      const endpoints: Record<string, { url: string; body: any }> = {
+        ip: { url: "/api/threat-intel/ip", body: { ip: lookupValue } },
+        domain: { url: "/api/threat-intel/otx-lookup", body: { indicator: lookupValue, type: "domain" } },
+        url: { url: "/api/threat-intel/urlscan", body: { url: lookupValue } },
+        hash: { url: "/api/threat-intel/hash", body: { hash: lookupValue } },
+        safebrowsing: { url: "/api/threat-intel/safebrowsing", body: { url: lookupValue } },
+      };
+      const ep = endpoints[lookupType];
+      const res = await apiRequest("POST", ep.url, ep.body);
+      return res.json();
+    },
+    onSuccess: (data) => setLookupResult(data),
+    onError: () => toast({ title: "Lookup failed", variant: "destructive" }),
+  });
+
+  return (
+    <Card data-testid="card-threat-lookup">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Scan className="w-4 h-4" />
+          Threat Intelligence Lookup
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex gap-2">
+          <Select value={lookupType} onValueChange={setLookupType}>
+            <SelectTrigger className="w-[150px]" data-testid="select-lookup-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ip">IP Reputation</SelectItem>
+              <SelectItem value="domain">OTX Domain</SelectItem>
+              <SelectItem value="url">URL Scan</SelectItem>
+              <SelectItem value="hash">Hash Lookup</SelectItem>
+              <SelectItem value="safebrowsing">Safe Browsing</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            value={lookupValue}
+            onChange={(e) => setLookupValue(e.target.value)}
+            placeholder={lookupType === "ip" ? "8.8.8.8" : lookupType === "hash" ? "SHA256 hash..." : "Enter value..."}
+            className="flex-1"
+            onKeyDown={(e) => { if (e.key === "Enter" && lookupValue) lookupMutation.mutate(); }}
+            data-testid="input-lookup-value"
+          />
+          <Button onClick={() => lookupMutation.mutate()} disabled={!lookupValue || lookupMutation.isPending} data-testid="button-lookup">
+            {lookupMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+          </Button>
+        </div>
+
+        {lookupResult && (
+          <div className="p-3 bg-muted/50 rounded-lg text-sm space-y-2" data-testid="container-lookup-result">
+            <div className="flex items-center justify-between">
+              <Badge variant="outline">{lookupResult.source}</Badge>
+              {lookupResult.stub && <Badge variant="secondary" className="text-xs">Demo Data</Badge>}
+            </div>
+            {lookupResult.data && lookupType === "ip" && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                <div><span className="text-muted-foreground">Confidence:</span> <span className="font-medium">{lookupResult.data.abuseConfidenceScore}%</span></div>
+                <div><span className="text-muted-foreground">Reports:</span> <span className="font-medium">{lookupResult.data.totalReports}</span></div>
+                <div><span className="text-muted-foreground">Country:</span> <span className="font-medium">{lookupResult.data.countryCode}</span></div>
+                <div><span className="text-muted-foreground">ISP:</span> <span className="font-medium">{lookupResult.data.isp}</span></div>
+              </div>
+            )}
+            {lookupResult.data && lookupType === "domain" && (
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div><span className="text-muted-foreground">Pulses:</span> <span className="font-medium">{lookupResult.data.pulseCount}</span></div>
+                <div><span className="text-muted-foreground">Reputation:</span> <span className="font-medium">{lookupResult.data.reputation}</span></div>
+              </div>
+            )}
+            {lookupResult.data && lookupType === "safebrowsing" && (
+              <div className="text-xs">
+                {lookupResult.data.safe ? (
+                  <span className="text-green-500 font-medium">URL is safe</span>
+                ) : (
+                  <span className="text-red-500 font-medium flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Threats detected</span>
+                )}
+              </div>
+            )}
+            {lookupResult.data && lookupType === "hash" && (
+              <div className="text-xs">
+                <span className="text-muted-foreground">Status: </span>
+                <span className="font-medium">{lookupResult.data.query_status || "unknown"}</span>
+              </div>
+            )}
+            {lookupResult.message && <p className="text-xs text-muted-foreground">{lookupResult.message}</p>}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function ThreatIntelPage() {
@@ -226,9 +328,11 @@ export default function ThreatIntelPage() {
         </Select>
       </div>
 
+      <ThreatLookupSection />
+
       <Card>
         <CardContent className="p-0">
-          <ScrollArea className="h-[calc(100vh-230px)]">
+          <ScrollArea className="h-[calc(100vh-430px)]">
             <div className="min-w-[600px]">
               <div className="grid grid-cols-[40px_1fr_100px_80px_100px_80px_60px_80px] gap-2 px-4 py-2 border-b text-[10px] text-muted-foreground uppercase tracking-wider font-medium sticky top-0 bg-card z-10">
                 <span></span>

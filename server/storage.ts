@@ -3,6 +3,7 @@ import {
   invites, assets, auditLogs, honeypotEvents, quarantineItems, responsePlaybooks,
   apiKeys, firewallRules, alertRules, notifications, threatFeedConfigs, responseActions,
   scanResults, supportTickets, networkDevices, networkScans,
+  plans, deviceTokens, agents, agentCommands, terminalAuditLogs, usageTracking,
   type User, type InsertUser,
   type Organization, type InsertOrganization,
   type SecurityEvent, type InsertSecurityEvent,
@@ -25,6 +26,12 @@ import {
   type SupportTicket, type InsertSupportTicket,
   type NetworkDevice, type InsertNetworkDevice,
   type NetworkScan, type InsertNetworkScan,
+  type Plan, type InsertPlan,
+  type DeviceToken, type InsertDeviceToken,
+  type Agent, type InsertAgent,
+  type AgentCommand, type InsertAgentCommand,
+  type TerminalAuditLog, type InsertTerminalAuditLog,
+  type UsageTracking, type InsertUsageTracking,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, gte, count, lt, ne } from "drizzle-orm";
@@ -151,6 +158,33 @@ export interface IStorage {
   getNetworkScans(orgId: number): Promise<NetworkScan[]>;
   createNetworkScan(scan: InsertNetworkScan): Promise<NetworkScan>;
   updateNetworkScan(id: number, data: Partial<NetworkScan>): Promise<NetworkScan | undefined>;
+
+  getPlans(): Promise<Plan[]>;
+  getPlanById(id: number): Promise<Plan | undefined>;
+  getPlanByName(name: string): Promise<Plan | undefined>;
+
+  createDeviceToken(token: InsertDeviceToken): Promise<DeviceToken>;
+  getDeviceToken(token: string): Promise<DeviceToken | undefined>;
+  getDeviceTokensByOrg(orgId: number): Promise<DeviceToken[]>;
+  markTokenUsed(id: number, agentId: number): Promise<void>;
+
+  createAgent(agent: InsertAgent): Promise<Agent>;
+  getAgentById(id: number): Promise<Agent | undefined>;
+  getAgentsByOrg(orgId: number): Promise<Agent[]>;
+  updateAgentHeartbeat(id: number, data: { lastSeen: Date; cpuUsage?: number; ramUsage?: number; ip?: string }): Promise<Agent | undefined>;
+  updateAgentStatus(id: number, status: string): Promise<void>;
+
+  createCommand(cmd: InsertAgentCommand): Promise<AgentCommand>;
+  getCommandById(id: number): Promise<AgentCommand | undefined>;
+  getCommandsByAgent(agentId: number): Promise<AgentCommand[]>;
+  getPendingCommands(agentId: number): Promise<AgentCommand[]>;
+  updateCommandStatus(id: number, data: { status: string; result?: string; executedAt?: Date }): Promise<AgentCommand | undefined>;
+
+  createTerminalLog(log: InsertTerminalAuditLog): Promise<TerminalAuditLog>;
+  getTerminalLogsByAgent(agentId: number, orgId: number): Promise<TerminalAuditLog[]>;
+
+  getUsageForToday(orgId: number): Promise<UsageTracking | undefined>;
+  incrementUsage(orgId: number, field: keyof Pick<UsageTracking, 'agentsRegistered' | 'logsSent' | 'commandsExecuted' | 'terminalCommandsExecuted' | 'threatIntelQueries'>): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -714,6 +748,111 @@ export class DatabaseStorage implements IStorage {
   async updateNetworkScan(id: number, data: Partial<NetworkScan>): Promise<NetworkScan | undefined> {
     const [updated] = await db.update(networkScans).set(data).where(eq(networkScans.id, id)).returning();
     return updated;
+  }
+
+  async getPlans(): Promise<Plan[]> {
+    return db.select().from(plans);
+  }
+
+  async getPlanById(id: number): Promise<Plan | undefined> {
+    const [plan] = await db.select().from(plans).where(eq(plans.id, id));
+    return plan || undefined;
+  }
+
+  async getPlanByName(name: string): Promise<Plan | undefined> {
+    const [plan] = await db.select().from(plans).where(eq(plans.name, name));
+    return plan || undefined;
+  }
+
+  async createDeviceToken(token: InsertDeviceToken): Promise<DeviceToken> {
+    const [created] = await db.insert(deviceTokens).values(token).returning();
+    return created;
+  }
+
+  async getDeviceToken(token: string): Promise<DeviceToken | undefined> {
+    const [dt] = await db.select().from(deviceTokens).where(eq(deviceTokens.token, token));
+    return dt || undefined;
+  }
+
+  async getDeviceTokensByOrg(orgId: number): Promise<DeviceToken[]> {
+    return db.select().from(deviceTokens).where(eq(deviceTokens.organizationId, orgId)).orderBy(desc(deviceTokens.createdAt));
+  }
+
+  async markTokenUsed(id: number, agentId: number): Promise<void> {
+    await db.update(deviceTokens).set({ used: true, usedByAgentId: agentId }).where(eq(deviceTokens.id, id));
+  }
+
+  async createAgent(agent: InsertAgent): Promise<Agent> {
+    const [created] = await db.insert(agents).values(agent).returning();
+    return created;
+  }
+
+  async getAgentById(id: number): Promise<Agent | undefined> {
+    const [agent] = await db.select().from(agents).where(eq(agents.id, id));
+    return agent || undefined;
+  }
+
+  async getAgentsByOrg(orgId: number): Promise<Agent[]> {
+    return db.select().from(agents).where(eq(agents.organizationId, orgId)).orderBy(desc(agents.lastSeen));
+  }
+
+  async updateAgentHeartbeat(id: number, data: { lastSeen: Date; cpuUsage?: number; ramUsage?: number; ip?: string }): Promise<Agent | undefined> {
+    const [updated] = await db.update(agents).set({ ...data, status: "online" }).where(eq(agents.id, id)).returning();
+    return updated;
+  }
+
+  async updateAgentStatus(id: number, status: string): Promise<void> {
+    await db.update(agents).set({ status }).where(eq(agents.id, id));
+  }
+
+  async createCommand(cmd: InsertAgentCommand): Promise<AgentCommand> {
+    const [created] = await db.insert(agentCommands).values(cmd).returning();
+    return created;
+  }
+
+  async getCommandById(id: number): Promise<AgentCommand | undefined> {
+    const [cmd] = await db.select().from(agentCommands).where(eq(agentCommands.id, id)).limit(1);
+    return cmd;
+  }
+
+  async getCommandsByAgent(agentId: number): Promise<AgentCommand[]> {
+    return db.select().from(agentCommands).where(eq(agentCommands.agentId, agentId)).orderBy(desc(agentCommands.createdAt)).limit(100);
+  }
+
+  async getPendingCommands(agentId: number): Promise<AgentCommand[]> {
+    return db.select().from(agentCommands).where(and(eq(agentCommands.agentId, agentId), eq(agentCommands.status, "pending"))).orderBy(agentCommands.createdAt);
+  }
+
+  async updateCommandStatus(id: number, data: { status: string; result?: string; executedAt?: Date }): Promise<AgentCommand | undefined> {
+    const [updated] = await db.update(agentCommands).set(data).where(eq(agentCommands.id, id)).returning();
+    return updated;
+  }
+
+  async createTerminalLog(log: InsertTerminalAuditLog): Promise<TerminalAuditLog> {
+    const [created] = await db.insert(terminalAuditLogs).values(log).returning();
+    return created;
+  }
+
+  async getTerminalLogsByAgent(agentId: number, orgId: number): Promise<TerminalAuditLog[]> {
+    return db.select().from(terminalAuditLogs).where(and(eq(terminalAuditLogs.agentId, agentId), eq(terminalAuditLogs.organizationId, orgId))).orderBy(desc(terminalAuditLogs.createdAt)).limit(200);
+  }
+
+  async getUsageForToday(orgId: number): Promise<UsageTracking | undefined> {
+    const today = new Date().toISOString().slice(0, 10);
+    const [usage] = await db.select().from(usageTracking).where(and(eq(usageTracking.organizationId, orgId), eq(usageTracking.date, today)));
+    return usage || undefined;
+  }
+
+  async incrementUsage(orgId: number, field: keyof Pick<UsageTracking, 'agentsRegistered' | 'logsSent' | 'commandsExecuted' | 'terminalCommandsExecuted' | 'threatIntelQueries'>): Promise<void> {
+    const today = new Date().toISOString().slice(0, 10);
+    const existing = await this.getUsageForToday(orgId);
+    if (existing) {
+      await db.update(usageTracking).set({ [field]: sql`${usageTracking[field]} + 1` }).where(eq(usageTracking.id, existing.id));
+    } else {
+      const initial: InsertUsageTracking = { organizationId: orgId, date: today, agentsRegistered: 0, logsSent: 0, commandsExecuted: 0, terminalCommandsExecuted: 0, threatIntelQueries: 0 };
+      (initial as any)[field] = 1;
+      await db.insert(usageTracking).values(initial);
+    }
   }
 }
 

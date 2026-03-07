@@ -184,3 +184,26 @@ export function requireRole(...roles: string[]) {
     next();
   };
 }
+
+export function requireActiveSubscription(req: any, res: any, next: any) {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: "Authentication required" });
+  const user = req.user as User;
+  if (user.isSuperAdmin) return next();
+  const org = (req as any).__org;
+  if (org && (org.subscriptionStatus === "active" || org.subscriptionStatus === "trial")) return next();
+  res.status(403).json({ error: "Active subscription required", redirect: "/choose-plan" });
+}
+
+export function requirePlanFeature(feature: string) {
+  return async (req: any, res: any, next: any) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: "Authentication required" });
+    const user = req.user as User;
+    if (user.isSuperAdmin) return next();
+    const org = await storage.getOrganization(user.organizationId!);
+    if (!org?.planId) return res.status(403).json({ error: "No plan selected", redirect: "/choose-plan" });
+    const plan = await storage.getPlanById(org.planId);
+    if (!plan) return res.status(403).json({ error: "Plan not found" });
+    if (!(plan as any)[feature]) return res.status(403).json({ error: `Feature not available on your plan. Upgrade to access this feature.`, feature });
+    next();
+  };
+}

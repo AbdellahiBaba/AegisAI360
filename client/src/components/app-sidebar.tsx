@@ -5,6 +5,7 @@ import {
   LayoutDashboard, ShieldAlert, Bug, Brain, Database,
   Network, Target, Clock, Radio, Lock, BookOpen, FileText,
   Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar, LifeBuoy, Server, Key,
+  Monitor, Download, Terminal,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -81,6 +82,11 @@ export function AppSidebar() {
     { title: t("sidebar.policies"), testId: "policies", url: "/policies", icon: FileText },
   ];
 
+  const endpointItems: NavItem[] = [
+    { title: "Endpoints", testId: "endpoints", url: "/endpoints", icon: Monitor },
+    { title: "Deploy Agent", testId: "download-agent", url: "/download-agent", icon: Download },
+  ];
+
   const intelItems: NavItem[] = [
     { title: t("sidebar.threatIntel"), testId: "threat-intel", url: "/threat-intel", icon: Database },
     { title: t("sidebar.networkMap"), testId: "network-map", url: "/network-map", icon: Network },
@@ -91,6 +97,7 @@ export function AppSidebar() {
     { title: t("sidebar.settings"), testId: "settings", url: "/settings", icon: Settings },
     { title: t("sidebar.billing"), testId: "billing", url: "/billing", icon: CreditCard },
     { title: t("sidebar.support"), testId: "support", url: "/support", icon: LifeBuoy },
+    { title: "Agent Docs", testId: "docs-agent", url: "/docs/agent", icon: BookOpen },
   ];
 
   const fullAdminItems = [
@@ -112,6 +119,7 @@ export function AppSidebar() {
         <NavGroup label={t("sidebar.command")} items={commandItems} location={location} />
         <NavGroup label={t("sidebar.detect")} items={detectItems} location={location} />
         <NavGroup label={t("sidebar.respond")} items={respondItems} location={location} />
+        <NavGroup label="ENDPOINTS" items={endpointItems} location={location} />
         <NavGroup label={t("sidebar.intel")} items={intelItems} location={location} />
         <NavGroup label={t("sidebar.admin")} items={fullAdminItems} location={location} />
       </SidebarContent>

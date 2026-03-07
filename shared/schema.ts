@@ -12,6 +12,8 @@ export const organizations = pgTable("organizations", {
   plan: text("plan").notNull().default("starter"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  subscriptionStatus: text("subscription_status").notNull().default("inactive"),
+  planId: integer("plan_id"),
   maxUsers: integer("max_users").notNull().default(5),
   suspended: boolean("suspended").notNull().default(false),
   defenseMode: text("defense_mode").notNull().default("auto"),
@@ -384,3 +386,99 @@ export const networkScans = pgTable("network_scans", {
 export const insertNetworkScanSchema = createInsertSchema(networkScans).omit({ id: true, createdAt: true });
 export type InsertNetworkScan = z.infer<typeof insertNetworkScanSchema>;
 export type NetworkScan = typeof networkScans.$inferSelect;
+
+export const plans = pgTable("plans", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  price: integer("price").notNull().default(0),
+  maxAgents: integer("max_agents").notNull().default(1),
+  maxLogsPerDay: integer("max_logs_per_day").notNull().default(100),
+  maxCommandsPerDay: integer("max_commands_per_day").notNull().default(10),
+  maxThreatIntelQueries: integer("max_threat_intel_queries").notNull().default(10),
+  allowNetworkIsolation: boolean("allow_network_isolation").notNull().default(false),
+  allowProcessKill: boolean("allow_process_kill").notNull().default(false),
+  allowFileScan: boolean("allow_file_scan").notNull().default(false),
+  allowEndpointDownload: boolean("allow_endpoint_download").notNull().default(false),
+  allowTerminalAccess: boolean("allow_terminal_access").notNull().default(false),
+  allowThreatIntel: boolean("allow_threat_intel").notNull().default(false),
+  allowAdvancedAnalytics: boolean("allow_advanced_analytics").notNull().default(false),
+});
+
+export const insertPlanSchema = createInsertSchema(plans).omit({ id: true });
+export type InsertPlan = z.infer<typeof insertPlanSchema>;
+export type Plan = typeof plans.$inferSelect;
+
+export const deviceTokens = pgTable("device_tokens", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  token: text("token").notNull().unique(),
+  used: boolean("used").notNull().default(false),
+  usedByAgentId: integer("used_by_agent_id"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertDeviceTokenSchema = createInsertSchema(deviceTokens).omit({ id: true, createdAt: true, used: true, usedByAgentId: true });
+export type InsertDeviceToken = z.infer<typeof insertDeviceTokenSchema>;
+export type DeviceToken = typeof deviceTokens.$inferSelect;
+
+export const agents = pgTable("agents", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  deviceToken: text("device_token").notNull(),
+  hostname: text("hostname").notNull(),
+  os: text("os"),
+  ip: text("ip"),
+  lastSeen: timestamp("last_seen").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  status: text("status").notNull().default("online"),
+  cpuUsage: integer("cpu_usage"),
+  ramUsage: integer("ram_usage"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertAgentSchema = createInsertSchema(agents).omit({ id: true, createdAt: true, lastSeen: true });
+export type InsertAgent = z.infer<typeof insertAgentSchema>;
+export type Agent = typeof agents.$inferSelect;
+
+export const agentCommands = pgTable("agent_commands", {
+  id: serial("id").primaryKey(),
+  agentId: integer("agent_id").notNull().references(() => agents.id),
+  command: text("command").notNull(),
+  params: text("params"),
+  status: text("status").notNull().default("pending"),
+  result: text("result"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  executedAt: timestamp("executed_at"),
+});
+
+export const insertAgentCommandSchema = createInsertSchema(agentCommands).omit({ id: true, createdAt: true, executedAt: true, result: true });
+export type InsertAgentCommand = z.infer<typeof insertAgentCommandSchema>;
+export type AgentCommand = typeof agentCommands.$inferSelect;
+
+export const terminalAuditLogs = pgTable("terminal_audit_logs", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  agentId: integer("agent_id").notNull().references(() => agents.id),
+  command: text("command").notNull(),
+  output: text("output"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertTerminalAuditLogSchema = createInsertSchema(terminalAuditLogs).omit({ id: true, createdAt: true });
+export type InsertTerminalAuditLog = z.infer<typeof insertTerminalAuditLogSchema>;
+export type TerminalAuditLog = typeof terminalAuditLogs.$inferSelect;
+
+export const usageTracking = pgTable("usage_tracking", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  date: text("date").notNull(),
+  agentsRegistered: integer("agents_registered").notNull().default(0),
+  logsSent: integer("logs_sent").notNull().default(0),
+  commandsExecuted: integer("commands_executed").notNull().default(0),
+  terminalCommandsExecuted: integer("terminal_commands_executed").notNull().default(0),
+  threatIntelQueries: integer("threat_intel_queries").notNull().default(0),
+});
+
+export const insertUsageTrackingSchema = createInsertSchema(usageTracking).omit({ id: true });
+export type InsertUsageTracking = z.infer<typeof insertUsageTrackingSchema>;
+export type UsageTracking = typeof usageTracking.$inferSelect;

@@ -1,6 +1,6 @@
 import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -42,6 +42,13 @@ import TermsPage from "@/pages/public/terms";
 import RefundPage from "@/pages/public/refund";
 import LandingPage from "@/pages/landing";
 import HashToolsPage from "@/pages/hash-tools";
+import ChoosePlan from "@/pages/choose-plan";
+import BillingSuccess from "@/pages/billing-success";
+import BillingError from "@/pages/billing-error";
+import Endpoints from "@/pages/endpoints";
+import DownloadAgent from "@/pages/download-agent";
+import AgentTerminal from "@/pages/agent-terminal";
+import DocsAgent from "@/pages/docs-agent";
 
 function AppRouter() {
   return (
@@ -61,6 +68,8 @@ function AppRouter() {
       <Route path="/playbooks" component={Playbooks} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/billing" component={Billing} />
+      <Route path="/billing/success" component={BillingSuccess} />
+      <Route path="/billing/error" component={BillingError} />
       <Route path="/firewall" component={Firewall} />
       <Route path="/alert-rules" component={AlertRules} />
       <Route path="/scanner" component={ScannerPage} />
@@ -68,6 +77,10 @@ function AppRouter() {
       <Route path="/support" component={SupportPage} />
       <Route path="/network-monitor" component={NetworkMonitorPage} />
       <Route path="/super-admin" component={SuperAdmin} />
+      <Route path="/endpoints" component={Endpoints} />
+      <Route path="/download-agent" component={DownloadAgent} />
+      <Route path="/endpoints/:agentId/terminal" component={AgentTerminal} />
+      <Route path="/docs/agent" component={DocsAgent} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -109,10 +122,17 @@ function AppLayout() {
   );
 }
 
+const BILLING_ROUTES = ["/choose-plan", "/billing", "/billing/success", "/billing/error"];
+
 function AuthenticatedApp() {
   const { t } = useTranslation();
   const { user, isLoading } = useAuth();
   const [location] = useLocation();
+
+  const { data: billingStatus } = useQuery<any>({
+    queryKey: ["/api/billing/status"],
+    enabled: !!user && !user.isSuperAdmin,
+  });
 
   if (isLoading) {
     return (
@@ -134,6 +154,22 @@ function AuthenticatedApp() {
 
   if (location === "/auth") {
     return <Redirect to="/" />;
+  }
+
+  if (
+    !user.isSuperAdmin &&
+    billingStatus &&
+    billingStatus.subscriptionStatus !== "active" &&
+    billingStatus.subscriptionStatus !== "trial" &&
+    !BILLING_ROUTES.includes(location)
+  ) {
+    return <ChoosePlan />;
+  }
+
+  if (BILLING_ROUTES.includes(location) && location !== "/billing") {
+    if (location === "/choose-plan") return <ChoosePlan />;
+    if (location === "/billing/success") return <BillingSuccess />;
+    if (location === "/billing/error") return <BillingError />;
   }
 
   return <AppLayout />;
