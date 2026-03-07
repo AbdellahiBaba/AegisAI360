@@ -1,0 +1,117 @@
+Build a fully production-ready Windows endpoint agent for the AegisAI360 Cyber Defense platform.  
+The agent must support silent deployment, backend-controlled authentication, auto-update, telemetry, and remote command execution.
+
+====================================================
+A. BRANDING & STRUCTURE
+====================================================
+Product name: AegisAI360 Endpoint Agent  
+Company: AegisAI Cyber Defense  
+Service name: AegisAI360Agent  
+Install path: C:\Program Files\AegisAI360\Agent  
+Config file: config.json  
+Log folder: logs/  
+Backend base URL: https://aegisai360.com/api  
+
+Organize the project into these files:
+
+/agent
+  main.go
+  service.go
+  backend.go
+  telemetry.go
+  commands.go
+  updater.go
+  registration.go
+  config.go
+  utils.go
+
+====================================================
+B. SILENT DEPLOYMENT & BACKEND TOKEN GENERATION
+====================================================
+The agent must install silently with no UI.  
+On first launch:
+
+1. Generate a unique device fingerprint (UUID + hostname + OS).
+2. Send a registration request:
+   POST /api/agent/register
+   Payload:
+   {
+     "fingerprint": "...",
+     "hostname": "...",
+     "os": "...",
+     "version": "<agentVersion>"
+   }
+
+3. Backend responds with:
+   {
+     "agentId": "...",
+     "token": "JWT or API token"
+   }
+
+4. Save token + agentId to config.json.
+5. All future requests must include:
+   Authorization: Bearer <token>
+
+====================================================
+C. TELEMETRY SYSTEM (EVERY 30 SECONDS)
+====================================================
+Collect and send:
+
+- CPU usage %
+- RAM usage %
+- OS version
+- Hostname
+- Running processes
+- Active network connections
+- Agent version
+- Last update time
+- Service uptime
+
+Send to:
+POST /api/agent/telemetry
+
+Payload:
+{
+  "agentId": "...",
+  "cpu": ...,
+  "ram": ...,
+  "os": "...",
+  "processes": [...],
+  "connections": [...],
+  "version": "...",
+  "timestamp": "..."
+}
+
+====================================================
+D. REMOTE COMMAND EXECUTION (EVERY 15 SECONDS)
+====================================================
+Poll:
+GET /api/agent/commands/<agentId>
+
+Supported commands:
+- "ping" → respond "pong"
+- "get_info" → send full telemetry immediately
+- "restart" → restart the agent service
+- "update" → trigger auto-update
+- "exec:<command>" → run safe shell command and return output
+
+Send results to:
+POST /api/agent/command-result
+
+====================================================
+E. AUTO-UPDATE SYSTEM
+====================================================
+Every 5 minutes:
+
+1. Check:
+   GET /api/agent/update?version=<currentVersion>
+
+2. If update available:
+   - Download update file (agent-update.exe)
+   - Verify SHA256 checksum
+   - Stop service
+   - Replace agent.exe
+   - Restart service
+   - Report update success to backend
+
+Log all
