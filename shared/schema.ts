@@ -482,3 +482,46 @@ export const usageTracking = pgTable("usage_tracking", {
 export const insertUsageTrackingSchema = createInsertSchema(usageTracking).omit({ id: true });
 export type InsertUsageTracking = z.infer<typeof insertUsageTrackingSchema>;
 export type UsageTracking = typeof usageTracking.$inferSelect;
+
+export const packetCaptures = pgTable("packet_captures", {
+  id: serial("id").primaryKey(),
+  agentId: integer("agent_id").notNull().references(() => agents.id),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  captureData: jsonb("capture_data").notNull(),
+  duration: integer("duration").notNull(),
+  packetCount: integer("packet_count").notNull().default(0),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertPacketCaptureSchema = createInsertSchema(packetCaptures).omit({ id: true, createdAt: true });
+export type InsertPacketCapture = z.infer<typeof insertPacketCaptureSchema>;
+export type PacketCapture = typeof packetCaptures.$inferSelect;
+
+export const arpAlerts = pgTable("arp_alerts", {
+  id: serial("id").primaryKey(),
+  agentId: integer("agent_id").notNull().references(() => agents.id),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  ip: text("ip").notNull(),
+  oldMac: text("old_mac"),
+  newMac: text("new_mac").notNull(),
+  alertType: text("alert_type").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertArpAlertSchema = createInsertSchema(arpAlerts).omit({ id: true, createdAt: true });
+export type InsertArpAlert = z.infer<typeof insertArpAlertSchema>;
+export type ArpAlert = typeof arpAlerts.$inferSelect;
+
+export const bandwidthLogs = pgTable("bandwidth_logs", {
+  id: serial("id").primaryKey(),
+  agentId: integer("agent_id").notNull().references(() => agents.id),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  interfaceName: text("interface_name").notNull(),
+  bytesIn: bigint("bytes_in", { mode: "number" }).notNull().default(0),
+  bytesOut: bigint("bytes_out", { mode: "number" }).notNull().default(0),
+  timestamp: timestamp("timestamp").default(sql`CURRENT_TIMESTAMP`).notNull(),
+})
+
+export const insertBandwidthLogSchema = createInsertSchema(bandwidthLogs).omit({ id: true, timestamp: true });
+export type InsertBandwidthLog = z.infer<typeof insertBandwidthLogSchema>;
+export type BandwidthLog = typeof bandwidthLogs.$inferSelect;

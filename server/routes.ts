@@ -477,6 +477,65 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/packet-captures", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const captures = await storage.getPacketCaptures(orgId);
+      res.json(captures);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch packet captures" });
+    }
+  });
+
+  app.get("/api/packet-captures/:agentId", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const agentId = parseInt(req.params.agentId);
+      const agent = await storage.getAgentById(agentId);
+      if (!agent || agent.organizationId !== orgId) return res.status(404).json({ error: "Agent not found" });
+      const captures = await storage.getPacketCapturesByAgent(agentId, orgId);
+      res.json(captures);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch packet captures" });
+    }
+  });
+
+  app.get("/api/arp-alerts", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const alerts = await storage.getArpAlerts(orgId);
+      res.json(alerts);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch ARP alerts" });
+    }
+  });
+
+  app.get("/api/arp-alerts/:agentId", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const agentId = parseInt(req.params.agentId);
+      const agent = await storage.getAgentById(agentId);
+      if (!agent || agent.organizationId !== orgId) return res.status(404).json({ error: "Agent not found" });
+      const alerts = await storage.getArpAlertsByAgent(agentId, orgId);
+      res.json(alerts);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch ARP alerts" });
+    }
+  });
+
+  app.get("/api/bandwidth/:agentId", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const agentId = parseInt(req.params.agentId);
+      const agent = await storage.getAgentById(agentId);
+      if (!agent || agent.organizationId !== orgId) return res.status(404).json({ error: "Agent not found" });
+      const logs = await storage.getBandwidthLogs(agentId, orgId);
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch bandwidth logs" });
+    }
+  });
+
   app.post("/api/network/assets", async (req, res) => {
     try {
       const orgId = getOrgId(req);

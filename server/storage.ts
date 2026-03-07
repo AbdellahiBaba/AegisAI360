@@ -4,6 +4,7 @@ import {
   apiKeys, firewallRules, alertRules, notifications, threatFeedConfigs, responseActions,
   scanResults, supportTickets, networkDevices, networkScans,
   plans, deviceTokens, agents, agentCommands, terminalAuditLogs, usageTracking,
+  packetCaptures, arpAlerts, bandwidthLogs,
   type User, type InsertUser,
   type Organization, type InsertOrganization,
   type SecurityEvent, type InsertSecurityEvent,
@@ -32,6 +33,9 @@ import {
   type AgentCommand, type InsertAgentCommand,
   type TerminalAuditLog, type InsertTerminalAuditLog,
   type UsageTracking, type InsertUsageTracking,
+  type PacketCapture, type InsertPacketCapture,
+  type ArpAlert, type InsertArpAlert,
+  type BandwidthLog, type InsertBandwidthLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, gte, count, lt, ne } from "drizzle-orm";
@@ -186,6 +190,17 @@ export interface IStorage {
 
   getUsageForToday(orgId: number): Promise<UsageTracking | undefined>;
   incrementUsage(orgId: number, field: keyof Pick<UsageTracking, 'agentsRegistered' | 'logsSent' | 'commandsExecuted' | 'terminalCommandsExecuted' | 'threatIntelQueries'>): Promise<void>;
+
+  createPacketCapture(capture: InsertPacketCapture): Promise<PacketCapture>;
+  getPacketCaptures(orgId: number): Promise<PacketCapture[]>;
+  getPacketCapturesByAgent(agentId: number, orgId: number): Promise<PacketCapture[]>;
+
+  createArpAlert(alert: InsertArpAlert): Promise<ArpAlert>;
+  getArpAlerts(orgId: number): Promise<ArpAlert[]>;
+  getArpAlertsByAgent(agentId: number, orgId: number): Promise<ArpAlert[]>;
+
+  createBandwidthLog(log: InsertBandwidthLog): Promise<BandwidthLog>;
+  getBandwidthLogs(agentId: number, orgId: number): Promise<BandwidthLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -859,6 +874,41 @@ export class DatabaseStorage implements IStorage {
       (initial as any)[field] = 1;
       await db.insert(usageTracking).values(initial);
     }
+  }
+
+  async createPacketCapture(capture: InsertPacketCapture): Promise<PacketCapture> {
+    const [created] = await db.insert(packetCaptures).values(capture).returning();
+    return created;
+  }
+
+  async getPacketCaptures(orgId: number): Promise<PacketCapture[]> {
+    return db.select().from(packetCaptures).where(eq(packetCaptures.organizationId, orgId)).orderBy(desc(packetCaptures.createdAt)).limit(100);
+  }
+
+  async getPacketCapturesByAgent(agentId: number, orgId: number): Promise<PacketCapture[]> {
+    return db.select().from(packetCaptures).where(and(eq(packetCaptures.agentId, agentId), eq(packetCaptures.organizationId, orgId))).orderBy(desc(packetCaptures.createdAt)).limit(50);
+  }
+
+  async createArpAlert(alert: InsertArpAlert): Promise<ArpAlert> {
+    const [created] = await db.insert(arpAlerts).values(alert).returning();
+    return created;
+  }
+
+  async getArpAlerts(orgId: number): Promise<ArpAlert[]> {
+    return db.select().from(arpAlerts).where(eq(arpAlerts.organizationId, orgId)).orderBy(desc(arpAlerts.createdAt)).limit(200);
+  }
+
+  async getArpAlertsByAgent(agentId: number, orgId: number): Promise<ArpAlert[]> {
+    return db.select().from(arpAlerts).where(and(eq(arpAlerts.agentId, agentId), eq(arpAlerts.organizationId, orgId))).orderBy(desc(arpAlerts.createdAt)).limit(100);
+  }
+
+  async createBandwidthLog(log: InsertBandwidthLog): Promise<BandwidthLog> {
+    const [created] = await db.insert(bandwidthLogs).values(log).returning();
+    return created;
+  }
+
+  async getBandwidthLogs(agentId: number, orgId: number): Promise<BandwidthLog[]> {
+    return db.select().from(bandwidthLogs).where(and(eq(bandwidthLogs.agentId, agentId), eq(bandwidthLogs.organizationId, orgId))).orderBy(desc(bandwidthLogs.timestamp)).limit(200);
   }
 }
 

@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
 import { requireAuth, requireRole, requirePlanFeature } from "./auth";
-import type { User } from "@shared/schema";
+import type { User, InsertPacketCapture, InsertArpAlert, InsertBandwidthLog } from "@shared/schema";
 
 const TERMINAL_WHITELIST_LINUX = ["whoami", "ifconfig", "ip a", "ip addr", "netstat", "ss", "ps aux", "ps -ef", "ls", "cat /etc/os-release", "uname -a", "df -h", "free -m", "uptime", "hostname", "w", "last", "top -bn1"];
 const TERMINAL_WHITELIST_WINDOWS = ["whoami", "ipconfig", "netstat", "tasklist", "dir", "systeminfo", "hostname", "ver"];
@@ -135,6 +135,21 @@ export function createAgentRouter(): Router {
             { command: "event_log", description: "Query Windows Event Log", params: [
               { name: "log", type: "string", required: false, description: "Log name: System, Application, Security (default: System)" },
               { name: "count", type: "number", required: false, description: "Number of entries (default: 50)" },
+            ]},
+          ],
+        },
+        {
+          name: "Traffic & Monitoring",
+          commands: [
+            { command: "packet_capture", description: "Capture and analyze network traffic (Wireshark-style)", params: [
+              { name: "duration", type: "number", required: false, description: "Capture duration in seconds (default: 10, max: 60)" },
+            ]},
+            { command: "arp_monitor", description: "Scan ARP table for spoofing and rogue devices", params: [] },
+            { command: "bandwidth_stats", description: "Get per-interface bandwidth usage statistics", params: [] },
+            { command: "rogue_scan", description: "Discover and identify all devices on local network", params: [] },
+            { command: "vuln_scan", description: "Scan a target IP for open ports and vulnerabilities", params: [
+              { name: "target", type: "string", required: false, description: "Target IP (default: local subnet scan)" },
+              { name: "portRange", type: "string", required: false, description: "Port range e.g. 1-1024 (default: top 100)" },
             ]},
           ],
         },
@@ -398,6 +413,96 @@ export function createAgentRouter(): Router {
       res.json({ status: "ok" });
     } catch (error) {
       res.status(500).json({ error: "Failed to update command result" });
+    }
+  });
+
+  router.post("/packet-capture", async (req, res) => {
+    try {
+      const { agentId, token, captureData, duration, packetCount } = z.object({
+        agentId: z.number(),
+        token: z.string(),
+        captureData: z.any(),
+        duration: z.number(),
+        packetCount: z.number(),
+      }).parse(req.body);
+
+      const agent = await storage.getAgentById(agentId);
+      if (!agent || agent.deviceToken !== token) return res.status(401).json({ error: "Invalid agent credentials" });
+
+      const capture = await storage.createPacketCapture({
+        agentId,
+        organizationId: agent.organizationId,
+        captureData,
+        duration,
+        packetCount,
+      });
+      res.status(201).json({ id: capture.id, status: "ok" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to store packet capture" });
+    }
+  });
+
+  router.post("/arp-alerts", async (req, res) => {
+    try {
+      const { agentId, token, alerts } = z.object({
+        agentId: z.number(),
+        token: z.string(),
+        alerts: z.array(z.object({
+          ip: z.string(),
+          oldMac: z.string().optional(),
+          newMac: z.string(),
+          alertType: z.string(),
+        })),
+      }).parse(req.body);
+
+      const agent = await storage.getAgentById(agentId);
+      if (!agent || agent.deviceToken !== token) return res.status(401).json({ error: "Invalid agent credentials" });
+
+      const created = [];
+      for (const alert of alerts) {
+        const a = await storage.createArpAlert({
+          agentId,
+          organizationId: agent.organizationId,
+          ip: alert.ip,
+          oldMac: alert.oldMac || null,
+          newMac: alert.newMac,
+          alertType: alert.alertType,
+        });
+        created.push(a.id);
+      }
+      res.status(201).json({ ids: created, status: "ok" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to store ARP alerts" });
+    }
+  });
+
+  router.post("/bandwidth", async (req, res) => {
+    try {
+      const { agentId, token, interfaces } = z.object({
+        agentId: z.number(),
+        token: z.string(),
+        interfaces: z.array(z.object({
+          interfaceName: z.string(),
+          bytesIn: z.number(),
+          bytesOut: z.number(),
+        })),
+      }).parse(req.body);
+
+      const agent = await storage.getAgentById(agentId);
+      if (!agent || agent.deviceToken !== token) return res.status(401).json({ error: "Invalid agent credentials" });
+
+      for (const iface of interfaces) {
+        await storage.createBandwidthLog({
+          agentId,
+          organizationId: agent.organizationId,
+          interfaceName: iface.interfaceName,
+          bytesIn: iface.bytesIn,
+          bytesOut: iface.bytesOut,
+        });
+      }
+      res.json({ status: "ok" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to store bandwidth data" });
     }
   });
 
