@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Download, Copy, Key, Monitor, Apple, Terminal as TerminalIcon, CheckCircle, AlertCircle } from "lucide-react";
+import { Loader2, Download, Copy, Key, Monitor, Apple, Terminal as TerminalIcon, CheckCircle, AlertCircle, Settings, Shield } from "lucide-react";
 
 export default function DownloadAgent() {
   const { toast } = useToast();
@@ -42,7 +42,7 @@ export default function DownloadAgent() {
     <div className="p-6 space-y-6 max-w-4xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-download-title">Deploy Endpoint Agent</h1>
-        <p className="text-muted-foreground text-sm">Download the agent, generate a token, and run it on your endpoints</p>
+        <p className="text-muted-foreground text-sm">Download the agent, generate a token, and deploy it on your endpoints</p>
       </div>
 
       <Card data-testid="card-download-agent">
@@ -158,50 +158,96 @@ export default function DownloadAgent() {
             <TerminalIcon className="w-5 h-5" />
             Step 3: Run the Agent
           </CardTitle>
-          <CardDescription>Open Command Prompt (or PowerShell) and run the agent with your token</CardDescription>
+          <CardDescription>Choose your preferred method to start the agent</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="bg-zinc-950 text-zinc-100 rounded-lg p-4 font-mono text-sm space-y-2" data-testid="code-run-command">
-            <p className="text-zinc-500">:: Navigate to your Downloads folder</p>
-            <p>cd %USERPROFILE%\Downloads</p>
-            <p className="text-zinc-500 mt-3">:: Run the agent with your server URL and device token</p>
-            <p>AegisAI360-Agent.exe https://aegisai360.com {availableTokens.length > 0 ? availableTokens[0].token : "YOUR_DEVICE_TOKEN"}</p>
+        <CardContent className="space-y-5">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Shield className="w-4 h-4 text-primary" />
+              <h4 className="text-sm font-medium" data-testid="text-method-doubleclick">Option A: Double-Click (Easiest)</h4>
+            </div>
+            <p className="text-sm text-muted-foreground mb-2">
+              Simply double-click the downloaded <code className="text-primary">AegisAI360-Agent.exe</code> file. 
+              The agent will launch an interactive setup wizard where you can enter your server URL and device token. 
+              Your configuration will be saved automatically for future runs.
+            </p>
           </div>
 
-          {availableTokens.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => copyToClipboard(`AegisAI360-Agent.exe https://aegisai360.com ${availableTokens[0].token}`)}
-                data-testid="button-copy-run-command"
-              >
-                <Copy className="w-4 h-4 me-2" />
-                Copy Full Command
-              </Button>
-              <span className="text-xs text-muted-foreground">Using your first available token</span>
+          <div className="border-t pt-4">
+            <div className="flex items-center gap-2 mb-2">
+              <TerminalIcon className="w-4 h-4 text-primary" />
+              <h4 className="text-sm font-medium" data-testid="text-method-cli">Option B: Command Line</h4>
             </div>
-          )}
+            <div className="bg-zinc-950 text-zinc-100 rounded-lg p-4 font-mono text-sm space-y-2" data-testid="code-run-command">
+              <p className="text-zinc-500">:: Navigate to your Downloads folder</p>
+              <p>cd %USERPROFILE%\Downloads</p>
+              <p className="text-zinc-500 mt-3">:: Run the agent with your server URL and device token</p>
+              <p>AegisAI360-Agent.exe https://aegisai360.com {availableTokens.length > 0 ? availableTokens[0].token : "YOUR_DEVICE_TOKEN"}</p>
+            </div>
+
+            {availableTokens.length > 0 && (
+              <div className="flex items-center gap-2 mt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copyToClipboard(`AegisAI360-Agent.exe https://aegisai360.com ${availableTokens[0].token}`)}
+                  data-testid="button-copy-run-command"
+                >
+                  <Copy className="w-4 h-4 me-2" />
+                  Copy Full Command
+                </Button>
+                <span className="text-xs text-muted-foreground">Using your first available token</span>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t pt-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Settings className="w-4 h-4 text-primary" />
+              <h4 className="text-sm font-medium" data-testid="text-method-service">Option C: Install as Windows Service</h4>
+            </div>
+            <p className="text-sm text-muted-foreground mb-2">
+              For production deployments, install the agent as a Windows service so it starts automatically on boot and runs in the background.
+            </p>
+            <div className="bg-zinc-950 text-zinc-100 rounded-lg p-4 font-mono text-sm space-y-2" data-testid="code-service-commands">
+              <p className="text-zinc-500">:: First, run setup to save your configuration</p>
+              <p>AegisAI360-Agent.exe --setup</p>
+              <p className="text-zinc-500 mt-3">:: Then install as a Windows service (run as Administrator)</p>
+              <p>AegisAI360-Agent.exe --install</p>
+              <p className="text-zinc-500 mt-3">:: Start the service</p>
+              <p>sc start AegisAI360Agent</p>
+              <p className="text-zinc-500 mt-3">:: Other commands</p>
+              <p>AegisAI360-Agent.exe --status     :: Check service status</p>
+              <p>AegisAI360-Agent.exe --uninstall   :: Remove the service</p>
+            </div>
+          </div>
 
           <div className="mt-4 space-y-2 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">What happens next:</p>
+            <p className="font-medium text-foreground">What happens when the agent connects:</p>
             <ul className="list-disc list-inside space-y-1 ms-2">
               <li>The agent registers with AegisAI360 using the device token (one-time use)</li>
               <li>It starts sending heartbeats with CPU/RAM metrics every 30 seconds</li>
-              <li>It polls for commands from the dashboard every 5 seconds</li>
-              <li>You will see the endpoint appear in your dashboard within seconds</li>
+              <li>It sends full system telemetry (disk, processes, network) every 30 seconds</li>
+              <li>It polls for remote commands from the dashboard every 5 seconds</li>
+              <li>It checks for agent updates every 5 minutes with SHA256 verification</li>
+              <li>If disconnected, it automatically retries with exponential backoff</li>
+              <li>Your endpoint will appear in the dashboard within seconds</li>
             </ul>
           </div>
 
           <div className="mt-4 p-3 bg-muted/50 rounded text-sm" data-testid="text-config-note">
-            <p className="font-medium mb-1">Alternative: Config File</p>
+            <p className="font-medium mb-1">Config File Reference</p>
             <p className="text-muted-foreground">
-              Instead of passing arguments on the command line, you can create a <code className="text-primary">config.json</code> file
-              in the same folder as the .exe:
+              The agent saves its configuration to <code className="text-primary">config.json</code> in the same folder as the .exe.
+              You can also create or edit this file manually:
             </p>
             <pre className="bg-zinc-950 text-zinc-100 rounded p-3 mt-2 text-xs overflow-x-auto">{`{
   "serverUrl": "https://aegisai360.com",
-  "apiKey": "${availableTokens.length > 0 ? availableTokens[0].token : "agt_YOUR_TOKEN_HERE"}"
+  "apiKey": "${availableTokens.length > 0 ? availableTokens[0].token : "agt_YOUR_TOKEN_HERE"}",
+  "heartbeatInterval": 30,
+  "commandPollInterval": 5,
+  "telemetryInterval": 30,
+  "updateCheckInterval": 300
 }`}</pre>
           </div>
         </CardContent>
