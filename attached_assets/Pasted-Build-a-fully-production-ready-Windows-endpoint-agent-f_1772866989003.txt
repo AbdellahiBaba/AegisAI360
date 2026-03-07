@@ -1,0 +1,65 @@
+Build a fully production-ready Windows endpoint agent for the AegisAI360 Cyber Defense platform.
+
+Requirements:
+
+1. Branding:
+   - Use the name: AegisAI360 Endpoint Agent
+   - Use the company: AegisAI Cyber Defense
+   - Include constants for branding (service name, display name, log folder, registry keys).
+   - Include comments showing where the installer branding (BMP/ICO) matches the agent branding.
+
+2. Backend Connectivity:
+   - The agent must connect to a backend API at:
+       https://aegisai360.com/api/agent
+   - On startup, the agent should:
+       a. Register the device (hostname, OS, UUID).
+       b. Authenticate using an API key stored in a config file.
+       c. Send a heartbeat every 30 seconds.
+       d. Send logs and alerts to the backend.
+   - Use HTTPS with proper error handling and retry logic.
+
+3. Core Agent Features:
+   - Run as a Windows service.
+   - Auto-restart if the service crashes.
+   - Create a logs folder at:
+       C:\Program Files\AegisAI360\Agent\logs
+   - Log all actions to a rotating log file.
+   - Collect system info (CPU, RAM, OS version).
+   - Monitor running processes.
+   - Monitor network connections.
+   - Monitor important system events.
+   - Send telemetry to the backend.
+
+4. Remote Command Execution:
+   - Poll the backend for commands.
+   - Supported commands:
+       - "ping" → respond with "pong"
+       - "get_info" → send system info
+       - "restart" → restart the agent service
+       - "update" → download and replace the agent executable
+   - All commands must be logged.
+
+5. Auto-Update System:
+   - Check backend for new version.
+   - Download update securely.
+   - Stop service, replace binary, restart service.
+
+6. Security Requirements:
+   - Validate SSL certificates.
+   - Use secure API key storage.
+   - Never expose sensitive data in logs.
+   - Use safe error handling.
+
+7. File Structure:
+   - main.go (entry point)
+   - service.go (Windows service logic)
+   - backend.go (API communication)
+   - telemetry.go (system monitoring)
+   - commands.go (remote command handler)
+   - updater.go (auto-update logic)
+   - config.json (API key + settings)
+
+8. Output:
+   - Provide complete Go code for all files.
+   - Include instructions for building the Windows service binary.
+   - Ensure the agent is fully functional and production-ready.
