@@ -15,20 +15,25 @@ export default function ChoosePlan() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
-  const { data: plans, isLoading } = useQuery<any[]>({
+  const { data: plans, isLoading, isError, refetch } = useQuery<any[]>({
     queryKey: ["/api/plans"],
+    retry: 3,
+    retryDelay: 1000,
   });
 
   const checkoutMutation = useMutation({
     mutationFn: async ({ planName, priceId }: { planName: string; priceId?: string }) => {
       const res = await apiRequest("POST", "/api/billing/create-checkout", { planName, priceId });
-      return res.json();
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Checkout failed");
+      return data;
     },
     onSuccess: (data) => {
       if (data.url) window.location.href = data.url;
+      else toast({ title: "Error", description: "No checkout URL received. Please try again.", variant: "destructive" });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to start checkout. Please try again.", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: "Checkout Error", description: error?.message || "Failed to start checkout. Please try again.", variant: "destructive" });
     },
   });
 
@@ -55,6 +60,19 @@ export default function ChoosePlan() {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background" data-testid="loading-plans">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (isError || (!isLoading && (!plans || plans.length === 0))) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background gap-4" data-testid="error-plans">
+        <p className="text-muted-foreground">Failed to load plans. Please try again.</p>
+        <Button onClick={() => refetch()} data-testid="button-retry-plans">Retry</Button>
+        <Button variant="ghost" onClick={() => logoutMutation.mutate()} data-testid="button-logout-error">
+          <LogOut className="w-4 h-4 me-2" />
+          Logout
+        </Button>
       </div>
     );
   }

@@ -1490,9 +1490,16 @@ export async function registerRoutes(
       });
 
       res.json({ url: session.url });
-    } catch (error) {
-      console.error("Checkout error:", error);
-      res.status(500).json({ error: "Failed to create checkout session" });
+    } catch (error: any) {
+      const msg = error?.message || String(error);
+      console.error("Checkout error:", msg);
+      if (msg.includes("connection not found") || msg.includes("X-Replit-Token")) {
+        res.status(503).json({ error: "Payment service temporarily unavailable. Please try again in a moment." });
+      } else if (error?.type === "StripeInvalidRequestError") {
+        res.status(400).json({ error: `Stripe error: ${msg}` });
+      } else {
+        res.status(500).json({ error: "Failed to create checkout session. Please try again." });
+      }
     }
   });
 
