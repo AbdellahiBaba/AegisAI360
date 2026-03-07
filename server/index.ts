@@ -249,7 +249,9 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  app.use("/downloads", express.static(path.resolve(import.meta.dirname, "..", "public/downloads"), {
+  const currentDir = typeof __dirname !== "undefined" ? __dirname : path.dirname(new URL(import.meta.url).pathname);
+  const downloadsDir = path.resolve(currentDir, "..", "public", "downloads");
+  app.use("/downloads", express.static(downloadsDir, {
     setHeaders: (res, filePath) => {
       if (filePath.endsWith(".exe")) {
         res.setHeader("Content-Type", "application/octet-stream");
