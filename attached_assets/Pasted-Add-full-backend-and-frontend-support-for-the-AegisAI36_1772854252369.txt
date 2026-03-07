@@ -1,0 +1,380 @@
+Add full backend and frontend support for the AegisAI360 Endpoint Agent system AND fix the billing issue where new users can access the platform without choosing a plan or paying. Also implement plan-based feature limitations and advanced SOC features including a safe built-in terminal for remote command execution.
+
+==================================================
+PART 1 — FIX BILLING & ACCESS CONTROL
+==================================================
+
+1. ENFORCE PAYWALL FOR ALL NEW USERS
+------------------------------------
+Implement a mandatory onboarding flow:
+
+Step 1: User signs up  
+Step 2: Redirect to /choose-plan  
+Step 3: User selects a plan  
+Step 4: Redirect to Stripe Checkout  
+Step 5: After successful payment → redirect to /dashboard  
+Step 6: Only then grant access to the platform
+
+2. BACKEND BILLING LOGIC
+------------------------
+Add fields to users table:
+- subscription_status (active, inactive, trial, canceled)
+- stripe_customer_id
+- stripe_subscription_id
+- plan_id
+
+Create middleware:
+- requireActiveSubscription
+  • Blocks access to all authenticated routes unless subscription_status = "active"
+  • Redirects to /billing if inactive
+
+3. STRIPE WEBHOOKS
+-------------------
+Implement webhook endpoint:
+POST /api/stripe/webhook
+
+Handle events:
+- checkout.session.completed → activate subscription
+- customer.subscription.updated → update status
+- customer.subscription.deleted → set subscription_status = "inactive"
+
+4. FRONTEND BILLING PAGES
+--------------------------
+Create:
+- /choose-plan → pricing cards
+- /billing → current plan, status, upgrade/downgrade
+- /billing/error → payment failed
+- /billing/success → payment successful
+
+5. BLOCK ACCESS UNTIL PAYMENT
+------------------------------
+All pages except:
+- /login
+- /signup
+- /choose-plan
+- /billing
+- /billing/success
+- /billing/error
+
+must require:
+- authenticated user
+- subscription_status = "active"
+
+==================================================
+PART 2 — PLAN LIMITATIONS (CRITICAL)
+==================================================
+
+Add a new table: plans
+Fields:
+- id
+- name
+- price
+- max_agents
+- max_logs_per_day
+- max_commands_per_day
+- allow_network_isolation (boolean)
+- allow_process_kill (boolean)
+- allow_file_scan (boolean)
+- allow_endpoint_download (boolean)
+- allow_terminal_access (boolean)
+- allow_threat_intel (boolean)
+- allow_advanced_analytics (boolean)
+
+Add a new table: usage_tracking
+Fields:
+- user_id
+- date
+- agents_registered
+- logs_sent
+- commands_executed
+- terminal_commands_executed
+
+Enforce plan limits:
+- When agent registers → check max_agents
+- When logs are sent → check max_logs_per_day
+- When commands are executed → check max_commands_per_day
+- When user tries to isolate network → check allow_network_isolation
+- When user tries to kill processes → check allow_process_kill
+- When user tries to scan files → check allow_file_scan
+- When user tries to download agent installer → check allow_endpoint_download
+- When user tries to open terminal or execute terminal commands → check allow_terminal_access
+- When user uses threat intelligence features → check allow_threat_intel
+- When user uses advanced analytics/AI features → check allow_advanced_analytics
+
+If limit exceeded:
+Return error: “Your current plan does not allow this action. Please upgrade.”
+
+==================================================
+PART 3 — ENDPOINT AGENT SYSTEM (BACKEND + FRONTEND)
+==================================================
+
+1. FRONTEND — “Download Agent” Page
+-----------------------------------
+Route: /download-agent
+
+Features:
+- Button: “Generate Device Token”
+- Display generated token
+- Disabled download buttons:
+    • Windows Agent (Coming Soon)
+    • Linux Agent (Coming Soon)
+    • macOS Agent (Coming Soon)
+- Explain that the installer will use the token to register the device.
+- If plan does NOT allow endpoint download → show upgrade message and disable token generation.
+
+2. BACKEND — Device Token System
+--------------------------------
+Table: device_tokens
+Fields:
+- id
+- token
+- created_at
+- used (boolean)
+- used_by_agent_id
+
+Endpoint:
+POST /api/device-token/create
+- Generates secure token
+- Saves to DB
+- Returns token
+- Check plan limit: max_agents
+
+3. BACKEND — Agent Registration API
+-----------------------------------
+Table: agents
+Fields:
+- id
+- user_id
+- device_token
+- hostname
+- os
+- ip
+- last_seen
+- status
+- cpu_usage
+- ram_usage
+- created_at
+
+Endpoints:
+POST /api/agent/register
+POST /api/agent/heartbeat
+POST /api/agent/logs
+GET  /api/agent/commands
+POST /api/agent/command-result
+
+All endpoints must:
+- Validate agent_id + device_token
+- Associate agent with owning user/organization
+- Enforce plan limits
+
+4. BACKEND — Command Queue System
+---------------------------------
+Table: agent_commands
+Fields:
+- id
+- agent_id
+- command
+- params (JSON)
+- status (pending, running, done, failed)
+- result (JSON)
+- created_at
+- executed_at
+
+Enforce plan limits:
+- max_commands_per_day
+- allow_network_isolation
+- allow_process_kill
+- allow_file_scan
+- allow_terminal_access (for terminal-related commands)
+
+==================================================
+PART 4 — SOC DASHBOARD & ADVANCED FEATURES
+==================================================
+
+1. FRONTEND — Super Admin “Endpoints” Dashboard
+-----------------------------------------------
+Route: /admin/endpoints
+
+Features:
+- List all agents
+- Show:
+    • hostname
+    • OS
+    • IP
+    • online/offline (based on last_seen)
+    • CPU/RAM
+    • last_seen
+- Agent detail view:
+    • system metrics
+    • logs
+    • command history
+    • threat score (placeholder)
+    • send command panel
+
+Commands:
+- run_system_scan
+- scan_directory
+- list_processes
+- kill_process
+- isolate_network
+- restore_network
+- ping
+
+Commands must be disabled if plan does not allow them.
+
+2. FRONTEND — Alerts & Threats View
+-----------------------------------
+Route: /alerts
+
+Features:
+- List alerts (from agent logs, commands, and threat intel)
+- Severity, source agent, timestamp, status
+- Filter by severity, agent, time
+- Link to agent detail and actions
+
+3. THREAT INTELLIGENCE INTEGRATION (STUBS)
+------------------------------------------
+Backend services (can be stubbed for now) for:
+- IP reputation lookup
+- Domain/URL reputation lookup
+- File hash reputation lookup
+
+Expose endpoints:
+- POST /api/threat-intel/ip-lookup
+- POST /api/threat-intel/url-lookup
+- POST /api/threat-intel/hash-lookup
+
+Enforce:
+- Only available if plan.allow_threat_intel = true
+
+4. ADVANCED ANALYTICS / AI (STUBS)
+----------------------------------
+Add backend endpoints for:
+- /api/analytics/anomaly-detection
+- /api/analytics/endpoint-risk-score
+
+These can return placeholder or simple heuristic results now, but must be wired into:
+- Agent metrics
+- Logs
+- Commands
+
+Enforce:
+- Only available if plan.allow_advanced_analytics = true
+
+==================================================
+PART 5 — BUILT-IN TERMINAL / REMOTE COMMAND SHELL
+==================================================
+
+1. FRONTEND — Terminal UI
+--------------------------
+Route: /admin/endpoints/:agentId/terminal
+
+Features:
+- Terminal-like interface:
+    • Input box for commands
+    • Scrollable output area
+- Show warning banner:
+    “All commands are logged. Destructive commands are blocked.”
+- Disable access if:
+    • plan.allow_terminal_access = false
+    • user role is not allowed (e.g., only Admin/Responder)
+
+2. BACKEND — Terminal Command Handling
+--------------------------------------
+Extend agent_commands to support terminal commands:
+
+- command: "terminal_exec"
+- params:
+    • "command": string (e.g., "ps", "netstat -ano", "dir C:\\Users")
+
+Create endpoint:
+POST /api/agent/terminal/execute
+- Accepts: agent_id, command
+- Validates:
+    • User has permission
+    • Plan allows terminal access
+    • Command is in allowed list (whitelist)
+- Creates agent_commands entry with type "terminal_exec"
+
+Allowed commands (example whitelist):
+- Windows:
+    • "whoami"
+    • "ipconfig"
+    • "netstat -ano"
+    • "tasklist"
+    • "dir <path>"
+- Linux:
+    • "whoami"
+    • "ifconfig" or "ip a"
+    • "netstat -tunap" or "ss -tunap"
+    • "ps aux"
+    • "ls <path>"
+
+No destructive commands (no rm, del, format, shutdown, etc.).
+
+3. AGENT SIDE (STUB)
+--------------------
+In the Go agent example, add support for:
+- Receiving "terminal_exec" commands
+- Executing only whitelisted commands
+- Capturing stdout/stderr
+- Sending result back via /api/agent/command-result
+
+4. LOGGING & AUDIT
+------------------
+Every terminal command must be:
+- Logged in agent_commands
+- Also stored in a new table: terminal_audit_logs
+Fields:
+- id
+- user_id
+- agent_id
+- command
+- output (truncated)
+- created_at
+
+==================================================
+PART 6 — SECURITY REQUIREMENTS
+==================================================
+
+- All agent endpoints require agent_id + device_token
+- All communication over HTTPS
+- Input validation on all APIs
+- Rate limiting on agent and terminal endpoints
+- Sanitize logs and command results
+- Enforce RBAC:
+    • Roles: super_admin, admin, analyst, viewer
+    • Terminal and destructive actions only for allowed roles
+- Never allow:
+    • Privilege escalation
+    • Arbitrary shell access outside whitelist
+    • Silent installation or hidden behavior
+
+==================================================
+PART 7 — DOCUMENTATION PAGE
+==================================================
+
+Route: /docs/agent
+
+Include:
+- How device tokens work
+- How registration works
+- How commands work
+- Plan limitations and feature matrix
+- Security notes
+- Terminal usage and restrictions
+- Installer coming soon
+
+==================================================
+PART 8 — PLACEHOLDER GO AGENT EXAMPLE
+==================================================
+
+Add a simple Go example in docs showing:
+- registration
+- heartbeat loop
+- command polling
+- handling:
+    • "ping"
+    • "run_system_scan" (stub)
+    • "terminal_exec" (stub with whitelist)
+- sending command results back
