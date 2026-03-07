@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Download, Copy, Key, Monitor, Apple, Terminal as TerminalIcon } from "lucide-react";
+import { Loader2, Download, Copy, Key, Monitor, Apple, Terminal as TerminalIcon, Package } from "lucide-react";
 
 export default function DownloadAgent() {
   const { toast } = useToast();
@@ -102,14 +102,18 @@ export default function DownloadAgent() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="border-dashed" data-testid="card-download-windows">
+            <Card data-testid="card-download-windows">
               <CardContent className="pt-6 text-center">
                 <Monitor className="w-10 h-10 mx-auto mb-3 text-blue-500" />
                 <h3 className="font-medium">Windows</h3>
                 <p className="text-xs text-muted-foreground mt-1">Windows 10/11, Server 2019+</p>
-                <Button className="mt-3 w-full" variant="outline" disabled data-testid="button-download-windows">
-                  Coming Soon
-                </Button>
+                <Badge className="mt-2">Installer Available</Badge>
+                <a href="/docs/agent" className="block mt-3">
+                  <Button className="w-full" variant="outline" data-testid="button-download-windows">
+                    <Package className="w-4 h-4 me-2" />
+                    Build Instructions
+                  </Button>
+                </a>
               </CardContent>
             </Card>
 
@@ -137,7 +141,7 @@ export default function DownloadAgent() {
           </div>
 
           <div className="mt-4 p-3 bg-muted/50 rounded text-sm text-muted-foreground" data-testid="text-agent-note">
-            Agent binaries are under development. See the <a href="/docs/agent" className="text-primary underline">documentation</a> for the API specification to build your own agent.
+            The Windows installer bundle (Go agent + NSIS installer + WinSW service wrapper) is available in the <code className="text-primary">/installer</code> directory. See the <a href="/docs/agent" className="text-primary underline">documentation</a> for build instructions and the full API reference.
           </div>
         </CardContent>
       </Card>

@@ -45,7 +45,8 @@ The frontend is built with React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Rec
 - **Command System**: SOC analysts send commands to agents (system scan, list processes, isolate network, etc.). Agents poll for pending commands and report results.
 - **Remote Terminal**: Built-in terminal UI for remote command execution on agents. Commands are validated against a whitelist (whoami, ifconfig, netstat, ps, ls, etc.). Destructive commands (rm, del, format, sudo) are always blocked. All terminal activity is logged in audit logs.
 - **Frontend Pages**: `/endpoints` (agent dashboard), `/download-agent` (token generation + agent download), `/endpoints/:agentId/terminal` (remote terminal).
-- **Files**: `server/agentApi.ts`, `client/src/pages/endpoints.tsx`, `client/src/pages/download-agent.tsx`, `client/src/pages/agent-terminal.tsx`
+- **Windows Installer Bundle**: Complete installer in `/installer` directory with Go agent (main.go), WinSW service wrapper (AegisAI360Agent.xml), NSIS installer script (installer.nsi), and build README. Build with `go build -o agent.exe main.go` + `makensis installer.nsi`.
+- **Files**: `server/agentApi.ts`, `client/src/pages/endpoints.tsx`, `client/src/pages/download-agent.tsx`, `client/src/pages/agent-terminal.tsx`, `installer/main.go`, `installer/installer.nsi`, `installer/AegisAI360Agent.xml`
 
 #### Billing Paywall System (NEW)
 - **Plans Table**: Three tiers (starter $29/mo, professional $99/mo, enterprise $299/mo) with feature flags and usage limits.

@@ -1,0 +1,20 @@
+<service>
+  <id>AegisAI360Agent</id>
+  <name>AegisAI360 Endpoint Agent</name>
+  <description>Security agent for AegisAI360 SOC platform. Monitors endpoint activity, reports security events, and executes SOC commands.</description>
+  <executable>%BASE%\agent.exe</executable>
+  <arguments></arguments>
+  <logpath>%BASE%\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>5</keepFiles>
+  </log>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+  <env name="AEGIS_SERVER_URL" value="https://aegisai360.com"/>
+  <env name="AEGIS_DEVICE_TOKEN" value="REPLACE_WITH_YOUR_TOKEN"/>
+</service>

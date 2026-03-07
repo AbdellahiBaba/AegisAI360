@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BookOpen, Terminal, Shield, Key, Monitor, Code, AlertTriangle } from "lucide-react";
+import { BookOpen, Terminal, Shield, Key, Monitor, Code, AlertTriangle, Package, Download } from "lucide-react";
 
 export default function DocsAgent() {
   return (
@@ -15,8 +15,9 @@ export default function DocsAgent() {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList data-testid="tabs-docs">
+        <TabsList data-testid="tabs-docs" className="flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="installer">Installer</TabsTrigger>
           <TabsTrigger value="registration">Registration</TabsTrigger>
           <TabsTrigger value="commands">Commands</TabsTrigger>
           <TabsTrigger value="terminal">Terminal</TabsTrigger>
@@ -47,6 +48,67 @@ export default function DocsAgent() {
                 <li>All terminal activity is logged in audit logs</li>
                 <li>Destructive commands (rm, del, format, etc.) are always blocked</li>
               </ul>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="installer">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Package className="w-5 h-5" />Windows Installer Bundle</CardTitle>
+            </CardHeader>
+            <CardContent className="prose dark:prose-invert max-w-none text-sm space-y-4">
+              <p>A complete Windows installer bundle is available in the <code>/installer</code> directory. It includes a Go-based agent, WinSW service wrapper, and NSIS installer script.</p>
+
+              <h3>Bundle Contents</h3>
+              <table>
+                <thead>
+                  <tr><th>File</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>main.go</code></td><td>Complete Go agent source code</td></tr>
+                  <tr><td><code>AegisAI360Agent.xml</code></td><td>WinSW service wrapper configuration</td></tr>
+                  <tr><td><code>installer.nsi</code></td><td>NSIS installer script</td></tr>
+                  <tr><td><code>README.txt</code></td><td>Detailed build instructions</td></tr>
+                </tbody>
+              </table>
+
+              <h3>Step 1: Build the Agent</h3>
+              <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">{`# Native Windows build
+go build -o agent.exe main.go
+
+# Cross-compile from Linux/macOS
+GOOS=windows GOARCH=amd64 go build -o agent.exe main.go`}</pre>
+
+              <h3>Step 2: Download WinSW</h3>
+              <p>Download <code>WinSW-x64.exe</code> from <a href="https://github.com/winsw/winsw/releases" target="_blank" rel="noopener noreferrer" className="text-primary">github.com/winsw/winsw/releases</a> and rename it to <code>AegisAI360Agent.exe</code>.</p>
+
+              <h3>Step 3: Configure</h3>
+              <p>Edit <code>AegisAI360Agent.xml</code> and set your server URL and device token:</p>
+              <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">{`<env name="AEGIS_SERVER_URL" value="https://your-server.com"/>
+<env name="AEGIS_DEVICE_TOKEN" value="agt_your_token_here"/>`}</pre>
+
+              <h3>Step 4: Build the Installer</h3>
+              <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">{`# Requires NSIS 3.x installed
+makensis installer.nsi
+
+# Output: AegisAI360-Agent-Setup.exe`}</pre>
+
+              <h3>Step 5: Install</h3>
+              <p>Run <code>AegisAI360-Agent-Setup.exe</code> as Administrator. The installer will copy all files, register the Windows service, and start the agent automatically.</p>
+
+              <h3>Agent Features</h3>
+              <ul>
+                <li>Registers with the SOC platform using a single-use device token</li>
+                <li>Sends heartbeats every 30 seconds with system metrics</li>
+                <li>Polls for commands every 5 seconds</li>
+                <li>Supports <code>ping</code>, <code>run_system_scan</code>, and <code>terminal_exec</code> commands</li>
+                <li>Enforces the same terminal command whitelist as the server</li>
+                <li>Runs as a Windows service with auto-restart on failure</li>
+              </ul>
+
+              <h3>Uninstall</h3>
+              <p>Use Windows Add/Remove Programs, or run <code>uninstall.exe</code> from the install directory. The uninstaller stops the service, removes it, and deletes all files.</p>
             </CardContent>
           </Card>
         </TabsContent>
