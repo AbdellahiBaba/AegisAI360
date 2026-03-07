@@ -1,0 +1,183 @@
+Add full backend and frontend support for the AegisAI360 Endpoint Agent system AND fix the billing issue where new users can access the platform without choosing a plan or paying.
+
+==================================================
+PART 1 — FIX BILLING & ACCESS CONTROL
+==================================================
+
+1. ENFORCE PAYWALL FOR ALL NEW USERS
+------------------------------------
+Implement a mandatory onboarding flow:
+
+Step 1: User signs up  
+Step 2: User is redirected to /choose-plan  
+Step 3: User selects a plan  
+Step 4: User is redirected to Stripe Checkout  
+Step 5: After successful payment, redirect to /dashboard  
+Step 6: Only then grant access to the platform
+
+2. BACKEND BILLING LOGIC
+------------------------
+Add fields to the users table:
+- subscription_status (active, inactive, trial, canceled)
+- stripe_customer_id
+- stripe_subscription_id
+- plan_id
+
+Create middleware:
+- requireActiveSubscription
+  • Blocks access to all authenticated routes unless subscription_status = "active"
+  • Redirects to /billing if inactive
+
+3. STRIPE WEBHOOKS
+-------------------
+Implement webhook endpoint:
+POST /api/stripe/webhook
+
+Handle events:
+- checkout.session.completed → activate subscription
+- customer.subscription.updated → update status
+- customer.subscription.deleted → set subscription_status = "inactive"
+
+4. FRONTEND BILLING PAGES
+--------------------------
+Create:
+- /choose-plan → shows pricing cards
+- /billing → shows current plan, status, upgrade/downgrade options
+- /billing/error → payment failed
+- /billing/success → payment successful
+
+5. BLOCK ACCESS UNTIL PAYMENT
+------------------------------
+All pages except:
+- /login
+- /signup
+- /choose-plan
+- /billing
+- /billing/success
+- /billing/error
+
+must require:
+- authenticated user
+- subscription_status = "active"
+
+==================================================
+PART 2 — ENDPOINT AGENT SYSTEM (BACKEND + FRONTEND)
+==================================================
+
+1. FRONTEND — “Download Agent” Page
+-----------------------------------
+Route: /download-agent
+
+Features:
+- Button: “Generate Device Token”
+- Display generated token
+- Disabled download buttons:
+    • Windows Agent (Coming Soon)
+    • Linux Agent (Coming Soon)
+    • macOS Agent (Coming Soon)
+- Explain that the installer will use the token to register the device.
+
+2. BACKEND — Device Token System
+--------------------------------
+Table: device_tokens
+Fields:
+- id
+- token
+- created_at
+- used (boolean)
+- used_by_agent_id
+
+Endpoint:
+POST /api/device-token/create
+- Generates secure token
+- Saves to DB
+- Returns token
+
+3. BACKEND — Agent Registration API
+-----------------------------------
+Table: agents
+Fields:
+- id
+- device_token
+- hostname
+- os
+- ip
+- last_seen
+- status
+- cpu_usage
+- ram_usage
+- created_at
+
+Endpoints:
+POST /api/agent/register
+POST /api/agent/heartbeat
+POST /api/agent/logs
+GET  /api/agent/commands
+POST /api/agent/command-result
+
+4. BACKEND — Command Queue System
+---------------------------------
+Table: agent_commands
+Fields:
+- id
+- agent_id
+- command
+- params (JSON)
+- status
+- result (JSON)
+- created_at
+
+5. FRONTEND — Super Admin “Endpoints” Dashboard
+-----------------------------------------------
+Route: /admin/endpoints
+
+Features:
+- List all agents
+- Show:
+    • hostname
+    • OS
+    • IP
+    • online/offline
+    • CPU/RAM
+    • last_seen
+- Agent detail view:
+    • metrics
+    • logs
+    • command history
+    • send command panel
+
+Commands:
+- run_system_scan
+- scan_directory
+- list_processes
+- kill_process
+- isolate_network
+- restore_network
+- ping
+
+6. SECURITY REQUIREMENTS
+------------------------
+- All agent endpoints require agent_id + device_token
+- HTTPS only
+- Input validation
+- Rate limiting
+- Sanitize logs and command results
+
+7. DOCUMENTATION PAGE
+---------------------
+Route: /docs/agent
+
+Include:
+- How device tokens work
+- How registration works
+- How commands work
+- Security notes
+- Installer coming soon
+
+8. PLACEHOLDER GO AGENT EXAMPLE
+-------------------------------
+Add a simple Go example showing:
+- registration
+- heartbeat loop
+- command polling
+- command execution stub

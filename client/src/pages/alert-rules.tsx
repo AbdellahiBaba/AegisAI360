@@ -67,6 +67,10 @@ function parseActions(actionsStr: string): string[] {
 }
 
 export default function AlertRules() {
+  return <AlertRulesContent />;
+}
+
+function AlertRulesContent() {
   const { t } = useTranslation();
   const [createOpen, setCreateOpen] = useState(false);
   const [ruleName, setRuleName] = useState("");

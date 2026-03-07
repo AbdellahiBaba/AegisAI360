@@ -35,7 +35,7 @@ The frontend is built with React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Rec
 - **Protection Center**: One-click "Protect Me" page with protection score, checklist, and auto-activation of all defenses.
 - **Smart Remediation**: Scan results include one-click fix buttons that create real firewall rules and alert rules.
 - **Data Ingestion**: APIs for Syslog, SIEM, and generic event ingestion.
-- **Super Admin System**: Provides platform-level management, organization oversight, and system health monitoring.
+- **Super Admin System**: Provides platform-level management, organization oversight, and system health monitoring. Super admin (isSuperAdmin=true) has full unrestricted access with no billing plan restrictions, sees "Platform Administrator" on billing page, and no upgrade banners on dashboard.
 
 ### System Design Choices
 - **Modular Architecture**: Codebase is organized into `server/`, `client/`, and `shared/` directories.
