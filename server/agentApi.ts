@@ -38,7 +38,114 @@ export function createAgentRouter(): Router {
   const router = Router();
 
   router.get("/ping", (_req, res) => {
-    res.json({ status: "ok", timestamp: Date.now(), version: "1.0.0" });
+    res.json({ status: "ok", timestamp: Date.now(), version: "1.1.0" });
+  });
+
+  router.get("/supported-commands", requireAuth, (_req, res) => {
+    res.json({
+      version: "1.1.0",
+      categories: [
+        {
+          name: "System",
+          commands: [
+            { command: "ping", description: "Test agent connectivity", params: [] },
+            { command: "get_info", description: "Get full system information", params: [] },
+            { command: "run_system_scan", description: "Run comprehensive system scan", params: [] },
+            { command: "security_scan", description: "Deep security audit (ports, users, firewall, AV, patches)", params: [] },
+            { command: "disk_usage", description: "Get disk usage for all drives", params: [] },
+            { command: "env_vars", description: "List all environment variables", params: [] },
+            { command: "restart", description: "Restart the agent service", params: [] },
+            { command: "update", description: "Check for agent updates", params: [] },
+          ],
+        },
+        {
+          name: "WiFi & Network",
+          commands: [
+            { command: "wifi_list", description: "Scan and list all visible WiFi networks", params: [] },
+            { command: "wifi_profiles", description: "Show saved WiFi profiles with passwords", params: [] },
+            { command: "wifi_connect", description: "Connect to a WiFi network", params: [{ name: "ssid", type: "string", required: true, description: "WiFi network name" }] },
+            { command: "wifi_disconnect", description: "Disconnect from current WiFi", params: [] },
+            { command: "network_interfaces", description: "List all network adapters with IP/MAC", params: [] },
+            { command: "network_connections", description: "Show active network connections", params: [] },
+            { command: "network_dns", description: "Show DNS servers and cache", params: [] },
+            { command: "network_arp", description: "Show ARP table (devices on local network)", params: [] },
+            { command: "network_route", description: "Show routing table", params: [] },
+            { command: "network_scan", description: "Full network scan (ports, connections, IP)", params: [] },
+          ],
+        },
+        {
+          name: "Firewall",
+          commands: [
+            { command: "network_firewall_rules", description: "List all firewall rules", params: [{ name: "filter", type: "string", required: false, description: "Filter by rule name" }] },
+            { command: "network_firewall_add", description: "Add a firewall rule", params: [
+              { name: "name", type: "string", required: true, description: "Rule name" },
+              { name: "direction", type: "string", required: true, description: "in or out" },
+              { name: "action", type: "string", required: true, description: "block or allow" },
+              { name: "port", type: "string", required: false, description: "Port number" },
+              { name: "protocol", type: "string", required: false, description: "tcp or udp (default: tcp)" },
+            ]},
+            { command: "network_firewall_remove", description: "Remove a firewall rule", params: [{ name: "name", type: "string", required: true, description: "Rule name to remove" }] },
+          ],
+        },
+        {
+          name: "Processes & Services",
+          commands: [
+            { command: "process_list", description: "List all running processes with details", params: [] },
+            { command: "process_kill", description: "Kill a process by PID or name", params: [
+              { name: "pid", type: "number", required: false, description: "Process ID" },
+              { name: "name", type: "string", required: false, description: "Process name" },
+            ]},
+            { command: "service_list", description: "List all system services", params: [] },
+            { command: "service_control", description: "Start, stop, or restart a service", params: [
+              { name: "name", type: "string", required: true, description: "Service name" },
+              { name: "action", type: "string", required: true, description: "start, stop, or restart" },
+            ]},
+          ],
+        },
+        {
+          name: "Users & Sessions",
+          commands: [
+            { command: "user_list", description: "List all local user accounts", params: [] },
+            { command: "user_sessions", description: "Show active login sessions", params: [] },
+          ],
+        },
+        {
+          name: "Software & Tasks",
+          commands: [
+            { command: "installed_software", description: "List all installed programs", params: [] },
+            { command: "startup_programs", description: "List programs that run at startup", params: [] },
+            { command: "scheduled_tasks", description: "List all scheduled tasks", params: [] },
+          ],
+        },
+        {
+          name: "Files & Registry",
+          commands: [
+            { command: "file_search", description: "Search for files by pattern", params: [
+              { name: "path", type: "string", required: false, description: "Search path (default: C:\\)" },
+              { name: "pattern", type: "string", required: true, description: "File pattern (e.g. *.exe)" },
+              { name: "maxResults", type: "number", required: false, description: "Max results (default: 50)" },
+            ]},
+            { command: "file_hash", description: "Get SHA256 hash of a file", params: [{ name: "path", type: "string", required: true, description: "Full file path" }] },
+            { command: "registry_query", description: "Query a Windows registry key", params: [{ name: "key", type: "string", required: true, description: "Registry key path" }] },
+          ],
+        },
+        {
+          name: "Logs & Events",
+          commands: [
+            { command: "event_log", description: "Query Windows Event Log", params: [
+              { name: "log", type: "string", required: false, description: "Log name: System, Application, Security (default: System)" },
+              { name: "count", type: "number", required: false, description: "Number of entries (default: 50)" },
+            ]},
+          ],
+        },
+        {
+          name: "Terminal",
+          commands: [
+            { command: "terminal_exec", description: "Execute a whitelisted terminal command", params: [{ name: "cmd", type: "string", required: true, description: "Command to execute" }] },
+          ],
+        },
+      ],
+    });
   });
 
   router.post("/device-token/create", requireAuth, async (req, res) => {
@@ -223,7 +330,7 @@ export function createAgentRouter(): Router {
 
   router.get("/version", (req, res) => {
     const currentVersion = req.query.version as string || "0.0.0";
-    const latestVersion = "1.0.0";
+    const latestVersion = "1.1.0";
     const needsUpdate = currentVersion !== latestVersion;
 
     let downloadUrl = "";

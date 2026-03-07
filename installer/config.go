@@ -25,7 +25,7 @@ func loadConfig() (*AgentConfig, error) {
                 ServerURL:           "https://aegisai360.com",
                 AgentVersion:        agentVersion,
                 HeartbeatInterval:   30,
-                CommandPollInterval: 5,
+                CommandPollInterval: 15,
                 UpdateCheckInterval: 300,
                 TelemetryInterval:   30,
                 LogMaxSizeMB:        10,

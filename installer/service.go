@@ -29,11 +29,13 @@ func runAgent(ctx context.Context, cfg *AgentConfig) error {
         logMessage("INFO", "Registered successfully as agent %.0f", agentID)
         globalStatus.SetRegistered(agentID, getHostname(), getLocalIP(), cfg.ServerURL, cfg.AgentVersion)
 
-        fmt.Println()
-        fmt.Printf("  Connected! Agent ID: %.0f\n", agentID)
-        fmt.Printf("  Server: %s\n", cfg.ServerURL)
-        fmt.Println("  Press Ctrl+C to stop.")
-        fmt.Println()
+        if !silentMode {
+                fmt.Println()
+                fmt.Printf("  Connected! Agent ID: %.0f\n", agentID)
+                fmt.Printf("  Server: %s\n", cfg.ServerURL)
+                fmt.Println("  Press Ctrl+C to stop.")
+                fmt.Println()
+        }
 
         sendAgentLog(cfg, agentID, "agent_started", "info",
                 fmt.Sprintf("AegisAI360 Agent v%s started on %s (%s)", cfg.AgentVersion, getHostname(), getLocalIP()))
