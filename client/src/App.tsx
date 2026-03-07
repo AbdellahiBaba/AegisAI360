@@ -28,7 +28,7 @@ import Playbooks from "@/pages/playbooks";
 import SettingsPage from "@/pages/settings";
 import Billing from "@/pages/billing";
 import Firewall from "@/pages/firewall";
-import AlertRules from "@/pages/alert-rules-page";
+import AlertRules from "@/pages/alert-rules";
 import SuperAdmin from "@/pages/super-admin";
 import ScannerPage from "@/pages/scanner";
 import SupportPage from "@/pages/support";
