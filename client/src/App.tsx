@@ -51,6 +51,9 @@ import AgentTerminal from "@/pages/agent-terminal";
 import DocsAgent from "@/pages/docs-agent";
 import TrafficAnalysis from "@/pages/traffic-analysis";
 import NetworkSecurityPage from "@/pages/network-security";
+import TrojanAnalyzerPage from "@/pages/trojan-analyzer";
+import MobilePentestPage from "@/pages/mobile-pentest";
+import PayloadGeneratorPage from "@/pages/payload-generator";
 
 function AppRouter() {
   return (
@@ -85,6 +88,9 @@ function AppRouter() {
       <Route path="/docs/agent" component={DocsAgent} />
       <Route path="/traffic-analysis" component={TrafficAnalysis} />
       <Route path="/network-security" component={NetworkSecurityPage} />
+      <Route path="/trojan-analyzer" component={TrojanAnalyzerPage} />
+      <Route path="/mobile-pentest" component={MobilePentestPage} />
+      <Route path="/payload-generator" component={PayloadGeneratorPage} />
       <Route component={NotFound} />
     </Switch>
   );

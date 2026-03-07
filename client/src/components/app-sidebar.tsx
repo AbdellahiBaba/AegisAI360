@@ -5,7 +5,7 @@ import {
   LayoutDashboard, ShieldAlert, Bug, Brain, Database,
   Network, Target, Clock, Radio, Lock, BookOpen, FileText,
   Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar, LifeBuoy, Server, Key,
-  Monitor, Download, Terminal, Activity, ScanSearch,
+  Monitor, Download, Terminal, Activity, ScanSearch, Smartphone,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -74,6 +74,9 @@ export function AppSidebar() {
     { title: t("sidebar.hashTools"), testId: "hash-tools", url: "/hash-tools", icon: Key },
     { title: "Traffic Analysis", testId: "traffic-analysis", url: "/traffic-analysis", icon: Activity },
     { title: "Network Security", testId: "network-security", url: "/network-security", icon: ScanSearch },
+    { title: "Payload Generator", testId: "payload-generator", url: "/payload-generator", icon: Terminal },
+    { title: "Trojan Analyzer", testId: "trojan-analyzer", url: "/trojan-analyzer", icon: Bug },
+    { title: "Mobile Pentest", testId: "mobile-pentest", url: "/mobile-pentest", icon: Smartphone },
   ];
 
   const respondItems: NavItem[] = [

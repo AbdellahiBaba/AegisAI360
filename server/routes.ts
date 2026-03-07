@@ -28,6 +28,9 @@ import { ResponseEngine } from "./responseEngine";
 import { AlertEngine } from "./alertEngine";
 import { scanPorts, lookupDNS, checkSSL, scanHeaders, scanVulnerabilities, isPrivateTarget } from "./scanEngine";
 import { enumerateSubdomains, bruteforceDirectories, fingerprintTechnology, detectWAF, whoisLookup, testSQLInjection, testXSS, identifyHash, crackHash, analyzePassword } from "./pentestEngine";
+import { lookupHash, classifyBehavior, generateYARARule, generateSigmaRule, extractIOCs, listFamilies } from "./trojanAnalyzer";
+import { analyzePermissions, testMobileEndpoint, checkOWASPMobile, lookupDeviceVulnerabilities } from "./mobilePentestEngine";
+import { generateReverseShell, generateBindShell, generateWebShell, generateMeterpreterStager, encodePayload, getSupportedLanguages } from "./payloadGenerator";
 import { SCENARIOS } from "./threatSimulator";
 
 const openai = new OpenAI({
@@ -2732,6 +2735,309 @@ export async function registerRoutes(
       res.json({ resolved });
     } catch (error) {
       res.status(500).json({ error: "Failed to resolve threats" });
+    }
+  });
+
+  // ============================================
+  // TROJAN ANALYZER ROUTES
+  // ============================================
+
+  app.get("/api/trojan/families", requireAuth, async (_req, res) => {
+    try {
+      const families = listFamilies();
+      res.json(families);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to list Trojan families" });
+    }
+  });
+
+  app.post("/api/trojan/lookup", requireAuth, async (req, res) => {
+    try {
+      const { hash } = z.object({ hash: z.string().min(16).max(128) }).parse(req.body);
+      const orgId = getOrgId(req);
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "trojan_hash_lookup",
+        targetType: "trojan_analysis",
+        targetId: hash,
+        details: `Trojan hash lookup: ${hash}`,
+      });
+      const result = await lookupHash(hash);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to lookup hash" });
+    }
+  });
+
+  app.post("/api/trojan/classify", requireAuth, async (req, res) => {
+    try {
+      const { indicators } = z.object({
+        indicators: z.object({
+          networkConnections: z.array(z.string()).optional(),
+          fileOperations: z.array(z.string()).optional(),
+          registryChanges: z.array(z.string()).optional(),
+          processNames: z.array(z.string()).optional(),
+          mutexNames: z.array(z.string()).optional(),
+        }),
+      }).parse(req.body);
+      const orgId = getOrgId(req);
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "trojan_behavior_classify",
+        targetType: "trojan_analysis",
+        targetId: "behavioral",
+        details: `Behavioral classification with ${Object.values(indicators).flat().length} indicators`,
+      });
+      const result = classifyBehavior(indicators);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to classify behavior" });
+    }
+  });
+
+  app.post("/api/trojan/yara-rule", requireAuth, async (req, res) => {
+    try {
+      const { family } = z.object({ family: z.string().min(1) }).parse(req.body);
+      const result = generateYARARule(family);
+      if (!result) return res.status(404).json({ error: "Trojan family not found" });
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to generate YARA rule" });
+    }
+  });
+
+  app.post("/api/trojan/sigma-rule", requireAuth, async (req, res) => {
+    try {
+      const { family } = z.object({ family: z.string().min(1) }).parse(req.body);
+      const result = generateSigmaRule(family);
+      if (!result) return res.status(404).json({ error: "Trojan family not found" });
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to generate Sigma rule" });
+    }
+  });
+
+  app.post("/api/trojan/iocs", requireAuth, async (req, res) => {
+    try {
+      const { family } = z.object({ family: z.string().min(1) }).parse(req.body);
+      const result = extractIOCs(family);
+      if (!result) return res.status(404).json({ error: "Trojan family not found" });
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to extract IOCs" });
+    }
+  });
+
+  // ============================================
+  // MOBILE PENTEST ROUTES
+  // ============================================
+
+  app.post("/api/mobile/analyze-permissions", requireAuth, async (req, res) => {
+    try {
+      const { permissions } = z.object({
+        permissions: z.array(z.string()).min(1).max(100),
+      }).parse(req.body);
+      const orgId = getOrgId(req);
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "mobile_permission_analysis",
+        targetType: "mobile_pentest",
+        targetId: "permissions",
+        details: `Analyzed ${permissions.length} Android permissions`,
+      });
+      const result = analyzePermissions(permissions);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to analyze permissions" });
+    }
+  });
+
+  app.post("/api/mobile/test-endpoint", requireAuth, async (req, res) => {
+    try {
+      const { url } = z.object({ url: z.string().url() }).parse(req.body);
+      const orgId = getOrgId(req);
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "mobile_endpoint_test",
+        targetType: "mobile_pentest",
+        targetId: url,
+        details: `Mobile API endpoint security test: ${url}`,
+      });
+      const result = await testMobileEndpoint(url);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to test endpoint" });
+    }
+  });
+
+  app.post("/api/mobile/owasp-check", requireAuth, async (req, res) => {
+    try {
+      const { target } = z.object({ target: z.string().min(1) }).parse(req.body);
+      const orgId = getOrgId(req);
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "mobile_owasp_check",
+        targetType: "mobile_pentest",
+        targetId: target,
+        details: `OWASP Mobile Top 10 scan: ${target}`,
+      });
+      const result = await checkOWASPMobile(target);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to run OWASP check" });
+    }
+  });
+
+  app.post("/api/mobile/device-vulns", requireAuth, async (req, res) => {
+    try {
+      const { osType, version } = z.object({
+        osType: z.enum(["android", "ios"]),
+        version: z.string().min(1),
+      }).parse(req.body);
+      const result = lookupDeviceVulnerabilities(osType, version);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to lookup device vulnerabilities" });
+    }
+  });
+
+  // ============================================
+  // PAYLOAD GENERATOR ROUTES
+  // ============================================
+
+  app.get("/api/payload/languages", requireAuth, async (_req, res) => {
+    try {
+      const result = getSupportedLanguages();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get supported languages" });
+    }
+  });
+
+  app.post("/api/payload/reverse-shell", requireAuth, async (req, res) => {
+    try {
+      const { language, ip, port, options } = z.object({
+        language: z.string().min(1),
+        ip: z.string().min(1),
+        port: z.number().int().min(1).max(65535),
+        options: z.object({
+          encrypted: z.boolean().optional(),
+          protocol: z.enum(["tcp", "udp"]).optional(),
+          staged: z.boolean().optional(),
+        }).optional(),
+      }).parse(req.body);
+      const orgId = getOrgId(req);
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "payload_reverse_shell",
+        targetType: "payload_generator",
+        targetId: language,
+        details: `Generated ${language} reverse shell payload (educational)`,
+      });
+      const result = generateReverseShell(language, ip, port, options || {});
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to generate reverse shell" });
+    }
+  });
+
+  app.post("/api/payload/bind-shell", requireAuth, async (req, res) => {
+    try {
+      const { language, port } = z.object({
+        language: z.string().min(1),
+        port: z.number().int().min(1).max(65535),
+      }).parse(req.body);
+      const orgId = getOrgId(req);
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "payload_bind_shell",
+        targetType: "payload_generator",
+        targetId: language,
+        details: `Generated ${language} bind shell payload (educational)`,
+      });
+      const result = generateBindShell(language, port);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to generate bind shell" });
+    }
+  });
+
+  app.post("/api/payload/web-shell", requireAuth, async (req, res) => {
+    try {
+      const { language, options } = z.object({
+        language: z.string().min(1),
+        options: z.object({
+          fileManager: z.boolean().optional(),
+          commandExec: z.boolean().optional(),
+          upload: z.boolean().optional(),
+          authentication: z.boolean().optional(),
+          password: z.string().optional(),
+          obfuscation: z.boolean().optional(),
+        }).optional(),
+      }).parse(req.body);
+      const orgId = getOrgId(req);
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "payload_web_shell",
+        targetType: "payload_generator",
+        targetId: language,
+        details: `Generated ${language} web shell payload (educational)`,
+      });
+      const result = generateWebShell(language, options || {});
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to generate web shell" });
+    }
+  });
+
+  app.post("/api/payload/meterpreter", requireAuth, async (req, res) => {
+    try {
+      const { platform, arch, options } = z.object({
+        platform: z.string().min(1),
+        arch: z.string().min(1),
+        options: z.object({
+          payloadType: z.string().optional(),
+          lhost: z.string().optional(),
+          lport: z.number().optional(),
+          encoder: z.string().optional(),
+          iterations: z.number().optional(),
+          format: z.string().optional(),
+        }).optional(),
+      }).parse(req.body);
+      const orgId = getOrgId(req);
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "payload_meterpreter",
+        targetType: "payload_generator",
+        targetId: `${platform}/${arch}`,
+        details: `Generated ${platform}/${arch} meterpreter stager (educational)`,
+      });
+      const result = generateMeterpreterStager(platform, arch, options || {});
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to generate meterpreter stager" });
+    }
+  });
+
+  app.post("/api/payload/encode", requireAuth, async (req, res) => {
+    try {
+      const { payload, encoding } = z.object({
+        payload: z.string().min(1),
+        encoding: z.string().min(1),
+      }).parse(req.body);
+      const result = encodePayload(payload, encoding);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to encode payload" });
     }
   });
 
