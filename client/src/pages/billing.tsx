@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslation } from "react-i18next";
-import { CreditCard, Zap, Shield, Crown, Check, ExternalLink, Loader2 } from "lucide-react";
+import { CreditCard, Zap, Shield, Crown, Check, ExternalLink, Loader2, AlertTriangle } from "lucide-react";
 import { useMemo } from "react";
 
 interface BillingStatus {
@@ -54,6 +54,10 @@ export default function Billing() {
 
   const { data: stripeProducts } = useQuery<StripeProduct[]>({
     queryKey: ["/api/billing/products"],
+  });
+
+  const { data: billingConfig } = useQuery<{ publishableKey: string; liveMode: boolean }>({
+    queryKey: ["/api/billing/config"],
   });
 
   const productsByTier = useMemo(() => {
@@ -112,6 +116,15 @@ export default function Billing() {
           <h1 className="text-lg font-bold tracking-wider uppercase">{t("billing.title")}</h1>
           <p className="text-xs text-muted-foreground">{t("billing.subtitle")}</p>
         </div>
+        {billingConfig && !billingConfig.liveMode && (
+          <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-500/50 bg-amber-500/10" data-testid="banner-sandbox-mode">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">Stripe Test Mode Active</p>
+              <p className="text-xs text-muted-foreground">Payments are in sandbox/test mode. Configure production Stripe keys in your deployment settings to enable live payments.</p>
+            </div>
+          </div>
+        )}
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-4">
@@ -168,6 +181,16 @@ export default function Billing() {
         <p className="text-xs text-muted-foreground">{t("billing.subtitle")}</p>
       </div>
 
+      {billingConfig && !billingConfig.liveMode && (
+        <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-500/50 bg-amber-500/10" data-testid="banner-sandbox-mode">
+          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">Stripe Test Mode Active</p>
+            <p className="text-xs text-muted-foreground">Payments are in sandbox/test mode. Configure production Stripe keys in your deployment settings to enable live payments.</p>
+          </div>
+        </div>
+      )}
+
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -206,7 +229,7 @@ export default function Billing() {
           const isCurrent = currentPlan === tier;
           const PlanIcon = meta.icon;
           const product = productsByTier[tier];
-          const displayPrice = product ? `$${(product.amount / 100).toFixed(0)}` : tier === "starter" ? "$9" : tier === "professional" ? "$29" : "$79";
+          const displayPrice = product ? `$${(product.amount / 100).toFixed(0)}` : tier === "starter" ? "$29" : tier === "professional" ? "$99" : "$299";
 
           return (
             <Card

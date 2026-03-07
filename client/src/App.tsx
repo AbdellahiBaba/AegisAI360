@@ -54,6 +54,12 @@ import NetworkSecurityPage from "@/pages/network-security";
 import TrojanAnalyzerPage from "@/pages/trojan-analyzer";
 import MobilePentestPage from "@/pages/mobile-pentest";
 import PayloadGeneratorPage from "@/pages/payload-generator";
+import CompliancePage from "@/pages/compliance";
+import DarkWebMonitor from "@/pages/dark-web-monitor";
+import SslInspectorPage from "@/pages/ssl-inspector";
+import EmailAnalyzerPage from "@/pages/email-analyzer";
+import CveDatabasePage from "@/pages/cve-database";
+import PasswordAuditorPage from "@/pages/password-auditor";
 
 function AppRouter() {
   return (
@@ -91,6 +97,12 @@ function AppRouter() {
       <Route path="/trojan-analyzer" component={TrojanAnalyzerPage} />
       <Route path="/mobile-pentest" component={MobilePentestPage} />
       <Route path="/payload-generator" component={PayloadGeneratorPage} />
+      <Route path="/dark-web-monitor" component={DarkWebMonitor} />
+      <Route path="/compliance" component={CompliancePage} />
+      <Route path="/ssl-inspector" component={SslInspectorPage} />
+      <Route path="/email-analyzer" component={EmailAnalyzerPage} />
+      <Route path="/cve-database" component={CveDatabasePage} />
+      <Route path="/password-auditor" component={PasswordAuditorPage} />
       <Route component={NotFound} />
     </Switch>
   );

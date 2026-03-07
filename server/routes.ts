@@ -18,7 +18,7 @@ import {
 } from "@shared/schema";
 import { requireAuth, requireRole, requirePlanFeature } from "./auth";
 import { generateNetworkDevices, runNetworkVulnerabilityScan, scanInfrastructureAsset, resolveHostToIp } from "./networkMonitor";
-import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { getUncachableStripeClient, getStripePublishableKey, isStripeLiveMode } from "./stripeClient";
 import { createIngestionRouter } from "./ingestion";
 import { createSuperAdminRouter } from "./superAdmin";
 import { createThreatFeedsRouter } from "./threatFeeds";
@@ -32,6 +32,11 @@ import { lookupHash, classifyBehavior, generateYARARule, generateSigmaRule, extr
 import { analyzePermissions, testMobileEndpoint, checkOWASPMobile, lookupDeviceVulnerabilities } from "./mobilePentestEngine";
 import { generateReverseShell, generateBindShell, generateWebShell, generateMeterpreterStager, encodePayload, getSupportedLanguages } from "./payloadGenerator";
 import { SCENARIOS } from "./threatSimulator";
+import { getFrameworks, assessFramework, getOverallScore } from "./complianceEngine";
+import { analyzePassword as auditAnalyzePassword, checkBreachStatus, auditPolicy, generatePassword } from "./passwordAuditor";
+import { analyzeEmail } from "./emailAnalyzer";
+import { searchCves, getCveDetail, getRecentCves } from "./cveDatabase";
+import { inspectSSL } from "./sslInspector";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -111,6 +116,7 @@ export async function registerRoutes(
   app.use("/api/support", requireAuth);
   app.use("/api/network", requireAuth);
   app.use("/api/protection", requireAuth);
+  app.use("/api/password", requireAuth);
 
   app.post("/api/support/tickets", async (req, res) => {
     try {
@@ -1439,7 +1445,8 @@ export async function registerRoutes(
   app.get("/api/billing/config", async (_req, res) => {
     try {
       const publishableKey = await getStripePublishableKey();
-      res.json({ publishableKey });
+      const liveMode = await isStripeLiveMode();
+      res.json({ publishableKey, liveMode });
     } catch (error) {
       res.status(500).json({ error: "Stripe not configured" });
     }
@@ -3028,6 +3035,73 @@ export async function registerRoutes(
     }
   });
 
+  app.use("/api/darkweb", requireAuth);
+
+  app.post("/api/darkweb/check-domain", async (req, res) => {
+    try {
+      const { query } = z.object({ query: z.string().min(1).max(253) }).parse(req.body);
+      const { checkDomain } = await import("./darkWebMonitor");
+      const result = await checkDomain(query);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to check domain" });
+    }
+  });
+
+  app.post("/api/darkweb/check-email", async (req, res) => {
+    try {
+      const { query } = z.object({ query: z.string().email().max(320) }).parse(req.body);
+      const { checkEmail } = await import("./darkWebMonitor");
+      const result = await checkEmail(query);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to check email" });
+    }
+  });
+
+  app.get("/api/darkweb/breaches", async (_req, res) => {
+    try {
+      const { getAllBreaches } = await import("./darkWebMonitor");
+      const breaches = await getAllBreaches();
+      res.json(breaches);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch breaches" });
+    }
+  });
+
+  app.get("/api/compliance/frameworks", requireAuth, async (_req, res) => {
+    try {
+      const frameworks = getFrameworks();
+      res.json(frameworks);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch frameworks" });
+    }
+  });
+
+  app.get("/api/compliance/assess/:framework", requireAuth, async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { framework } = req.params;
+      const assessment = await assessFramework(framework, orgId);
+      res.json(assessment);
+    } catch (error: any) {
+      if (error?.message?.includes("Unknown framework")) {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: "Failed to assess framework" });
+    }
+  });
+
+  app.get("/api/compliance/score", requireAuth, async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const score = await getOverallScore(orgId);
+      res.json(score);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to calculate compliance score" });
+    }
+  });
+
   app.post("/api/payload/encode", requireAuth, async (req, res) => {
     try {
       const { payload, encoding } = z.object({
@@ -3038,6 +3112,139 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to encode payload" });
+    }
+  });
+
+  app.post("/api/ssl/inspect", requireAuth, async (req, res) => {
+    try {
+      const { domain, port } = z.object({
+        domain: z.string().min(1).max(253),
+        port: z.number().int().min(1).max(65535).optional().default(443),
+      }).parse(req.body);
+
+      if (isPrivateTarget(domain)) {
+        return res.status(400).json({ error: "Private/internal targets are not allowed for SSRF protection" });
+      }
+
+      const result = await inspectSSL(domain, port);
+      res.json(result);
+    } catch (error: any) {
+      const msg = error?.message || "Failed to inspect SSL certificate";
+      res.status(msg.includes("parse") ? 400 : 500).json({ error: msg });
+    }
+  });
+
+  app.post("/api/email/analyze", requireAuth, async (req, res) => {
+    try {
+      const { rawEmail } = z.object({
+        rawEmail: z.string().min(10, "Email content must be at least 10 characters"),
+      }).parse(req.body);
+
+      const result = analyzeEmail(rawEmail);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to analyze email" });
+    }
+  });
+
+  app.post("/api/password/analyze", async (req, res) => {
+    try {
+      const { password } = z.object({ password: z.string().min(1) }).parse(req.body);
+      const result = auditAnalyzePassword(password);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to analyze password" });
+    }
+  });
+
+  app.post("/api/password/check-breach", async (req, res) => {
+    try {
+      const { password } = z.object({ password: z.string().min(1) }).parse(req.body);
+      const result = await checkBreachStatus(password);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to check breach status" });
+    }
+  });
+
+  app.post("/api/password/policy-audit", async (req, res) => {
+    try {
+      const policy = z.object({
+        minLength: z.number().optional(),
+        maxLength: z.number().optional(),
+        requireUppercase: z.boolean().optional(),
+        requireLowercase: z.boolean().optional(),
+        requireDigits: z.boolean().optional(),
+        requireSpecial: z.boolean().optional(),
+        preventCommon: z.boolean().optional(),
+        maxAge: z.number().optional(),
+        historyCount: z.number().optional(),
+        lockoutThreshold: z.number().optional(),
+        lockoutDuration: z.number().optional(),
+        mfaRequired: z.boolean().optional(),
+      }).parse(req.body);
+      const result = auditPolicy(policy);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to audit policy" });
+    }
+  });
+
+  app.post("/api/password/generate", async (req, res) => {
+    try {
+      const options = z.object({
+        length: z.number().optional(),
+        includeUppercase: z.boolean().optional(),
+        includeLowercase: z.boolean().optional(),
+        includeDigits: z.boolean().optional(),
+        includeSpecial: z.boolean().optional(),
+        excludeAmbiguous: z.boolean().optional(),
+        count: z.number().optional(),
+      }).parse(req.body);
+      const passwords = generatePassword(options);
+      res.json({ passwords });
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to generate passwords" });
+    }
+  });
+
+  app.post("/api/cve/search", requireAuth, async (req, res) => {
+    try {
+      const { keyword, cveId, severity } = z.object({
+        keyword: z.string().optional(),
+        cveId: z.string().optional(),
+        severity: z.string().optional(),
+      }).parse(req.body);
+      const results = await searchCves({ keyword, cveId, severity });
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to search CVEs" });
+    }
+  });
+
+  app.get("/api/cve/detail/:id", requireAuth, async (req, res) => {
+    try {
+      const cveId = req.params.id;
+      if (!/^CVE-\d{4}-\d+$/i.test(cveId)) {
+        return res.status(400).json({ error: "Invalid CVE ID format" });
+      }
+      const result = await getCveDetail(cveId.toUpperCase());
+      if (!result) return res.status(404).json({ error: "CVE not found" });
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to fetch CVE details" });
+    }
+  });
+
+  app.post("/api/cve/recent", requireAuth, async (req, res) => {
+    try {
+      const { severity } = z.object({
+        severity: z.string().optional(),
+      }).parse(req.body || {});
+      const results = await getRecentCves(severity === "all" ? undefined : severity);
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to fetch recent CVEs" });
     }
   });
 

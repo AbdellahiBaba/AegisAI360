@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, Shield, Zap, Crown, LogOut } from "lucide-react";
+import { Loader2, Check, Shield, Zap, Crown, LogOut, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ChoosePlan() {
@@ -19,6 +19,10 @@ export default function ChoosePlan() {
     queryKey: ["/api/plans"],
     retry: 3,
     retryDelay: 1000,
+  });
+
+  const { data: billingConfig } = useQuery<{ publishableKey: string; liveMode: boolean }>({
+    queryKey: ["/api/billing/config"],
   });
 
   const checkoutMutation = useMutation({
@@ -90,6 +94,16 @@ export default function ChoosePlan() {
             Logout
           </Button>
         </div>
+
+        {billingConfig && !billingConfig.liveMode && (
+          <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-500/50 bg-amber-500/10 mb-2" data-testid="banner-sandbox-mode">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">Stripe Test Mode Active</p>
+              <p className="text-xs text-muted-foreground">Payments are in sandbox/test mode. No real charges will be made. To enable live payments, configure production Stripe keys in your deployment settings.</p>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {plans?.map((plan: any) => {

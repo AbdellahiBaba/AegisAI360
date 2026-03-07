@@ -14,99 +14,43 @@ Do not make changes to file `package-lock.json`.
 ## System Architecture
 
 ### UI/UX Decisions
-The platform features a professional cybersecurity-themed dark mode user interface. Key visual elements include a deep midnight navy background, gold/amber primary accents, an SVG shield logo with gold gradients and a circuit-eye motif, and specific fonts like Space Grotesk, Cairo (for RTL), and JetBrains Mono. It uses a grid background pattern and scanline animations. Security levels are indicated via CSS classes, and severity is color-coded (critical, high, medium, low, info). The application supports internationalization with English and Arabic (RTL) languages, with dynamic `dir` and `lang` attribute switching and logical CSS properties for RTL compatibility.
+The platform features a professional cybersecurity-themed dark mode user interface with a deep midnight navy background and gold/amber accents. It utilizes an SVG shield logo, Space Grotesk, Cairo (for RTL), and JetBrains Mono fonts, grid background patterns, and scanline animations. Security levels and severity are indicated via CSS classes and color-coding. The application supports internationalization with English and Arabic (RTL) languages.
 
 ### Technical Implementations
-The frontend is built with React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Recharts, Wouter, and TanStack Query. The backend utilizes Express.js with TypeScript, WebSocket for live feeds, and Passport.js for authentication. PostgreSQL is used as the database, managed via Drizzle ORM. AI capabilities are integrated using OpenAI (gpt-4o-mini), and payment processing is handled by Stripe.
+The frontend is built with React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Recharts, Wouter, and TanStack Query. The backend uses Express.js with TypeScript, WebSockets for live feeds, and Passport.js for authentication. PostgreSQL is the database, managed via Drizzle ORM. AI capabilities are integrated using OpenAI (gpt-4o-mini), and payment processing is handled by Stripe.
 
 ### Feature Specifications
-- **Real-time Monitoring**: Provides live feeds of security events and network activities.
-- **AI-powered Threat Detection**: Analyzes security events using AI to identify threats.
-- **One-Click Defense Response**: Enables immediate actions such as IP blocking, asset isolation, and playbook execution.
-- **Multi-tenancy & RBAC**: Supports multiple organizations with data separation and role-based access control (admin, analyst, auditor, readonly).
-- **Firewall Management**: Allows creation, editing, and management of firewall rules.
-- **Alert Rules Engine**: Configurable engine to define custom alert conditions and actions.
-- **Security Scanning**: Includes port, DNS, SSL/TLS, header, and vulnerability scanning capabilities.
-- **Penetration Testing Tools**: Advanced offensive security suite including subdomain enumeration (DNS brute-force + crt.sh), directory bruteforce (500+ paths), technology fingerprinting, WAF detection (12 WAF types), WHOIS/RDAP lookup, SQL injection testing (18 payloads), and XSS testing (20 payloads). All tools work against real targets with SSRF protection.
-- **Hash & Password Tools**: Standalone page with hash identifier (MD5/SHA-1/SHA-256/SHA-512/bcrypt), hash cracker (dictionary attack with 200+ common passwords), and password strength analyzer (entropy, crack time estimation, weakness analysis).
-- **Trojan Analyzer**: Real malware analysis suite at `/trojan-analyzer`. Hash lookup via MalwareBazaar API + built-in knowledge base of 48 Trojan families (RATs, Banking, Stealers, Mobile, Cryptominers, C2, Loaders, Ransomware). Behavioral classification with weighted scoring. Production-grade YARA and Sigma rule generation. Full IOC extraction (IPs, domains, hashes, mutexes, registry keys, file paths, network signatures). Files: `server/trojanAnalyzer.ts`, `client/src/pages/trojan-analyzer.tsx`.
-- **Mobile Penetration Testing**: Real mobile security testing at `/mobile-pentest`. Android permission risk analysis (40+ permissions with protection levels, risk scores, exploitation scenarios). Real API endpoint security testing (SSL/TLS analysis, HSTS, CORS, rate limiting, JWT analysis, security headers). OWASP Mobile Top 10 checks with real HTTP probing. Device CVE lookup with real CVE IDs and CVSS scores for Android 8-15 and iOS 13-18. Files: `server/mobilePentestEngine.ts`, `client/src/pages/mobile-pentest.tsx`.
-- **Payload Generator**: Educational payload builder at `/payload-generator`. Generates real reverse/bind shells in 10 languages (Python, Bash, PowerShell, PHP, Ruby, Perl, Netcat, Java, C#, Go) with TCP/UDP/encrypted variants. Web shell generator (PHP, ASPX, JSP) with file manager, command exec, upload, authentication, and obfuscation. Meterpreter stager command generator (Windows, Linux, Android, macOS). Payload encoding (Base64, URL, Hex, Unicode, Double, PowerShell). All payloads include educational disclaimers. Files: `server/payloadGenerator.ts`, `client/src/pages/payload-generator.tsx`.
-- **Threat Simulation Engine**: Offers 6 attack scenarios (SSH Brute Force, Ransomware, Phishing, Port Scan Sweep, Data Exfiltration, APT Kill Chain) to test defenses.
-- **Automation Defense Modes**: Three modes (Full Auto, Semi-Auto, Manual) control the level of automated response.
-- **Network/Infrastructure Monitor**: Real infrastructure scanning (port scan, SSL check, header audit, vulnerability path scan) for user-provided servers/domains/IPs, with device management and real-time monitoring.
-- **Protection Center**: One-click "Protect Me" page with protection score, checklist, and auto-activation of all defenses.
-- **Smart Remediation**: Scan results include one-click fix buttons that create real firewall rules and alert rules.
-- **Data Ingestion**: APIs for Syslog, SIEM, and generic event ingestion.
-- **Super Admin System**: Provides platform-level management, organization oversight, and system health monitoring. Super admin (isSuperAdmin=true) has full unrestricted access with no billing plan restrictions.
-
-#### Endpoint Agent System (NEW)
-- **Device Token Management**: Generate single-use tokens via `/api/agent/device-token/create` to register endpoint agents.
-- **Agent Registration**: Agents register with hostname, OS, IP via `/api/agent/register` using device tokens.
-- **Heartbeat Monitoring**: Agents send periodic heartbeats with CPU/RAM metrics via `/api/agent/heartbeat`.
-- **Log Ingestion**: Agents send security events via `/api/agent/logs` with plan-based rate limiting.
-- **Command System**: SOC analysts send commands to agents (system scan, list processes, isolate network, etc.). Agents poll for pending commands and report results.
-- **Remote Terminal**: Built-in terminal UI for remote command execution on agents. Commands are validated against a whitelist (whoami, ifconfig, netstat, ps, ls, etc.). Destructive commands (rm, del, format, sudo) are always blocked. All terminal activity is logged in audit logs.
-- **Frontend Pages**: `/endpoints` (agent dashboard), `/download-agent` (token generation + agent download), `/endpoints/:agentId/terminal` (remote terminal).
-- **Windows Endpoint Agent**: Production-ready Go agent in `/installer` directory (v1.1.0). Requires Administrator privileges (auto-elevates via UAC on Windows, refuses to run without admin). Features: interactive setup wizard on double-click, "Press Enter to exit" on errors, connection retry with exponential backoff (10 attempts), auto re-registration after 5 heartbeat failures, Windows service install/uninstall/status commands, SHA256 auto-update, full telemetry (CPU/RAM/disk/processes/network every 30s), 35+ remote cyber commands with JSON parameters, silent background operation, auto-start on boot. CLI flags: `--setup`, `--install` (Windows service + registry auto-start), `--uninstall`, `--status`, `--silent`/`--quiet` (background mode, no console), `--help`, `--version`, `--service`/`--headless`. Commands: ping, get_info, run_system_scan, security_scan, disk_usage, wifi_list, wifi_profiles, wifi_connect, wifi_disconnect, network_interfaces, network_connections, network_dns, network_arp, network_route, network_scan, network_firewall_rules, network_firewall_add, network_firewall_remove, process_list, process_kill, service_list, service_control, user_list, user_sessions, installed_software, startup_programs, file_search, file_hash, event_log, scheduled_tasks, env_vars, registry_query, terminal_exec, restart, update, **packet_capture** (Wireshark-style traffic analysis), **rogue_scan** (local network device discovery), **vuln_scan** (port scan + service fingerprinting), **arp_monitor** (ARP spoof detection), **bandwidth_stats** (interface throughput monitoring). Command poll interval: 15s. Go files: `main.go`, `config.go`, `backend.go`, `telemetry.go`, `commands.go`, `network.go`, `admin.go`, `admin_windows.go`, `admin_unix.go`, `capture.go` (packet capture), `vulnscan.go` (vulnerability scanning), `arpmon.go` (ARP monitoring), `bandwidth.go` (bandwidth stats), `updater.go`, `service.go`, `tray.go`/`icons.go` (`!headless`), `tray_headless.go` (`headless`), `status.go`. Server endpoint: `GET /api/agent/supported-commands` returns full command catalog with parameter schemas. Pre-compiled .exe at `public/downloads/AegisAI360-Agent.exe` (7.85MB, cross-compiled with `GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -tags headless`).
-- **Network Security Pages**: `/traffic-analysis` (packet capture + protocol analysis), `/network-security` (rogue detection, ARP monitor, vuln scanner tabs)
-- **New DB Tables**: `packet_captures` (jsonb capture data), `arp_alerts` (ARP spoof detection alerts), `bandwidth_logs` (per-interface throughput)
-- **New API Endpoints**: Agent POST: `/api/agent/packet-capture`, `/api/agent/arp-alerts`, `/api/agent/bandwidth`. Dashboard GET: `/api/packet-captures`, `/api/packet-captures/:agentId`, `/api/arp-alerts`, `/api/arp-alerts/:agentId`, `/api/bandwidth/:agentId`
-- **Files**: `server/agentApi.ts`, `server/routes.ts`, `client/src/pages/endpoints.tsx`, `client/src/pages/download-agent.tsx`, `client/src/pages/agent-terminal.tsx`, `client/src/pages/traffic-analysis.tsx`, `client/src/pages/network-security.tsx`, `installer/*.go`
-
-#### Billing Paywall System (NEW)
-- **Plans Table**: Three tiers (starter $29/mo, professional $99/mo, enterprise $299/mo) with feature flags and usage limits.
-- **Subscription Enforcement**: New users are redirected to `/choose-plan` until they have an active subscription. Super admin bypasses all restrictions.
-- **Usage Tracking**: Daily usage tracked per organization (agents, logs, commands, terminal commands, threat intel queries).
-- **Plan Features**: `allowNetworkIsolation`, `allowProcessKill`, `allowFileScan`, `allowEndpointDownload`, `allowTerminalAccess`, `allowThreatIntel`, `allowAdvancedAnalytics`.
-- **Frontend Pages**: `/choose-plan` (plan selection), `/billing/success`, `/billing/error`.
-- **Organization Fields**: `subscription_status` (active/inactive/trial/canceled), `plan_id` (references plans table).
-
-#### Threat Intelligence API Integration (NEW)
-- **AbuseIPDB**: IP reputation lookup via `/api/threat-intel/ip`. Returns abuse confidence score, reports, country, ISP.
-- **AlienVault OTX**: Indicator lookup via `/api/threat-intel/otx-lookup`. Supports IP, domain, URL, hash types.
-- **URLScan.io**: URL analysis via `/api/threat-intel/urlscan`. Submits URLs for scanning.
-- **Google Safe Browsing**: URL safety check via `/api/threat-intel/safebrowsing`. Checks against malware/phishing lists.
-- **MalwareBazaar**: Hash lookup via `/api/threat-intel/hash`. No API key required (free API).
-- **Stub Data**: When API keys are not configured, returns realistic demo data with a "Demo Data" badge.
-- **Files**: `server/services/threatIntel/` directory with individual service files.
-
-#### Advanced Analytics (NEW)
-- **Anomaly Detection**: `/api/analytics/anomaly-detection` - heuristic analysis of security events, returns anomaly score and detected anomalies.
-- **Endpoint Risk Score**: `/api/analytics/endpoint-risk-score` - calculates risk scores based on agent status, CPU/RAM, last seen time.
-
-#### Documentation (NEW)
-- **Agent Documentation**: `/docs/agent` page with comprehensive documentation covering registration flow, command system, terminal usage, API reference, Go agent skeleton, and plan feature matrix.
-
-### Database Schema
-- **New Tables**: `plans`, `device_tokens`, `agents`, `agent_commands`, `terminal_audit_logs`, `usage_tracking`
-- **Modified Tables**: `organizations` (added `subscription_status`, `plan_id` columns)
-- **Total Tables**: 28+ tables covering all platform functionality
+- **Core Security Operations**: Real-time monitoring, AI-powered threat detection, one-click defense response, multi-tenancy with RBAC, firewall management, and a configurable alert rules engine.
+- **Security Scanning & Testing**: Includes port, DNS, SSL/TLS, header, and vulnerability scanning. Advanced offensive security tools cover subdomain enumeration, directory bruteforce, technology fingerprinting, WAF detection, WHOIS/RDAP lookup, SQL injection, and XSS testing.
+- **Malware & Mobile Analysis**: Trojan Analyzer for malware analysis (hash lookup, behavioral classification, YARA/Sigma rule generation, IOC extraction) and Mobile Penetration Testing (Android permission risk analysis, API endpoint security testing, OWASP Mobile Top 10 checks, device CVE lookup).
+- **Payload Generation**: Educational tool to generate reverse/bind shells, web shells, and Meterpreter stager commands in various languages, with encoding options.
+- **Threat Simulation**: Offers 6 attack scenarios (SSH Brute Force, Ransomware, Phishing, Port Scan Sweep, Data Exfiltration, APT Kill Chain) to test defenses.
+- **Endpoint Agent System**: Manages device token generation, agent registration, heartbeat monitoring, log ingestion, command execution (system scan, isolate network, remote terminal), and remote terminal with command whitelisting/blacklisting. Includes a production-ready Go agent for Windows with extensive capabilities (packet capture, rogue scan, vuln scan, ARP monitor, bandwidth stats).
+- **Billing Paywall System**: Three subscription tiers (starter, professional, enterprise) with feature flags and usage limits, enforced via Stripe integration. Includes usage tracking and redirects new users to plan selection.
+- **Compliance Dashboard**: Tracks compliance with NIST CSF 2.0, ISO 27001:2022, SOC 2 Type II, GDPR, PCI DSS 4.0, HIPAA, offering auto-assessment and gap analysis.
+- **Dark Web Monitor**: Detects credential exposure via Have I Been Pwned API, providing risk scoring and remediation recommendations.
+- **SSL/TLS Certificate Inspector**: Analyzes SSL/TLS certificate security for domains, including grading, protocol detection, and vulnerability checks.
+- **Email Security Analyzer**: Parses email headers for phishing detection, SPF/DKIM/DMARC authentication, and IOC extraction.
+- **CVE Database Search**: Integrates with NIST NVD API for searching and tracking CVEs, including CVSS scores and severity filtering.
+- **Password Security Auditor**: Assesses password strength, checks for breaches (HIBP), audits password policies, and generates secure passwords.
+- **Threat Intelligence Integrations**: Integrates with AbuseIPDB, AlienVault OTX, URLScan.io, Google Safe Browsing, and MalwareBazaar for comprehensive threat intelligence.
+- **Advanced Analytics**: Provides anomaly detection and endpoint risk scoring.
 
 ### System Design Choices
-- **Modular Architecture**: Codebase is organized into `server/`, `client/`, and `shared/` directories.
-- **Authentication**: Passport-local with scrypt hashing and session management.
-- **Organization Scoping**: All data access is scoped by `organizationId` to ensure multi-tenancy.
-- **Agent Auth**: Device token-based authentication for agent API endpoints (no user session required).
-- **Terminal Safety**: Command whitelist + blocked pattern list for remote terminal execution.
+The architecture is modular, organized into `server/`, `client/`, and `shared/` directories. Authentication uses Passport-local with scrypt hashing. All data access is scoped by `organizationId` for multi-tenancy. Agent authentication is token-based. The remote terminal ensures safety through command whitelisting and blacklisting.
 
 ## External Dependencies
-- **OpenAI**: Integrated for AI-powered threat analysis (gpt-4o-mini).
-- **Stripe**: Used for subscription management and billing via the `stripe-replit-sync` connector.
-- **PostgreSQL**: Primary database for all application data, accessed via Drizzle ORM.
+- **OpenAI**: Integrated for AI-powered threat analysis.
+- **Stripe**: Used for subscription management and billing.
+- **PostgreSQL**: Primary database.
 - **Passport.js**: Authentication middleware.
-- **i18next + react-i18next**: For internationalization and localization.
-- **Node.js `net` and `dns` modules**: Used for network scanning functionalities (Port Scanner, DNS Lookup).
-- **Node.js `tls` module**: Used for SSL/TLS certificate checking.
-- **AbuseIPDB API**: IP reputation (optional, needs ABUSEIPDB_API_KEY).
-- **AlienVault OTX API**: Threat intelligence (optional, needs OTX_API_KEY).
-- **URLScan.io API**: URL analysis (optional, needs URLSCAN_API_KEY).
-- **Google Safe Browsing API**: URL safety (optional, needs GOOGLE_SAFE_BROWSING_API_KEY).
-- **MalwareBazaar API**: Malware hash lookup (free, no key needed).
-
-## Key Technical Notes
-- **Session Cookie**: `secure: process.env.NODE_ENV === "production"` + `proxy: true` in `server/auth.ts`
-- **parseActions()**: Handles both `string[]` and `{type: string}[]` formats for alert rule actions
-- **DB Pattern**: Use `and()` with `eq(table.organizationId, orgId)` for all org-scoped queries
-- **Super Admin**: username=`admin`, bypasses all billing/plan restrictions via `isSuperAdmin` check
-- **Plans Seeded**: starter (id=1), professional (id=2), enterprise (id=3) in plans table
+- **i18next + react-i18next**: For internationalization.
+- **Node.js `net`, `dns`, `tls` modules**: For network and SSL/TLS scanning.
+- **AbuseIPDB API**: For IP reputation lookup.
+- **AlienVault OTX API**: For threat intelligence.
+- **URLScan.io API**: For URL analysis.
+- **Google Safe Browsing API**: For URL safety checks.
+- **MalwareBazaar API**: For malware hash lookup.
+- **Have I Been Pwned API**: For credential exposure detection.
+- **NIST NVD API**: For CVE database search.
+- **HIBP Passwords API**: For password breach checking.

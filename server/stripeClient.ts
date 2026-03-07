@@ -1,7 +1,9 @@
 import Stripe from 'stripe';
 
 let connectionSettings: any;
-let cachedCredentials: { publishableKey: string; secretKey: string } | null = null;
+let cachedCredentials: { publishableKey: string; secretKey: string; isLiveMode: boolean } | null = null;
+let credentialsCacheTime: number = 0;
+const CREDENTIALS_CACHE_TTL = 5 * 60 * 1000;
 
 async function fetchStripeConnection(hostname: string, xReplitToken: string, environment: string) {
   const url = new URL(`https://${hostname}/api/v2/connection`);
@@ -30,7 +32,11 @@ async function fetchStripeConnection(hostname: string, xReplitToken: string, env
 }
 
 async function getCredentials() {
-  if (cachedCredentials) return cachedCredentials;
+  if (cachedCredentials && (Date.now() - credentialsCacheTime) < CREDENTIALS_CACHE_TTL) {
+    return cachedCredentials;
+  }
+
+  cachedCredentials = null;
 
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY
@@ -48,8 +54,10 @@ async function getCredentials() {
   if (isProduction) {
     const prodCreds = await fetchStripeConnection(hostname!, xReplitToken, 'production');
     if (prodCreds) {
-      console.log("Stripe: using production credentials");
-      cachedCredentials = prodCreds;
+      const isLive = prodCreds.secretKey.startsWith('sk_live_');
+      console.log(`Stripe: using production credentials (live mode: ${isLive})`);
+      cachedCredentials = { ...prodCreds, isLiveMode: isLive };
+      credentialsCacheTime = Date.now();
       return cachedCredentials;
     }
     console.log("Stripe: production credentials not found, falling back to development");
@@ -57,8 +65,10 @@ async function getCredentials() {
 
   const devCreds = await fetchStripeConnection(hostname!, xReplitToken, 'development');
   if (devCreds) {
-    console.log(`Stripe: using development credentials${isProduction ? ' (fallback)' : ''}`);
-    cachedCredentials = devCreds;
+    const isLive = devCreds.secretKey.startsWith('sk_live_');
+    console.log(`Stripe: using development credentials${isProduction ? ' (fallback)' : ''} (live mode: ${isLive})`);
+    cachedCredentials = { ...devCreds, isLiveMode: isLive };
+    credentialsCacheTime = Date.now();
     return cachedCredentials;
   }
 
@@ -80,6 +90,11 @@ export async function getStripePublishableKey() {
 export async function getStripeSecretKey() {
   const { secretKey } = await getCredentials();
   return secretKey;
+}
+
+export async function isStripeLiveMode(): Promise<boolean> {
+  const creds = await getCredentials();
+  return creds.isLiveMode;
 }
 
 let stripeSync: any = null;

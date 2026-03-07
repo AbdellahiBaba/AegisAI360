@@ -5,7 +5,8 @@ import {
   LayoutDashboard, ShieldAlert, Bug, Brain, Database,
   Network, Target, Clock, Radio, Lock, BookOpen, FileText,
   Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar, LifeBuoy, Server, Key,
-  Monitor, Download, Terminal, Activity, ScanSearch, Smartphone,
+  Monitor, Download, Terminal, Activity, ScanSearch, Smartphone, Eye, ShieldCheck,
+  Mail, KeyRound, ShieldBan, FileSearch,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -77,6 +78,9 @@ export function AppSidebar() {
     { title: "Payload Generator", testId: "payload-generator", url: "/payload-generator", icon: Terminal },
     { title: "Trojan Analyzer", testId: "trojan-analyzer", url: "/trojan-analyzer", icon: Bug },
     { title: "Mobile Pentest", testId: "mobile-pentest", url: "/mobile-pentest", icon: Smartphone },
+    { title: "SSL Inspector", testId: "ssl-inspector", url: "/ssl-inspector", icon: ShieldBan },
+    { title: "Email Analyzer", testId: "email-analyzer", url: "/email-analyzer", icon: Mail },
+    { title: "Password Auditor", testId: "password-auditor", url: "/password-auditor", icon: KeyRound },
   ];
 
   const respondItems: NavItem[] = [
@@ -85,6 +89,7 @@ export function AppSidebar() {
     { title: t("sidebar.playbooks"), testId: "playbooks", url: "/playbooks", icon: BookOpen },
     { title: t("sidebar.firewall"), testId: "firewall", url: "/firewall", icon: Flame },
     { title: t("sidebar.policies"), testId: "policies", url: "/policies", icon: FileText },
+    { title: "Compliance", testId: "compliance", url: "/compliance", icon: ShieldCheck },
   ];
 
   const endpointItems: NavItem[] = [
@@ -96,6 +101,8 @@ export function AppSidebar() {
     { title: t("sidebar.threatIntel"), testId: "threat-intel", url: "/threat-intel", icon: Database },
     { title: t("sidebar.networkMap"), testId: "network-map", url: "/network-map", icon: Network },
     { title: t("sidebar.forensicTimeline"), testId: "forensic-timeline", url: "/forensics", icon: Clock },
+    { title: "Dark Web Monitor", testId: "dark-web-monitor", url: "/dark-web-monitor", icon: Eye },
+    { title: "CVE Database", testId: "cve-database", url: "/cve-database", icon: FileSearch },
   ];
 
   const adminItems: NavItem[] = [
