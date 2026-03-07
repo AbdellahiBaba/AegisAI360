@@ -62,6 +62,16 @@ func executeCommand(cmd Command) (string, string) {
                 }()
                 return "Update check initiated — agent will restart if a new version is available", "done"
 
+        case "disk_usage":
+                result := collectDiskUsage()
+                logMessage("INFO", "Disk usage collected")
+                return result, "done"
+
+        case "network_scan":
+                result := collectNetworkScanInfo()
+                logMessage("INFO", "Network scan completed")
+                return result, "done"
+
         default:
                 logMessage("WARN", "Unknown command received: %s", cmd.Command)
                 return fmt.Sprintf("Unknown command: %s", cmd.Command), "failed"

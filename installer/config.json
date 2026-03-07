@@ -4,6 +4,8 @@
   "agentVersion": "1.0.0",
   "heartbeatInterval": 30,
   "commandPollInterval": 5,
+  "updateCheckInterval": 300,
+  "telemetryInterval": 30,
   "logMaxSizeMB": 10,
   "logMaxBackups": 5
 }

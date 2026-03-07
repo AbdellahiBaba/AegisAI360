@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
-import { randomBytes } from "crypto";
+import { randomBytes, createHash } from "crypto";
+import fs from "fs";
+import path from "path";
 import { storage } from "./storage";
 import { requireAuth, requireRole, requirePlanFeature } from "./auth";
 import type { User } from "@shared/schema";
@@ -178,6 +180,78 @@ export function createAgentRouter(): Router {
       if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
       res.status(500).json({ error: "Failed to ingest logs" });
     }
+  });
+
+  router.post("/telemetry", async (req, res) => {
+    try {
+      const { agentId, token, hostname, os, cpuUsage, ramUsage, ramTotalMB, ramFreeMB, cpus, uptime, agentVersion, topProcesses, netConnections, diskUsage, localIP, arch } = z.object({
+        agentId: z.number(),
+        token: z.string(),
+        hostname: z.string().optional(),
+        os: z.string().optional(),
+        arch: z.string().optional(),
+        cpuUsage: z.number().optional(),
+        ramUsage: z.number().optional(),
+        ramTotalMB: z.number().optional(),
+        ramFreeMB: z.number().optional(),
+        cpus: z.number().optional(),
+        uptime: z.string().optional(),
+        agentVersion: z.string().optional(),
+        topProcesses: z.array(z.string()).optional(),
+        netConnections: z.number().optional(),
+        diskUsage: z.string().optional(),
+        localIP: z.string().optional(),
+        timestamp: z.string().optional(),
+      }).parse(req.body);
+
+      const agent = await storage.getAgentById(agentId);
+      if (!agent || agent.deviceToken !== token) return res.status(401).json({ error: "Invalid agent credentials" });
+
+      await storage.updateAgentHeartbeat(agentId, {
+        lastSeen: new Date(),
+        cpuUsage: cpuUsage ?? undefined,
+        ramUsage: ramUsage ?? undefined,
+        ip: localIP ?? undefined,
+      });
+
+      res.json({ status: "ok" });
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Telemetry ingestion failed" });
+    }
+  });
+
+  router.get("/version", (req, res) => {
+    const currentVersion = req.query.version as string || "0.0.0";
+    const latestVersion = "1.0.0";
+    const needsUpdate = currentVersion !== latestVersion;
+
+    let downloadUrl = "";
+    let checksum = "";
+
+    if (needsUpdate) {
+      const host = req.get("host") || "aegisai360.com";
+      const protocol = req.protocol === "https" || req.get("x-forwarded-proto") === "https" ? "https" : "https";
+      downloadUrl = `${protocol}://${host}/downloads/AegisAI360-Agent.exe`;
+
+      try {
+        const searchPaths = [
+          path.resolve(process.cwd(), "public", "downloads", "AegisAI360-Agent.exe"),
+          path.resolve("public", "downloads", "AegisAI360-Agent.exe"),
+        ];
+        for (const exePath of searchPaths) {
+          if (fs.existsSync(exePath)) {
+            const fileBuffer = fs.readFileSync(exePath);
+            checksum = createHash("sha256").update(fileBuffer).digest("hex");
+            break;
+          }
+        }
+      } catch (e) {
+        checksum = "";
+      }
+    }
+
+    res.json({ version: latestVersion, downloadUrl, checksum });
   });
 
   router.get("/commands", async (req, res) => {

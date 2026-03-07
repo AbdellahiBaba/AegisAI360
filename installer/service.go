@@ -34,8 +34,11 @@ func runAgent(ctx context.Context, cfg *AgentConfig) error {
 	commandTicker := time.NewTicker(time.Duration(cfg.CommandPollInterval) * time.Second)
 	defer commandTicker.Stop()
 
-	updateTicker := time.NewTicker(1 * time.Hour)
+	updateTicker := time.NewTicker(time.Duration(cfg.UpdateCheckInterval) * time.Second)
 	defer updateTicker.Stop()
+
+	telemetryTicker := time.NewTicker(time.Duration(cfg.TelemetryInterval) * time.Second)
+	defer telemetryTicker.Stop()
 
 	manualUpdateCh := make(chan struct{}, 1)
 	triggerUpdateCheck = func() {
@@ -46,8 +49,10 @@ func runAgent(ctx context.Context, cfg *AgentConfig) error {
 	}
 
 	sendHeartbeatSafe(cfg, agentID)
+	sendTelemetrySafe(cfg, agentID)
 
-	logMessage("INFO", "Agent running — heartbeat every %ds, polling every %ds", cfg.HeartbeatInterval, cfg.CommandPollInterval)
+	logMessage("INFO", "Agent running — heartbeat every %ds, commands every %ds, telemetry every %ds, update check every %ds",
+		cfg.HeartbeatInterval, cfg.CommandPollInterval, cfg.TelemetryInterval, cfg.UpdateCheckInterval)
 
 	for {
 		select {
@@ -66,6 +71,9 @@ func runAgent(ctx context.Context, cfg *AgentConfig) error {
 		case <-updateTicker.C:
 			checkAndUpdate(cfg, agentID)
 
+		case <-telemetryTicker.C:
+			sendTelemetrySafe(cfg, agentID)
+
 		case <-manualUpdateCh:
 			checkAndUpdate(cfg, agentID)
 		}
@@ -79,6 +87,14 @@ func sendHeartbeatSafe(cfg *AgentConfig, agentID float64) {
 	} else {
 		cpu, ram := collectCPUAndRAM()
 		globalStatus.SetConnected(agentID, getHostname(), getLocalIP(), cpu, ram)
+	}
+}
+
+func sendTelemetrySafe(cfg *AgentConfig, agentID float64) {
+	if err := sendTelemetry(cfg, agentID); err != nil {
+		logMessage("WARN", "Telemetry send failed: %v", err)
+	} else {
+		logMessage("DEBUG", "Telemetry sent successfully")
 	}
 }
 
