@@ -156,6 +156,7 @@ export interface IStorage {
 
   getNetworkDevices(orgId: number): Promise<NetworkDevice[]>;
   getNetworkDevice(id: number): Promise<NetworkDevice | undefined>;
+  getNetworkDeviceByMac(orgId: number, macAddress: string): Promise<NetworkDevice | undefined>;
   createNetworkDevice(device: InsertNetworkDevice): Promise<NetworkDevice>;
   updateNetworkDevice(id: number, data: Partial<NetworkDevice>): Promise<NetworkDevice | undefined>;
   deleteNetworkDevice(id: number): Promise<void>;
@@ -735,6 +736,12 @@ export class DatabaseStorage implements IStorage {
 
   async getNetworkDevice(id: number): Promise<NetworkDevice | undefined> {
     const [device] = await db.select().from(networkDevices).where(eq(networkDevices.id, id));
+    return device || undefined;
+  }
+
+  async getNetworkDeviceByMac(orgId: number, macAddress: string): Promise<NetworkDevice | undefined> {
+    const [device] = await db.select().from(networkDevices)
+      .where(and(eq(networkDevices.organizationId, orgId), eq(networkDevices.macAddress, macAddress)));
     return device || undefined;
   }
 

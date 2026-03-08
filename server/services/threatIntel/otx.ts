@@ -6,20 +6,9 @@ export async function otxLookup(indicator: string, type: "ip" | "domain" | "url"
       configured: false,
       indicator,
       type,
-      message: "OTX API key not configured. Set OTX_API_KEY environment variable to enable live lookups.",
-      stub: true,
-      data: {
-        pulseCount: Math.floor(Math.random() * 20),
-        reputation: Math.floor(Math.random() * 5),
-        country: "US",
-        asn: "AS15169",
-        indicator,
-        sections: ["general", "geo", "malware", "url_list", "passive_dns"],
-        pulses: [
-          { name: "Malicious IP Feed", description: "Known malicious IPs", created: new Date().toISOString(), tags: ["malware", "c2"] },
-          { name: "Threat Intel Report", description: "Threat intelligence indicators", created: new Date().toISOString(), tags: ["apt", "threat"] },
-        ],
-      },
+      message: "OTX API key not configured. Set OTX_API_KEY environment variable to enable live threat intelligence lookups.",
+      setupUrl: "https://otx.alienvault.com/api",
+      setupInstructions: "Sign up at otx.alienvault.com, go to Settings > API, and copy your API key (free, unlimited).",
     };
   }
 
@@ -29,6 +18,10 @@ export async function otxLookup(indicator: string, type: "ip" | "domain" | "url"
     const response = await fetch(`https://otx.alienvault.com/api/v1/indicators/${otxType}/${encodeURIComponent(indicator)}/general`, {
       headers: { "X-OTX-API-KEY": apiKey },
     });
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { source: "AlienVault OTX", configured: true, indicator, error: `API returned ${response.status}: ${errorText}` };
+    }
     const result = await response.json();
     return { source: "AlienVault OTX", configured: true, indicator, type, data: result };
   } catch (error: any) {

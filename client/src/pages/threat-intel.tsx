@@ -10,9 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Search, Globe, Hash, Link, Mail, Server, ShieldBan, Loader2, Scan, AlertTriangle } from "lucide-react";
+import { Plus, Search, Globe, Hash, Link, Mail, Server, ShieldBan, Loader2, Scan, AlertTriangle, CheckCircle, XCircle, ExternalLink, KeyRound } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { ThreatIntel } from "@shared/schema";
 
@@ -33,6 +32,82 @@ const typeIcons: Record<string, React.ElementType> = {
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+interface ApiStatus {
+  name: string;
+  envVar: string | null;
+  configured: boolean;
+  description: string;
+  setupUrl: string;
+  freeTier: string;
+}
+
+function ApiStatusSection() {
+  const { data } = useQuery<{ apis: ApiStatus[] }>({
+    queryKey: ["/api/threat-intel/api-status"],
+  });
+
+  if (!data) return null;
+
+  const configuredCount = data.apis.filter(a => a.configured).length;
+  const totalCount = data.apis.length;
+
+  return (
+    <Card data-testid="card-api-status">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center justify-between gap-2 flex-wrap">
+          <span className="flex items-center gap-2">
+            <KeyRound className="w-4 h-4" />
+            API Configuration Status
+          </span>
+          <Badge variant={configuredCount === totalCount ? "default" : "secondary"} data-testid="badge-api-count">
+            {configuredCount}/{totalCount} Active
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {data.apis.map((api) => (
+            <div
+              key={api.name}
+              className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted/30"
+              data-testid={`api-status-${api.name.replace(/\s+/g, "-").toLowerCase()}`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {api.configured ? (
+                  <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+                ) : (
+                  <XCircle className="w-4 h-4 text-muted-foreground shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-xs font-medium truncate">{api.name}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{api.freeTier}</p>
+                </div>
+              </div>
+              {!api.configured && api.envVar && (
+                <a
+                  href={api.setupUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0"
+                  data-testid={`link-setup-${api.name.replace(/\s+/g, "-").toLowerCase()}`}
+                >
+                  <Button size="sm" variant="outline" className="text-[10px] gap-1">
+                    <ExternalLink className="w-3 h-3" />
+                    Get Key
+                  </Button>
+                </a>
+              )}
+              {api.configured && (
+                <Badge variant="outline" className="text-[10px] shrink-0">Active</Badge>
+              )}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function ThreatLookupSection() {
@@ -95,10 +170,47 @@ function ThreatLookupSection() {
 
         {lookupResult && (
           <div className="p-3 bg-muted/50 rounded-lg text-sm space-y-2" data-testid="container-lookup-result">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <Badge variant="outline">{lookupResult.source}</Badge>
-              {lookupResult.stub && <Badge variant="secondary" className="text-xs">Demo Data</Badge>}
+              {lookupResult.configured === false && (
+                <Badge variant="secondary" className="text-xs gap-1">
+                  <KeyRound className="w-3 h-3" />
+                  API Key Required
+                </Badge>
+              )}
+              {lookupResult.error && (
+                <Badge variant="destructive" className="text-xs gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Error
+                </Badge>
+              )}
             </div>
+
+            {lookupResult.configured === false && (
+              <div className="p-2 rounded-md bg-muted/50 space-y-1">
+                <p className="text-xs text-muted-foreground">{lookupResult.message}</p>
+                {lookupResult.setupInstructions && (
+                  <p className="text-[10px] text-muted-foreground">{lookupResult.setupInstructions}</p>
+                )}
+                {lookupResult.setupUrl && (
+                  <a
+                    href={lookupResult.setupUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] text-blue-500 hover:underline"
+                    data-testid="link-result-setup"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Get API Key
+                  </a>
+                )}
+              </div>
+            )}
+
+            {lookupResult.error && !lookupResult.setupUrl && (
+              <p className="text-xs text-destructive">{lookupResult.error}</p>
+            )}
+
             {lookupResult.data && lookupType === "ip" && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                 <div><span className="text-muted-foreground">Confidence:</span> <span className="font-medium">{lookupResult.data.abuseConfidenceScore}%</span></div>
@@ -109,14 +221,14 @@ function ThreatLookupSection() {
             )}
             {lookupResult.data && lookupType === "domain" && (
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div><span className="text-muted-foreground">Pulses:</span> <span className="font-medium">{lookupResult.data.pulseCount}</span></div>
-                <div><span className="text-muted-foreground">Reputation:</span> <span className="font-medium">{lookupResult.data.reputation}</span></div>
+                <div><span className="text-muted-foreground">Pulses:</span> <span className="font-medium">{lookupResult.data.pulse_info?.count ?? lookupResult.data.pulseCount ?? "N/A"}</span></div>
+                <div><span className="text-muted-foreground">Reputation:</span> <span className="font-medium">{lookupResult.data.reputation ?? "N/A"}</span></div>
               </div>
             )}
             {lookupResult.data && lookupType === "safebrowsing" && (
               <div className="text-xs">
                 {lookupResult.data.safe ? (
-                  <span className="text-green-500 font-medium">URL is safe</span>
+                  <span className="text-green-500 font-medium flex items-center gap-1"><CheckCircle className="w-3 h-3" /> URL is safe</span>
                 ) : (
                   <span className="text-red-500 font-medium flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Threats detected</span>
                 )}
@@ -128,7 +240,10 @@ function ThreatLookupSection() {
                 <span className="font-medium">{lookupResult.data.query_status || "unknown"}</span>
               </div>
             )}
-            {lookupResult.message && <p className="text-xs text-muted-foreground">{lookupResult.message}</p>}
+            {lookupResult.data && lookupType === "url" && lookupResult.data.message && (
+              <p className="text-xs text-muted-foreground">{lookupResult.data.message}</p>
+            )}
+            {lookupResult.message && lookupResult.configured !== false && <p className="text-xs text-muted-foreground">{lookupResult.message}</p>}
           </div>
         )}
       </CardContent>
@@ -328,11 +443,13 @@ export default function ThreatIntelPage() {
         </Select>
       </div>
 
+      <ApiStatusSection />
+
       <ThreatLookupSection />
 
       <Card>
         <CardContent className="p-0">
-          <ScrollArea className="h-[calc(100vh-430px)]">
+          <ScrollArea className="h-[calc(100vh-530px)]">
             <div className="min-w-[600px]">
               <div className="grid grid-cols-[40px_1fr_100px_80px_100px_80px_60px_80px] gap-2 px-4 py-2 border-b text-[10px] text-muted-foreground uppercase tracking-wider font-medium sticky top-0 bg-card z-10">
                 <span></span>

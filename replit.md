@@ -25,15 +25,17 @@ The frontend is built with React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Rec
 - **Malware & Mobile Analysis**: Trojan Analyzer for malware analysis (hash lookup, behavioral classification, YARA/Sigma rule generation, IOC extraction) and Mobile Penetration Testing (Android permission risk analysis, API endpoint security testing, OWASP Mobile Top 10 checks, device CVE lookup).
 - **Payload Generation**: Educational tool to generate reverse/bind shells, web shells, and Meterpreter stager commands in various languages, with encoding options.
 - **Threat Simulation**: Offers 6 attack scenarios (SSH Brute Force, Ransomware, Phishing, Port Scan Sweep, Data Exfiltration, APT Kill Chain) to test defenses.
-- **Endpoint Agent System**: Manages device token generation, agent registration, heartbeat monitoring, log ingestion, command execution (system scan, isolate network, remote terminal), and remote terminal with command whitelisting/blacklisting. Includes a production-ready Go agent for Windows with extensive capabilities (packet capture, rogue scan, vuln scan, ARP monitor, bandwidth stats).
+- **Endpoint Agent System**: Manages device token generation, agent registration, heartbeat monitoring, log ingestion, command execution (system scan, isolate network, remote terminal, honeypot_monitor), and remote terminal with command whitelisting/blacklisting. Includes a production-ready Go agent for Windows with extensive capabilities (packet capture, rogue scan, vuln scan, ARP monitor, bandwidth stats, honeypot monitoring).
 - **Billing Paywall System**: Three subscription tiers (starter, professional, enterprise) with feature flags and usage limits, enforced via Stripe integration. Includes usage tracking and redirects new users to plan selection.
 - **Compliance Dashboard**: Tracks compliance with NIST CSF 2.0, ISO 27001:2022, SOC 2 Type II, GDPR, PCI DSS 4.0, HIPAA, offering auto-assessment and gap analysis.
-- **Dark Web Monitor**: Detects credential exposure via Have I Been Pwned API, providing risk scoring and remediation recommendations.
+- **Dark Web Monitor**: Detects credential exposure via Have I Been Pwned public API (no key needed for domain lookups), with optional HIBP_API_KEY for per-email breach lookups ($3.50/mo). Uses 10-min cached breach list. No mock/simulated data.
 - **SSL/TLS Certificate Inspector**: Analyzes SSL/TLS certificate security for domains, including grading, protocol detection, and vulnerability checks.
 - **Email Security Analyzer**: Parses email headers for phishing detection, SPF/DKIM/DMARC authentication, and IOC extraction.
-- **CVE Database Search**: Integrates with NIST NVD API for searching and tracking CVEs, including CVSS scores and severity filtering.
+- **CVE Database Search**: Integrates with NIST NVD API v2.0 with rate limiting (1 req/6s without key), exponential backoff retry (3 attempts), 5-min result cache, and optional NVD_API_KEY for higher rate limits. No mock/fallback data.
 - **Password Security Auditor**: Assesses password strength, checks for breaches (HIBP), audits password policies, and generates secure passwords.
-- **Threat Intelligence Integrations**: Integrates with AbuseIPDB, AlienVault OTX, URLScan.io, Google Safe Browsing, and MalwareBazaar for comprehensive threat intelligence.
+- **Threat Intelligence Integrations**: Integrates with AbuseIPDB, AlienVault OTX, URLScan.io, Google Safe Browsing, and MalwareBazaar. MalwareBazaar works without API key. Others show "API Key Required" with setup URLs when keys aren't configured (no fake demo data). API status endpoint at GET /api/threat-intel/api-status.
+- **Honeypot System**: Agent-based honeypot monitoring via `honeypot_monitor` command. Agent opens TCP listeners on bait ports (23, 445, 1433, 3389, 5900, 8080), captures connection attempts, and reports events to POST /api/agent/honeypot-events.
+- **Network Monitor**: Uses real agent rogue_scan data when agents are online. Falls back to demo data (clearly marked) when no agents available. Agent scan results auto-populate network_devices via MAC-based upsert.
 - **Advanced Analytics**: Provides anomaly detection and endpoint risk scoring.
 
 ### System Design Choices

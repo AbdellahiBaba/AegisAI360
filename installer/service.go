@@ -2,7 +2,9 @@ package main
 
 import (
         "context"
+        "encoding/json"
         "fmt"
+        "strings"
         "time"
 )
 
@@ -220,5 +222,28 @@ func processCommands(cfg *AgentConfig, agentID float64) {
                 if err := sendCommandResult(cfg, agentID, cmd.ID, status, result); err != nil {
                         logMessage("WARN", "Failed to send result for command %.0f: %v", cmd.ID, err)
                 }
+
+                if cmd.Command == "honeypot_monitor" && status == "done" {
+                        extractAndSendHoneypotEvents(cfg, agentID, result)
+                }
+        }
+}
+
+func extractAndSendHoneypotEvents(cfg *AgentConfig, agentID float64, result string) {
+        marker := "__HONEYPOT_EVENTS_JSON__:"
+        idx := strings.Index(result, marker)
+        if idx < 0 {
+                return
+        }
+        jsonStr := result[idx+len(marker):]
+
+        var events []HoneypotConnection
+        if err := json.Unmarshal([]byte(jsonStr), &events); err != nil {
+                logMessage("WARN", "Failed to parse honeypot events JSON: %v", err)
+                return
+        }
+
+        if err := sendHoneypotEvents(cfg, agentID, events); err != nil {
+                logMessage("WARN", "Failed to send honeypot events: %v", err)
         }
 }

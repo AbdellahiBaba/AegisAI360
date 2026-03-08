@@ -357,6 +357,78 @@ export function runNetworkVulnerabilityScan(devices: Array<{ hostname: string | 
   return { vulnerabilities: vulns, riskScore };
 }
 
+export interface RogueScanHost {
+  ip: string;
+  mac: string;
+  hostname: string;
+  openPorts: Array<{ port: number; state: string; service: string; risk?: string }>;
+  riskCount: number;
+}
+
+export interface RogueScanResult {
+  scanTime: string;
+  hosts: RogueScanHost[];
+  totalHosts: number;
+  totalOpen: number;
+  totalRisks: number;
+}
+
+export function parseRogueScanToDevices(orgId: number, scanResult: RogueScanResult): InsertNetworkDevice[] {
+  const devices: InsertNetworkDevice[] = [];
+
+  for (const host of scanResult.hosts) {
+    let mac = host.mac;
+    if (!mac) {
+      const ipParts = host.ip.split(".").map(Number);
+      mac = `02:AG:${ipParts.map(p => p.toString(16).padStart(2, "0").toUpperCase()).join(":")}`;
+    }
+
+    let deviceType = "unknown";
+    const openPortNumbers = (host.openPorts || []).map(p => p.port);
+    if (openPortNumbers.includes(80) || openPortNumbers.includes(443) || openPortNumbers.includes(8080)) {
+      deviceType = "computer";
+    }
+    if (openPortNumbers.includes(22) || openPortNumbers.includes(3389)) {
+      deviceType = "computer";
+    }
+    if (openPortNumbers.includes(445)) {
+      deviceType = "computer";
+    }
+    if (host.ip.endsWith(".1") || host.ip.endsWith(".254")) {
+      deviceType = "router";
+    }
+
+    let os: string | null = null;
+    if (openPortNumbers.includes(22) && !openPortNumbers.includes(3389)) {
+      os = "Linux/Unix";
+    } else if (openPortNumbers.includes(3389) || openPortNumbers.includes(445)) {
+      os = "Windows";
+    }
+
+    devices.push({
+      organizationId: orgId,
+      macAddress: mac,
+      ipAddress: host.ip,
+      hostname: host.hostname || null,
+      manufacturer: null,
+      deviceType,
+      os,
+      status: "online",
+      authorization: "unknown",
+      dataIn: 0,
+      dataOut: 0,
+      networkName: null,
+      signalStrength: null,
+      location: "Local Network",
+      isCompanyDevice: false,
+      lastSeen: new Date(),
+      firstSeen: new Date(),
+    });
+  }
+
+  return devices;
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;

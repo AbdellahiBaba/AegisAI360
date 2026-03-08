@@ -17,7 +17,7 @@ import {
   type User,
 } from "@shared/schema";
 import { requireAuth, requireRole, requirePlanFeature } from "./auth";
-import { generateNetworkDevices, runNetworkVulnerabilityScan, scanInfrastructureAsset, resolveHostToIp } from "./networkMonitor";
+import { generateNetworkDevices, runNetworkVulnerabilityScan, scanInfrastructureAsset, resolveHostToIp, parseRogueScanToDevices, type RogueScanResult } from "./networkMonitor";
 import { getUncachableStripeClient, getStripePublishableKey, isStripeLiveMode } from "./stripeClient";
 import { createIngestionRouter } from "./ingestion";
 import { createSuperAdminRouter } from "./superAdmin";
@@ -239,49 +239,64 @@ export async function registerRoutes(
         unauthorizedCount: 0,
       });
 
-      res.json({ scanId: scan.id, status: "running" });
+      const agents = await storage.getAgentsByOrg(orgId);
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const onlineAgent = agents.find(a => a.status === "online" && a.lastSeen && new Date(a.lastSeen) > fiveMinutesAgo);
 
-      try {
-        const deviceCount = scanType === "full" ? 15 : 10;
-        const newDevices = generateNetworkDevices(orgId, deviceCount);
-
-        const existingDevices = await storage.getNetworkDevices(orgId);
-        const existingMacs = new Set(existingDevices.map(d => d.macAddress));
-
-        let created = 0;
-        let unauthorizedCount = 0;
-        for (const device of newDevices) {
-          if (!existingMacs.has(device.macAddress)) {
-            await storage.createNetworkDevice(device);
-            created++;
-          }
-          if (device.authorization === "unauthorized") unauthorizedCount++;
-        }
-
-        const totalDevices = existingDevices.length + created;
-        await storage.updateNetworkScan(scan.id, {
-          status: "completed",
-          devicesFound: totalDevices,
-          unauthorizedCount,
-          completedAt: new Date(),
-          results: { newDevices: created, totalDevices, scanType },
+      if (onlineAgent) {
+        await storage.createCommand({
+          agentId: onlineAgent.id,
+          command: "rogue_scan",
+          params: JSON.stringify({ scanId: scan.id }),
+          status: "pending",
         });
 
-        if (unauthorizedCount > 0) {
-          await storage.createSecurityEvent({
-            organizationId: orgId,
-            eventType: "unauthorized_device",
-            severity: "high",
-            source: "network-monitor",
-            description: `Network scan detected ${unauthorizedCount} unauthorized device(s) on the network`,
-            sourceIp: "network-scanner",
-            status: "new",
-          });
-        }
+        res.json({ scanId: scan.id, status: "running", source: "agent", agentId: onlineAgent.id });
+      } else {
+        res.json({ scanId: scan.id, status: "running", source: "demo" });
 
-      } catch (err) {
-        console.error("Network scan error:", err);
-        await storage.updateNetworkScan(scan.id, { status: "failed" });
+        try {
+          const deviceCount = scanType === "full" ? 15 : 10;
+          const newDevices = generateNetworkDevices(orgId, deviceCount);
+
+          const existingDevices = await storage.getNetworkDevices(orgId);
+          const existingMacs = new Set(existingDevices.map(d => d.macAddress));
+
+          let created = 0;
+          let unauthorizedCount = 0;
+          for (const device of newDevices) {
+            if (!existingMacs.has(device.macAddress)) {
+              await storage.createNetworkDevice(device);
+              created++;
+            }
+            if (device.authorization === "unauthorized") unauthorizedCount++;
+          }
+
+          const totalDevices = existingDevices.length + created;
+          await storage.updateNetworkScan(scan.id, {
+            status: "completed",
+            devicesFound: totalDevices,
+            unauthorizedCount,
+            completedAt: new Date(),
+            results: { newDevices: created, totalDevices, scanType, source: "demo" },
+          });
+
+          if (unauthorizedCount > 0) {
+            await storage.createSecurityEvent({
+              organizationId: orgId,
+              eventType: "unauthorized_device",
+              severity: "high",
+              source: "network-monitor",
+              description: `[Demo Data] Network scan detected ${unauthorizedCount} unauthorized device(s) on the network`,
+              sourceIp: "network-scanner",
+              status: "new",
+            });
+          }
+
+        } catch (err) {
+          console.error("Network scan error:", err);
+          await storage.updateNetworkScan(scan.id, { status: "failed" });
+        }
       }
     } catch (error) {
       res.status(500).json({ error: "Failed to start network scan" });
@@ -1656,6 +1671,57 @@ export async function registerRoutes(
       res.json({ usage: usage || { agentsRegistered: 0, logsSent: 0, commandsExecuted: 0, terminalCommandsExecuted: 0, threatIntelQueries: 0 }, plan });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch usage" });
+    }
+  });
+
+  app.get("/api/threat-intel/api-status", requireAuth, async (_req, res) => {
+    try {
+      res.json({
+        apis: [
+          {
+            name: "AbuseIPDB",
+            envVar: "ABUSEIPDB_API_KEY",
+            configured: !!process.env.ABUSEIPDB_API_KEY,
+            description: "IP address reputation and abuse reporting",
+            setupUrl: "https://www.abuseipdb.com/account/api",
+            freeTier: "1,000 lookups/day",
+          },
+          {
+            name: "AlienVault OTX",
+            envVar: "OTX_API_KEY",
+            configured: !!process.env.OTX_API_KEY,
+            description: "Open threat intelligence for IPs, domains, URLs, and hashes",
+            setupUrl: "https://otx.alienvault.com/api",
+            freeTier: "Unlimited",
+          },
+          {
+            name: "URLScan.io",
+            envVar: "URLSCAN_API_KEY",
+            configured: !!process.env.URLSCAN_API_KEY,
+            description: "URL scanning and website analysis",
+            setupUrl: "https://urlscan.io/user/signup",
+            freeTier: "50 scans/day",
+          },
+          {
+            name: "Google Safe Browsing",
+            envVar: "GOOGLE_SAFE_BROWSING_API_KEY",
+            configured: !!process.env.GOOGLE_SAFE_BROWSING_API_KEY,
+            description: "URL threat detection for malware, phishing, and unwanted software",
+            setupUrl: "https://console.cloud.google.com/apis/library/safebrowsing.googleapis.com",
+            freeTier: "10,000 lookups/day",
+          },
+          {
+            name: "MalwareBazaar",
+            envVar: null,
+            configured: true,
+            description: "Malware hash lookup (free, no API key required)",
+            setupUrl: "https://bazaar.abuse.ch/",
+            freeTier: "Unlimited, no key needed",
+          },
+        ],
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch API status" });
     }
   });
 
@@ -3044,7 +3110,11 @@ export async function registerRoutes(
       const result = await checkDomain(query);
       res.json(result);
     } catch (error: any) {
-      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to check domain" });
+      if (error?.issues) {
+        res.status(400).json({ error: "Invalid domain format" });
+      } else {
+        res.status(502).json({ error: error?.message || "Failed to check domain against HIBP API" });
+      }
     }
   });
 
@@ -3055,7 +3125,11 @@ export async function registerRoutes(
       const result = await checkEmail(query);
       res.json(result);
     } catch (error: any) {
-      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to check email" });
+      if (error?.issues) {
+        res.status(400).json({ error: "Invalid email format" });
+      } else {
+        res.status(502).json({ error: error?.message || "Failed to check email against HIBP API" });
+      }
     }
   });
 
@@ -3064,8 +3138,8 @@ export async function registerRoutes(
       const { getAllBreaches } = await import("./darkWebMonitor");
       const breaches = await getAllBreaches();
       res.json(breaches);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch breaches" });
+    } catch (error: any) {
+      res.status(502).json({ error: error?.message || "Failed to fetch breach data from HIBP API" });
     }
   });
 
@@ -3218,7 +3292,11 @@ export async function registerRoutes(
       const results = await searchCves({ keyword, cveId, severity });
       res.json(results);
     } catch (error: any) {
-      res.status(500).json({ error: "Failed to search CVEs" });
+      if (error?.issues) {
+        res.status(400).json({ error: "Invalid search parameters" });
+      } else {
+        res.status(502).json({ error: error?.message || "Failed to reach NVD API. Try again shortly." });
+      }
     }
   });
 
@@ -3232,7 +3310,7 @@ export async function registerRoutes(
       if (!result) return res.status(404).json({ error: "CVE not found" });
       res.json(result);
     } catch (error: any) {
-      res.status(500).json({ error: "Failed to fetch CVE details" });
+      res.status(502).json({ error: error?.message || "Failed to reach NVD API. Try again shortly." });
     }
   });
 
@@ -3244,7 +3322,7 @@ export async function registerRoutes(
       const results = await getRecentCves(severity === "all" ? undefined : severity);
       res.json(results);
     } catch (error: any) {
-      res.status(500).json({ error: "Failed to fetch recent CVEs" });
+      res.status(502).json({ error: error?.message || "Failed to reach NVD API. Try again shortly." });
     }
   });
 

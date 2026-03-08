@@ -285,6 +285,36 @@ func sendTelemetry(cfg *AgentConfig, agentID float64) error {
         return nil
 }
 
+type HoneypotEventRequest struct {
+        AgentID float64              `json:"agentId"`
+        Token   string               `json:"token"`
+        Events  []HoneypotConnection `json:"events"`
+}
+
+func sendHoneypotEvents(cfg *AgentConfig, agentID float64, events []HoneypotConnection) error {
+        if len(events) == 0 {
+                return nil
+        }
+
+        body := HoneypotEventRequest{
+                AgentID: agentID,
+                Token:   cfg.APIKey,
+                Events:  events,
+        }
+
+        resp, err := postJSONWithRetry(cfg.ServerURL+"/api/agent/honeypot-events", body)
+        if err != nil {
+                return fmt.Errorf("failed to send honeypot events: %w", err)
+        }
+        resp.Body.Close()
+
+        if resp.StatusCode != 201 {
+                return fmt.Errorf("honeypot events returned status %d", resp.StatusCode)
+        }
+        logMessage("INFO", "Sent %d honeypot events to server", len(events))
+        return nil
+}
+
 func postJSONWithRetry(url string, body interface{}) (*http.Response, error) {
         var lastErr error
 

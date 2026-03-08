@@ -1,5 +1,3 @@
-import { createHash } from "crypto";
-
 interface BreachResult {
   name: string;
   title: string;
@@ -32,15 +30,40 @@ interface DarkWebCheckResult {
   exposedDataTypes: { type: string; count: number }[];
   timeline: { date: string; breachName: string; records: number }[];
   recommendations: string[];
+  dataSource: "hibp-api" | "hibp-public" | "hibp-email-api";
+  apiKeyConfigured: boolean;
+}
+
+let breachCache: { data: any[]; timestamp: number } | null = null;
+const CACHE_TTL = 10 * 60 * 1000;
+
+async function fetchAllBreachesFromHIBP(): Promise<any[]> {
+  if (breachCache && (Date.now() - breachCache.timestamp) < CACHE_TTL) {
+    return breachCache.data;
+  }
+
+  const response = await fetch("https://haveibeenpwned.com/api/v3/breaches", {
+    headers: {
+      "user-agent": "AegisAI360-SOC-Platform",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`HIBP API returned ${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  breachCache = { data, timestamp: Date.now() };
+  return data;
 }
 
 function classifyBreachSeverity(breach: any): "critical" | "high" | "medium" | "low" {
   const criticalDataTypes = ["Passwords", "Credit cards", "Bank account numbers", "Social security numbers", "Credit card CVV"];
   const highDataTypes = ["Email addresses", "Phone numbers", "Physical addresses", "Dates of birth", "Government issued IDs"];
-  
+
   const hasCritical = breach.DataClasses?.some((dc: string) => criticalDataTypes.includes(dc));
   const hasHigh = breach.DataClasses?.some((dc: string) => highDataTypes.includes(dc));
-  
+
   if (hasCritical && breach.PwnCount > 1000000) return "critical";
   if (hasCritical) return "high";
   if (hasHigh && breach.PwnCount > 500000) return "high";
@@ -52,7 +75,7 @@ function calculateRiskScore(breach: any): number {
   let score = 0;
   const criticalDataTypes = ["Passwords", "Credit cards", "Bank account numbers", "Social security numbers"];
   const highDataTypes = ["Email addresses", "Phone numbers", "Physical addresses", "Dates of birth"];
-  
+
   if (breach.DataClasses) {
     for (const dc of breach.DataClasses) {
       if (criticalDataTypes.includes(dc)) score += 25;
@@ -60,26 +83,26 @@ function calculateRiskScore(breach: any): number {
       else score += 5;
     }
   }
-  
+
   if (breach.PwnCount > 10000000) score += 20;
   else if (breach.PwnCount > 1000000) score += 15;
   else if (breach.PwnCount > 100000) score += 10;
   else score += 5;
-  
+
   if (breach.IsVerified) score += 10;
-  
+
   const breachAge = (Date.now() - new Date(breach.BreachDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000);
   if (breachAge < 1) score += 15;
   else if (breachAge < 2) score += 10;
   else if (breachAge < 5) score += 5;
-  
+
   return Math.min(100, score);
 }
 
 function generateRecommendations(breach: any): string[] {
   const recs: string[] = [];
   const dataClasses = breach.DataClasses || [];
-  
+
   if (dataClasses.includes("Passwords")) {
     recs.push("Immediately change passwords for all accounts associated with this service");
     recs.push("Enable multi-factor authentication (MFA) on all accounts");
@@ -116,7 +139,7 @@ function transformBreachData(breach: any): BreachResult {
   const severity = classifyBreachSeverity(breach);
   const riskScore = calculateRiskScore(breach);
   const recommendations = generateRecommendations(breach);
-  
+
   return {
     name: breach.Name,
     title: breach.Title,
@@ -141,9 +164,9 @@ function transformBreachData(breach: any): BreachResult {
 
 export async function checkDomain(domain: string): Promise<DarkWebCheckResult> {
   const apiKey = process.env.HIBP_API_KEY;
-  
   let rawBreaches: any[] = [];
-  
+  let dataSource: DarkWebCheckResult["dataSource"] = "hibp-public";
+
   if (apiKey) {
     try {
       const response = await fetch(`https://haveibeenpwned.com/api/v3/breaches?domain=${encodeURIComponent(domain)}`, {
@@ -154,46 +177,47 @@ export async function checkDomain(domain: string): Promise<DarkWebCheckResult> {
       });
       if (response.ok) {
         rawBreaches = await response.json();
+        dataSource = "hibp-api";
       } else if (response.status === 404) {
         rawBreaches = [];
+        dataSource = "hibp-api";
       }
     } catch (err) {
-      console.error("HIBP domain lookup failed:", err);
+      console.error("HIBP domain API lookup failed, falling back to public breach list:", err);
     }
   }
-  
-  if (rawBreaches.length === 0) {
+
+  if (rawBreaches.length === 0 && dataSource !== "hibp-api") {
     try {
-      const response = await fetch("https://haveibeenpwned.com/api/v3/breaches", {
-        headers: {
-          "user-agent": "AegisAI360-SOC-Platform",
-        },
+      const allBreaches = await fetchAllBreachesFromHIBP();
+      const domainLower = domain.toLowerCase();
+      rawBreaches = allBreaches.filter((b: any) => {
+        const bDomain = (b.Domain || "").toLowerCase();
+        const bName = (b.Name || "").toLowerCase();
+        const bTitle = (b.Title || "").toLowerCase();
+        return bDomain === domainLower ||
+               bDomain.endsWith("." + domainLower) ||
+               domainLower.endsWith("." + bDomain) ||
+               bDomain.includes(domainLower) ||
+               bName.includes(domainLower) ||
+               bTitle.includes(domainLower);
       });
-      if (response.ok) {
-        const allBreaches = await response.json();
-        rawBreaches = allBreaches.filter((b: any) =>
-          b.Domain?.toLowerCase().includes(domain.toLowerCase()) ||
-          b.Name?.toLowerCase().includes(domain.toLowerCase()) ||
-          b.Title?.toLowerCase().includes(domain.toLowerCase())
-        );
-      }
+      dataSource = "hibp-public";
     } catch (err) {
-      console.error("HIBP public breaches lookup failed:", err);
+      console.error("HIBP public breach list fetch failed:", err);
+      throw new Error("Unable to reach Have I Been Pwned API. Please try again later.");
     }
   }
-  
-  if (rawBreaches.length === 0) {
-    rawBreaches = getSimulatedBreachesForDomain(domain);
-  }
-  
-  return buildCheckResult(domain, "domain", rawBreaches);
+
+  const result = buildCheckResult(domain, "domain", rawBreaches);
+  return { ...result, dataSource, apiKeyConfigured: !!apiKey };
 }
 
 export async function checkEmail(email: string): Promise<DarkWebCheckResult> {
   const apiKey = process.env.HIBP_API_KEY;
-  
   let rawBreaches: any[] = [];
-  
+  let dataSource: DarkWebCheckResult["dataSource"] = "hibp-public";
+
   if (apiKey) {
     try {
       const response = await fetch(`https://haveibeenpwned.com/api/v3/breachedaccount/${encodeURIComponent(email)}?truncateResponse=false`, {
@@ -204,49 +228,65 @@ export async function checkEmail(email: string): Promise<DarkWebCheckResult> {
       });
       if (response.ok) {
         rawBreaches = await response.json();
+        dataSource = "hibp-email-api";
       } else if (response.status === 404) {
         rawBreaches = [];
+        dataSource = "hibp-email-api";
+      } else if (response.status === 401) {
+        throw new Error("Invalid HIBP API key. Please check your HIBP_API_KEY environment variable.");
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err.message?.includes("Invalid HIBP API key")) throw err;
       console.error("HIBP email lookup failed:", err);
     }
   }
-  
-  if (rawBreaches.length === 0) {
+
+  if (!apiKey) {
     const domain = email.split("@")[1];
     if (domain) {
-      rawBreaches = getSimulatedBreachesForDomain(domain);
+      try {
+        const allBreaches = await fetchAllBreachesFromHIBP();
+        const domainLower = domain.toLowerCase();
+        rawBreaches = allBreaches.filter((b: any) => {
+          const bDomain = (b.Domain || "").toLowerCase();
+          return bDomain === domainLower || bDomain.includes(domainLower) || domainLower.includes(bDomain);
+        });
+        dataSource = "hibp-public";
+      } catch (err) {
+        console.error("HIBP public breach list fetch failed:", err);
+        throw new Error("Unable to reach Have I Been Pwned API. Please try again later.");
+      }
     }
   }
-  
-  return buildCheckResult(email, "email", rawBreaches);
+
+  const result = buildCheckResult(email, "email", rawBreaches);
+  return {
+    ...result,
+    dataSource,
+    apiKeyConfigured: !!apiKey,
+    recommendations: !apiKey
+      ? [...result.recommendations, "Configure HIBP_API_KEY for per-email breach lookup (available at haveibeenpwned.com/API/Key for $3.50/month). Without it, results are based on domain-level breach data."]
+      : result.recommendations,
+  };
 }
 
 export async function getAllBreaches(): Promise<any[]> {
   try {
-    const response = await fetch("https://haveibeenpwned.com/api/v3/breaches", {
-      headers: {
-        "user-agent": "AegisAI360-SOC-Platform",
-      },
-    });
-    if (response.ok) {
-      const breaches = await response.json();
-      return breaches
-        .sort((a: any, b: any) => new Date(b.BreachDate).getTime() - new Date(a.BreachDate).getTime())
-        .slice(0, 50)
-        .map(transformBreachData);
-    }
+    const allBreaches = await fetchAllBreachesFromHIBP();
+    return allBreaches
+      .sort((a: any, b: any) => new Date(b.AddedDate || b.BreachDate).getTime() - new Date(a.AddedDate || a.BreachDate).getTime())
+      .slice(0, 50)
+      .map(transformBreachData);
   } catch (err) {
     console.error("HIBP breaches fetch failed:", err);
+    throw new Error("Unable to fetch breach data from Have I Been Pwned. Please try again later.");
   }
-  
-  return getKnownBreachDatabase();
 }
 
-function buildCheckResult(query: string, queryType: "domain" | "email", rawBreaches: any[]): DarkWebCheckResult {
+function buildCheckResult(query: string, queryType: "domain" | "email", rawBreaches: any[]): Omit<DarkWebCheckResult, "dataSource" | "apiKeyConfigured"> {
   const breaches = rawBreaches.map(transformBreachData);
   const totalExposedRecords = breaches.reduce((sum, b) => sum + b.pwnCount, 0);
-  
+
   const dataTypeMap = new Map<string, number>();
   for (const breach of breaches) {
     for (const dc of breach.dataClasses) {
@@ -256,22 +296,22 @@ function buildCheckResult(query: string, queryType: "domain" | "email", rawBreac
   const exposedDataTypes = Array.from(dataTypeMap.entries())
     .map(([type, count]) => ({ type, count }))
     .sort((a, b) => b.count - a.count);
-  
+
   const timeline = breaches
     .map(b => ({ date: b.breachDate, breachName: b.title, records: b.pwnCount }))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  
+
   const overallRiskScore = breaches.length > 0
     ? Math.min(100, Math.round(breaches.reduce((sum, b) => sum + b.riskScore, 0) / breaches.length + breaches.length * 5))
     : 0;
-  
+
   let riskLevel: "critical" | "high" | "medium" | "low" | "none";
   if (overallRiskScore >= 80) riskLevel = "critical";
   else if (overallRiskScore >= 60) riskLevel = "high";
   else if (overallRiskScore >= 40) riskLevel = "medium";
   else if (overallRiskScore > 0) riskLevel = "low";
   else riskLevel = "none";
-  
+
   const allRecs = new Set<string>();
   for (const breach of breaches) {
     for (const rec of breach.recommendations) {
@@ -283,7 +323,7 @@ function buildCheckResult(query: string, queryType: "domain" | "email", rawBreac
     allRecs.add("Implement dark web monitoring as an ongoing security measure");
     allRecs.add("Review and update your incident response plan");
   }
-  
+
   return {
     query,
     queryType,
@@ -296,195 +336,4 @@ function buildCheckResult(query: string, queryType: "domain" | "email", rawBreac
     timeline,
     recommendations: Array.from(allRecs),
   };
-}
-
-function getSimulatedBreachesForDomain(domain: string): any[] {
-  const hash = createHash("md5").update(domain.toLowerCase()).digest("hex");
-  const seed = parseInt(hash.substring(0, 8), 16);
-  
-  const knownBreaches = getKnownBreachDatabase();
-  const count = (seed % 5) + 1;
-  const selected: any[] = [];
-  
-  for (let i = 0; i < count && i < knownBreaches.length; i++) {
-    const idx = (seed + i * 7) % knownBreaches.length;
-    selected.push(knownBreaches[idx]);
-  }
-  
-  return selected;
-}
-
-function getKnownBreachDatabase(): any[] {
-  return [
-    {
-      Name: "LinkedIn",
-      Title: "LinkedIn",
-      Domain: "linkedin.com",
-      BreachDate: "2012-05-05",
-      AddedDate: "2016-05-21",
-      ModifiedDate: "2016-05-21",
-      PwnCount: 164611595,
-      Description: "In May 2016, LinkedIn had 164 million email addresses and passwords exposed. Originally hacked in 2012, the data remained out of sight until being offered for sale on a dark market site 4 years later.",
-      DataClasses: ["Email addresses", "Passwords"],
-      IsVerified: true,
-      IsFabricated: false,
-      IsSensitive: false,
-      IsRetired: false,
-      IsSpamList: false,
-      LogoPath: null,
-    },
-    {
-      Name: "Adobe",
-      Title: "Adobe",
-      Domain: "adobe.com",
-      BreachDate: "2013-10-04",
-      AddedDate: "2013-12-04",
-      ModifiedDate: "2022-05-15",
-      PwnCount: 152445165,
-      Description: "In October 2013, 153 million Adobe accounts were breached with each containing an internal ID, username, email, encrypted password and a password hint in plain text.",
-      DataClasses: ["Email addresses", "Passwords", "Password hints", "Usernames"],
-      IsVerified: true,
-      IsFabricated: false,
-      IsSensitive: false,
-      IsRetired: false,
-      IsSpamList: false,
-      LogoPath: null,
-    },
-    {
-      Name: "Dropbox",
-      Title: "Dropbox",
-      Domain: "dropbox.com",
-      BreachDate: "2012-07-01",
-      AddedDate: "2016-08-31",
-      ModifiedDate: "2016-08-31",
-      PwnCount: 68648009,
-      Description: "In mid-2012, Dropbox suffered a data breach which exposed the stored credentials of tens of millions of their customers.",
-      DataClasses: ["Email addresses", "Passwords"],
-      IsVerified: true,
-      IsFabricated: false,
-      IsSensitive: false,
-      IsRetired: false,
-      IsSpamList: false,
-      LogoPath: null,
-    },
-    {
-      Name: "Canva",
-      Title: "Canva",
-      Domain: "canva.com",
-      BreachDate: "2019-05-24",
-      AddedDate: "2019-06-11",
-      ModifiedDate: "2019-06-11",
-      PwnCount: 137272116,
-      Description: "In May 2019, the graphic design tool website Canva suffered a data breach that impacted 137 million subscribers.",
-      DataClasses: ["Email addresses", "Passwords", "Usernames", "Names", "Geographic locations"],
-      IsVerified: true,
-      IsFabricated: false,
-      IsSensitive: false,
-      IsRetired: false,
-      IsSpamList: false,
-      LogoPath: null,
-    },
-    {
-      Name: "MyFitnessPal",
-      Title: "MyFitnessPal",
-      Domain: "myfitnesspal.com",
-      BreachDate: "2018-02-01",
-      AddedDate: "2019-02-02",
-      ModifiedDate: "2019-02-02",
-      PwnCount: 143606147,
-      Description: "In February 2018, the diet and exercise service MyFitnessPal suffered a data breach. The incident exposed 144 million unique email addresses alongside usernames, IP addresses and passwords stored as SHA-1 and bcrypt hashes.",
-      DataClasses: ["Email addresses", "IP addresses", "Passwords", "Usernames"],
-      IsVerified: true,
-      IsFabricated: false,
-      IsSensitive: false,
-      IsRetired: false,
-      IsSpamList: false,
-      LogoPath: null,
-    },
-    {
-      Name: "Zynga",
-      Title: "Zynga",
-      Domain: "zynga.com",
-      BreachDate: "2019-09-01",
-      AddedDate: "2019-12-19",
-      ModifiedDate: "2019-12-19",
-      PwnCount: 172869660,
-      Description: "In September 2019, game developer Zynga (makers of Words With Friends) suffered a data breach. The incident exposed 173 million unique email addresses alongside usernames and passwords stored as salted SHA-1 hashes.",
-      DataClasses: ["Email addresses", "Passwords", "Phone numbers", "Usernames"],
-      IsVerified: true,
-      IsFabricated: false,
-      IsSensitive: false,
-      IsRetired: false,
-      IsSpamList: false,
-      LogoPath: null,
-    },
-    {
-      Name: "Marriott",
-      Title: "Marriott International",
-      Domain: "marriott.com",
-      BreachDate: "2018-11-19",
-      AddedDate: "2018-12-11",
-      ModifiedDate: "2018-12-11",
-      PwnCount: 383000000,
-      Description: "In November 2018, the Marriott International hotel chain disclosed a breach of the Starwood guest reservation database. The breach exposed up to 383 million guest records including names, addresses, phone numbers, dates of birth, passport numbers, and credit card information.",
-      DataClasses: ["Email addresses", "Names", "Phone numbers", "Physical addresses", "Dates of birth", "Credit cards", "Passport numbers"],
-      IsVerified: true,
-      IsFabricated: false,
-      IsSensitive: false,
-      IsRetired: false,
-      IsSpamList: false,
-      LogoPath: null,
-    },
-    {
-      Name: "Equifax",
-      Title: "Equifax",
-      Domain: "equifax.com",
-      BreachDate: "2017-07-12",
-      AddedDate: "2017-09-08",
-      ModifiedDate: "2017-09-08",
-      PwnCount: 147900000,
-      Description: "In September 2017, Equifax disclosed a massive breach compromising the personal data of 148 million consumers. The data included names, Social Security numbers, birth dates, addresses, and in some instances, driver's license numbers and credit card numbers.",
-      DataClasses: ["Email addresses", "Names", "Social security numbers", "Dates of birth", "Physical addresses", "Credit cards"],
-      IsVerified: true,
-      IsFabricated: false,
-      IsSensitive: false,
-      IsRetired: false,
-      IsSpamList: false,
-      LogoPath: null,
-    },
-    {
-      Name: "Twitter",
-      Title: "Twitter (200M)",
-      Domain: "twitter.com",
-      BreachDate: "2023-01-01",
-      AddedDate: "2023-01-05",
-      ModifiedDate: "2023-01-05",
-      PwnCount: 209595668,
-      Description: "In early January 2023, over 200 million records scraped from Twitter appeared on a popular hacking forum. The data was obtained by exploiting an API vulnerability disclosed in December 2021.",
-      DataClasses: ["Email addresses", "Names", "Usernames"],
-      IsVerified: true,
-      IsFabricated: false,
-      IsSensitive: false,
-      IsRetired: false,
-      IsSpamList: false,
-      LogoPath: null,
-    },
-    {
-      Name: "Facebook",
-      Title: "Facebook",
-      Domain: "facebook.com",
-      BreachDate: "2019-04-01",
-      AddedDate: "2021-04-04",
-      ModifiedDate: "2021-04-04",
-      PwnCount: 533000000,
-      Description: "In April 2021, a large data set of over 500 million Facebook users was made freely available for download. The data had been obtained by exploiting a vulnerability that was patched by Facebook in August 2019.",
-      DataClasses: ["Email addresses", "Names", "Phone numbers", "Dates of birth", "Geographic locations", "Genders", "Relationship statuses"],
-      IsVerified: true,
-      IsFabricated: false,
-      IsSensitive: false,
-      IsRetired: false,
-      IsSpamList: false,
-      LogoPath: null,
-    },
-  ];
 }

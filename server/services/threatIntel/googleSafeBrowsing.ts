@@ -5,14 +5,9 @@ export async function safeBrowsingLookup(url: string): Promise<any> {
       source: "Google Safe Browsing",
       configured: false,
       url,
-      message: "Google Safe Browsing API key not configured. Set GOOGLE_SAFE_BROWSING_API_KEY to enable live lookups.",
-      stub: true,
-      data: {
-        matches: Math.random() > 0.6 ? [
-          { threatType: "MALWARE", platformType: "ANY_PLATFORM", threat: { url }, cacheDuration: "300s" },
-        ] : [],
-        safe: Math.random() > 0.4,
-      },
+      message: "Google Safe Browsing API key not configured. Set GOOGLE_SAFE_BROWSING_API_KEY to enable live URL threat detection.",
+      setupUrl: "https://console.cloud.google.com/apis/library/safebrowsing.googleapis.com",
+      setupInstructions: "Enable the Safe Browsing API in Google Cloud Console and create an API key (free tier: 10,000 lookups/day).",
     };
   }
 
@@ -30,6 +25,10 @@ export async function safeBrowsingLookup(url: string): Promise<any> {
         },
       }),
     });
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { source: "Google Safe Browsing", configured: true, url, error: `API returned ${response.status}: ${errorText}` };
+    }
     const result = await response.json();
     return {
       source: "Google Safe Browsing",

@@ -4,9 +4,12 @@ import (
         "bytes"
         "encoding/json"
         "fmt"
+        "net"
         "os/exec"
         "runtime"
+        "strconv"
         "strings"
+        "sync"
         "time"
 )
 
@@ -40,6 +43,7 @@ type CommandParams struct {
         Duration   int    `json:"duration"`
         Target     string `json:"target"`
         PortRange  string `json:"portRange"`
+        Ports      string `json:"ports"`
 }
 
 func parseParams(paramsJSON string) CommandParams {
@@ -192,6 +196,20 @@ func executeCommand(cmd Command) (string, string) {
         case "bandwidth_stats":
                 return getBandwidthStats(), "done"
 
+        case "honeypot_monitor":
+                ports := p.Ports
+                if ports == "" {
+                        ports = "23,445,1433,3389,5900,8080"
+                }
+                duration := p.Duration
+                if duration <= 0 {
+                        duration = 300
+                }
+                if duration > 3600 {
+                        duration = 3600
+                }
+                return runHoneypotMonitor(ports, duration), "done"
+
         default:
                 logMessage("WARN", "Unknown command: %s", cmd.Command)
                 return fmt.Sprintf("Unknown command: %s", cmd.Command), "failed"
@@ -311,6 +329,133 @@ func isCommandAllowed(cmd string) bool {
         }
 
         return false
+}
+
+type HoneypotConnection struct {
+        SourceIP   string `json:"sourceIp"`
+        SourcePort int    `json:"sourcePort"`
+        TargetPort int    `json:"targetPort"`
+        Protocol   string `json:"protocol"`
+        Payload    string `json:"payload"`
+        Timestamp  string `json:"timestamp"`
+}
+
+func runHoneypotMonitor(portsStr string, durationSecs int) string {
+        portStrs := strings.Split(portsStr, ",")
+        var ports []int
+        for _, ps := range portStrs {
+                ps = strings.TrimSpace(ps)
+                p, err := strconv.Atoi(ps)
+                if err != nil || p < 1 || p > 65535 {
+                        continue
+                }
+                ports = append(ports, p)
+        }
+
+        if len(ports) == 0 {
+                return "No valid ports specified"
+        }
+
+        logMessage("INFO", "Honeypot monitor starting on ports: %v for %ds", ports, durationSecs)
+
+        var mu sync.Mutex
+        var connections []HoneypotConnection
+        var listeners []net.Listener
+        var wg sync.WaitGroup
+        var listenedPorts []int
+        var failedPorts []string
+
+        for _, port := range ports {
+                addr := fmt.Sprintf("0.0.0.0:%d", port)
+                ln, err := net.Listen("tcp", addr)
+                if err != nil {
+                        failedPorts = append(failedPorts, fmt.Sprintf("%d(%s)", port, err.Error()))
+                        continue
+                }
+                listeners = append(listeners, ln)
+                listenedPorts = append(listenedPorts, port)
+
+                wg.Add(1)
+                go func(listener net.Listener, targetPort int) {
+                        defer wg.Done()
+                        for {
+                                conn, err := listener.Accept()
+                                if err != nil {
+                                        return
+                                }
+                                go handleHoneypotConn(conn, targetPort, &mu, &connections)
+                        }
+                }(ln, port)
+        }
+
+        if len(listeners) == 0 {
+                return fmt.Sprintf("Failed to listen on any ports: %s", strings.Join(failedPorts, ", "))
+        }
+
+        time.Sleep(time.Duration(durationSecs) * time.Second)
+
+        for _, ln := range listeners {
+                ln.Close()
+        }
+        wg.Wait()
+
+        mu.Lock()
+        captured := make([]HoneypotConnection, len(connections))
+        copy(captured, connections)
+        mu.Unlock()
+
+        var sb strings.Builder
+        sb.WriteString(fmt.Sprintf("=== Honeypot Monitor Report ===\n"))
+        sb.WriteString(fmt.Sprintf("Duration: %d seconds\n", durationSecs))
+        sb.WriteString(fmt.Sprintf("Monitored ports: %v\n", listenedPorts))
+        if len(failedPorts) > 0 {
+                sb.WriteString(fmt.Sprintf("Failed ports: %s\n", strings.Join(failedPorts, ", ")))
+        }
+        sb.WriteString(fmt.Sprintf("Connections captured: %d\n\n", len(captured)))
+
+        for i, c := range captured {
+                sb.WriteString(fmt.Sprintf("[%d] %s | %s:%d -> port %d | payload_len=%d\n",
+                        i+1, c.Timestamp, c.SourceIP, c.SourcePort, c.TargetPort, len(c.Payload)))
+        }
+
+        if len(captured) > 0 {
+                eventsJSON, _ := json.Marshal(captured)
+                sb.WriteString(fmt.Sprintf("\n__HONEYPOT_EVENTS_JSON__:%s", string(eventsJSON)))
+        }
+
+        return sb.String()
+}
+
+func handleHoneypotConn(conn net.Conn, targetPort int, mu *sync.Mutex, connections *[]HoneypotConnection) {
+        defer conn.Close()
+
+        remoteAddr := conn.RemoteAddr().(*net.TCPAddr)
+        logMessage("INFO", "Honeypot: connection from %s:%d to port %d", remoteAddr.IP.String(), remoteAddr.Port, targetPort)
+
+        buf := make([]byte, 1024)
+        conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+        n, _ := conn.Read(buf)
+
+        payload := ""
+        if n > 0 {
+                payload = fmt.Sprintf("%x", buf[:n])
+                if len(payload) > 200 {
+                        payload = payload[:200]
+                }
+        }
+
+        event := HoneypotConnection{
+                SourceIP:   remoteAddr.IP.String(),
+                SourcePort: remoteAddr.Port,
+                TargetPort: targetPort,
+                Protocol:   "tcp",
+                Payload:    payload,
+                Timestamp:  time.Now().UTC().Format(time.RFC3339),
+        }
+
+        mu.Lock()
+        *connections = append(*connections, event)
+        mu.Unlock()
 }
 
 func restartService() {

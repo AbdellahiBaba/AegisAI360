@@ -6,6 +6,7 @@ import path from "path";
 import { storage } from "./storage";
 import { requireAuth, requireRole, requirePlanFeature } from "./auth";
 import type { User, InsertPacketCapture, InsertArpAlert, InsertBandwidthLog } from "@shared/schema";
+import { parseRogueScanToDevices, type RogueScanResult } from "./networkMonitor";
 
 const TERMINAL_WHITELIST_LINUX = ["whoami", "ifconfig", "ip a", "ip addr", "netstat", "ss", "ps aux", "ps -ef", "ls", "cat /etc/os-release", "uname -a", "df -h", "free -m", "uptime", "hostname", "w", "last", "top -bn1"];
 const TERMINAL_WHITELIST_WINDOWS = ["whoami", "ipconfig", "netstat", "tasklist", "dir", "systeminfo", "hostname", "ver"];
@@ -150,6 +151,10 @@ export function createAgentRouter(): Router {
             { command: "vuln_scan", description: "Scan a target IP for open ports and vulnerabilities", params: [
               { name: "target", type: "string", required: false, description: "Target IP (default: local subnet scan)" },
               { name: "portRange", type: "string", required: false, description: "Port range e.g. 1-1024 (default: top 100)" },
+            ]},
+            { command: "honeypot_monitor", description: "Monitor bait ports for connection attempts (honeypot)", params: [
+              { name: "ports", type: "string", required: false, description: "Comma-separated ports to monitor (default: 23,445,1433,3389,5900,8080)" },
+              { name: "duration", type: "number", required: false, description: "Duration in seconds to monitor (default: 300, max: 3600)" },
             ]},
           ],
         },
@@ -436,6 +441,71 @@ export function createAgentRouter(): Router {
       if (!existingCmd || existingCmd.agentId !== agentId) return res.status(403).json({ error: "Command does not belong to this agent" });
 
       await storage.updateCommandStatus(commandId, { status, result: result || null, executedAt: new Date() });
+
+      if (existingCmd.command === "rogue_scan" && status === "done" && result) {
+        try {
+          const scanResult: RogueScanResult = JSON.parse(result);
+          if (scanResult.hosts && Array.isArray(scanResult.hosts)) {
+            const orgId = agent.organizationId;
+            const devices = parseRogueScanToDevices(orgId, scanResult);
+
+            let created = 0;
+            let updated = 0;
+            for (const device of devices) {
+              const existing = await storage.getNetworkDeviceByMac(orgId, device.macAddress);
+              if (existing) {
+                await storage.updateNetworkDevice(existing.id, {
+                  ipAddress: device.ipAddress,
+                  hostname: device.hostname || existing.hostname,
+                  status: "online",
+                  lastSeen: new Date(),
+                  os: device.os || existing.os,
+                  deviceType: device.deviceType !== "unknown" ? device.deviceType : existing.deviceType,
+                });
+                updated++;
+              } else {
+                await storage.createNetworkDevice(device);
+                created++;
+              }
+            }
+
+            let scanId: number | null = null;
+            if (existingCmd.params) {
+              try {
+                const params = JSON.parse(existingCmd.params);
+                if (params.scanId) scanId = params.scanId;
+              } catch {}
+            }
+
+            if (scanId) {
+              const existingDevices = await storage.getNetworkDevices(orgId);
+              const unauthorizedCount = existingDevices.filter(d => d.authorization === "unauthorized").length;
+              await storage.updateNetworkScan(scanId, {
+                status: "completed",
+                devicesFound: existingDevices.length,
+                unauthorizedCount,
+                completedAt: new Date(),
+                results: { newDevices: created, updatedDevices: updated, totalHosts: scanResult.totalHosts, source: "agent" },
+              });
+            }
+
+            if (created > 0) {
+              await storage.createSecurityEvent({
+                organizationId: orgId,
+                eventType: "network_scan_complete",
+                severity: "info",
+                source: "agent-rogue-scan",
+                description: `Agent rogue scan discovered ${created} new device(s) and updated ${updated} existing device(s) on the network`,
+                sourceIp: agent.ip || "agent",
+                status: "new",
+              });
+            }
+          }
+        } catch (parseErr) {
+          console.error("Failed to parse rogue_scan results:", parseErr);
+        }
+      }
+
       res.json({ status: "ok" });
     } catch (error) {
       res.status(500).json({ error: "Failed to update command result" });
@@ -650,6 +720,56 @@ export function createAgentRouter(): Router {
       res.json(logs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch terminal logs" });
+    }
+  });
+
+  router.post("/honeypot-events", async (req, res) => {
+    try {
+      const { agentId, token, events } = z.object({
+        agentId: z.number(),
+        token: z.string(),
+        events: z.array(z.object({
+          sourceIp: z.string(),
+          sourcePort: z.number(),
+          targetPort: z.number(),
+          protocol: z.string().default("tcp"),
+          payload: z.string().optional(),
+          timestamp: z.string().optional(),
+        })),
+      }).parse(req.body);
+
+      const agent = await storage.getAgentById(agentId);
+      if (!agent || agent.deviceToken !== token) return res.status(401).json({ error: "Invalid agent credentials" });
+
+      const portServiceMap: Record<number, string> = {
+        23: "telnet",
+        445: "smb",
+        1433: "mssql",
+        3389: "rdp",
+        5900: "vnc",
+        8080: "http-proxy",
+      };
+
+      const created = [];
+      for (const event of events) {
+        const serviceName = portServiceMap[event.targetPort] || `port-${event.targetPort}`;
+        const honeypotEvent = await storage.createHoneypotEvent({
+          organizationId: agent.organizationId,
+          honeypotName: `agent-${agentId}-${serviceName}`,
+          attackerIp: event.sourceIp,
+          service: serviceName,
+          action: `connection_attempt:${event.protocol}/${event.targetPort}`,
+          payload: event.payload || null,
+          country: null,
+          sessionId: `agent-${agentId}-${Date.now()}`,
+        });
+        created.push(honeypotEvent.id);
+      }
+
+      res.status(201).json({ ids: created, status: "ok" });
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to store honeypot events" });
     }
   });
 
