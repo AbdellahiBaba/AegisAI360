@@ -2219,6 +2219,236 @@ for (const family of TROJAN_KNOWLEDGE_BASE) {
 }
 const UNIQUE_FAMILIES = Array.from(uniqueFamilies.values());
 
+interface ThreatActorInfo {
+  name: string;
+  aliases: string[];
+  origin: string;
+  targetSectors: string[];
+  activeSince: string;
+  description: string;
+}
+
+const THREAT_ACTOR_MAP: Record<string, ThreatActorInfo> = {
+  Emotet: { name: "Mummy Spider", aliases: ["TA542", "MealyBug", "Gold Crestwood"], origin: "Eastern Europe", targetSectors: ["Financial", "Government", "Healthcare", "Education", "Manufacturing"], activeSince: "2014", description: "Prolific cybercrime group operating Emotet as a malware-as-a-service botnet, primarily distributing banking trojans and ransomware." },
+  TrickBot: { name: "Wizard Spider", aliases: ["UNC1878", "Gold Blackburn", "ITG23"], origin: "Russia", targetSectors: ["Healthcare", "Financial", "Government", "Technology", "Legal"], activeSince: "2016", description: "Russian-speaking cybercrime syndicate operating TrickBot and Conti ransomware operations." },
+  Conti: { name: "Wizard Spider", aliases: ["UNC1878", "Gold Blackburn", "ITG23"], origin: "Russia", targetSectors: ["Healthcare", "Critical Infrastructure", "Government", "Financial"], activeSince: "2020", description: "Ransomware operation run by Wizard Spider, known for targeting healthcare during COVID-19 pandemic." },
+  Dridex: { name: "Evil Corp", aliases: ["Indrik Spider", "UNC2165", "Gold Drake"], origin: "Russia", targetSectors: ["Financial", "Government", "Manufacturing"], activeSince: "2014", description: "Russian cybercrime group sanctioned by US Treasury, operating Dridex banking trojan and BitPaymer/WastedLocker ransomware." },
+  Zeus: { name: "Slavik", aliases: ["Evgeniy Bogachev", "lucky12345"], origin: "Russia/Ukraine", targetSectors: ["Financial", "Banking"], activeSince: "2007", description: "One of the most wanted cybercriminals, creator of Zeus banking trojan. $3M FBI bounty." },
+  Gh0stRAT: { name: "APT1 / Comment Crew", aliases: ["Unit 61398", "Comment Panda", "TG-8223"], origin: "China", targetSectors: ["Defense", "Government", "Technology", "Telecommunications", "Energy"], activeSince: "2006", description: "Chinese military-linked APT group using Gh0st RAT variants in espionage campaigns." },
+  CobaltStrike: { name: "Multiple Threat Actors", aliases: ["Various APTs", "FIN groups", "Ransomware affiliates"], origin: "Global", targetSectors: ["All sectors"], activeSince: "2012", description: "Commercially available C2 framework abused by numerous APT groups and ransomware operators worldwide." },
+  LockBit: { name: "LockBit Gang", aliases: ["Gold Mystic", "Bitwise Spider"], origin: "Russia", targetSectors: ["Healthcare", "Education", "Government", "Manufacturing", "Critical Infrastructure"], activeSince: "2019", description: "Most prolific RaaS operation with extensive affiliate program. Disrupted by law enforcement in 2024." },
+  BlackCat: { name: "BlackCat/ALPHV", aliases: ["Scattered Spider (affiliate)", "UNC3944"], origin: "Russia", targetSectors: ["Healthcare", "Financial", "Technology", "Government"], activeSince: "2021", description: "Rust-based RaaS with cross-platform capabilities. Associated with former DarkSide/BlackMatter operators." },
+  REvil: { name: "Gold Southfield", aliases: ["Pinchy Spider", "REvil Gang"], origin: "Russia", targetSectors: ["Manufacturing", "Legal", "Technology", "MSPs", "Government"], activeSince: "2019", description: "High-profile RaaS operation responsible for Kaseya supply chain attack. Members arrested in 2022." },
+  Remcos: { name: "Breaking Security", aliases: ["Commercial RAT vendor"], origin: "Germany (marketed)", targetSectors: ["Government", "Financial", "Defense"], activeSince: "2016", description: "Commercial surveillance tool marketed as legitimate but widely abused in targeted attacks." },
+  AsyncRAT: { name: "Various Actors", aliases: ["Open-source RAT users"], origin: "Global", targetSectors: ["SMB", "Government", "Education"], activeSince: "2019", description: "Open-source RAT used by various low-to-mid tier threat actors in phishing campaigns." },
+  njRAT: { name: "Various Middle Eastern Actors", aliases: ["njRAT operators"], origin: "Middle East", targetSectors: ["Government", "Military", "Telecommunications"], activeSince: "2012", description: "Widely used RAT originating from the Middle East, popular among less sophisticated threat actors." },
+  QBot: { name: "Gold Lagoon", aliases: ["QakBot operators", "TA570"], origin: "Eastern Europe", targetSectors: ["Financial", "Healthcare", "Government", "Manufacturing"], activeSince: "2007", description: "Long-running banking trojan evolved into a major malware distribution platform." },
+  DarkComet: { name: "DarkCoderSc", aliases: ["Jean-Pierre Lesueur"], origin: "France", targetSectors: ["Government", "Activists", "Dissidents"], activeSince: "2008", description: "RAT notably used against Syrian dissidents. Developer ceased development in 2012." },
+  AgentTesla: { name: "Various Actors", aliases: ["AgentTesla operators"], origin: "Global (Turkey-linked MaaS)", targetSectors: ["Financial", "Energy", "Manufacturing", "Government"], activeSince: "2014", description: ".NET-based info stealer sold as MaaS, widely used in Business Email Compromise (BEC) campaigns." },
+  FormBook: { name: "Various Actors", aliases: ["XLoader operators"], origin: "Global", targetSectors: ["Manufacturing", "Financial", "Government", "Defense"], activeSince: "2016", description: "Info stealer sold as MaaS with XLoader variant targeting macOS." },
+  Sliver: { name: "Multiple APTs", aliases: ["Various"], origin: "Global", targetSectors: ["Government", "Technology", "Critical Infrastructure"], activeSince: "2019", description: "Open-source C2 framework increasingly adopted by APT groups as alternative to Cobalt Strike." },
+};
+
+interface KillChainPhase {
+  phase: string;
+  order: number;
+  description: string;
+  active: boolean;
+  techniques: string[];
+}
+
+const KILL_CHAIN_PHASES = [
+  "Reconnaissance",
+  "Weaponization",
+  "Delivery",
+  "Exploitation",
+  "Installation",
+  "Command & Control",
+  "Actions on Objectives",
+] as const;
+
+function mapToKillChain(family: TrojanFamily): KillChainPhase[] {
+  const bp = family.behaviorProfile;
+  const phases: KillChainPhase[] = [
+    {
+      phase: "Reconnaissance",
+      order: 1,
+      description: "Gathering information about targets",
+      active: bp.discovery.length > 0,
+      techniques: bp.discovery.slice(0, 3),
+    },
+    {
+      phase: "Weaponization",
+      order: 2,
+      description: "Creating malicious payload",
+      active: family.yaraStrings.length > 0 || family.category === "Loader",
+      techniques: family.category === "Loader" ? ["Payload packaging", "Dropper creation"] : ["Malware compilation", "Payload obfuscation"],
+    },
+    {
+      phase: "Delivery",
+      order: 3,
+      description: "Transmitting payload to target",
+      active: family.mitreTechniques.some(t => t.tactic === "Initial Access") || bp.execution.some(e => e.toLowerCase().includes("phishing") || e.toLowerCase().includes("download") || e.toLowerCase().includes("dropper") || e.toLowerCase().includes("macro") || e.toLowerCase().includes("sideload")),
+      techniques: bp.execution.filter(e => e.toLowerCase().includes("phishing") || e.toLowerCase().includes("download") || e.toLowerCase().includes("macro") || e.toLowerCase().includes("sideload") || e.toLowerCase().includes("dropper")).slice(0, 3),
+    },
+    {
+      phase: "Exploitation",
+      order: 4,
+      description: "Exploiting vulnerability to execute",
+      active: bp.execution.length > 0,
+      techniques: bp.execution.filter(e => !e.toLowerCase().includes("phishing") && !e.toLowerCase().includes("download")).slice(0, 3),
+    },
+    {
+      phase: "Installation",
+      order: 5,
+      description: "Installing persistent access",
+      active: bp.persistence.length > 0,
+      techniques: bp.persistence.slice(0, 3),
+    },
+    {
+      phase: "Command & Control",
+      order: 6,
+      description: "Establishing C2 communication",
+      active: bp.commandAndControl.length > 0,
+      techniques: bp.commandAndControl.slice(0, 3),
+    },
+    {
+      phase: "Actions on Objectives",
+      order: 7,
+      description: "Achieving mission goals",
+      active: bp.exfiltration.length > 0 || bp.lateralMovement.length > 0,
+      techniques: [...bp.exfiltration.slice(0, 2), ...bp.lateralMovement.slice(0, 2)],
+    },
+  ];
+  if (phases[2].techniques.length === 0 && phases[2].active) {
+    phases[2].techniques = ["Malicious payload delivery"];
+  }
+  if (phases[3].techniques.length === 0 && phases[3].active) {
+    phases[3].techniques = bp.execution.slice(0, 3);
+  }
+  return phases;
+}
+
+const MITRE_TACTICS_ORDER = [
+  "Reconnaissance", "Resource Development", "Initial Access", "Execution",
+  "Persistence", "Privilege Escalation", "Defense Evasion", "Credential Access",
+  "Discovery", "Lateral Movement", "Collection", "Command and Control",
+  "Exfiltration", "Impact",
+];
+
+function generateMitreHeatmap(family: TrojanFamily): {
+  tactics: Array<{
+    tactic: string;
+    techniques: Array<{ id: string; name: string }>;
+    coverage: number;
+  }>;
+  totalTechniques: number;
+  coveredTactics: number;
+  totalTactics: number;
+} {
+  const tacticMap = new Map<string, Array<{ id: string; name: string }>>();
+  for (const tactic of MITRE_TACTICS_ORDER) {
+    tacticMap.set(tactic, []);
+  }
+
+  for (const tech of family.mitreTechniques) {
+    const existing = tacticMap.get(tech.tactic) || [];
+    existing.push({ id: tech.id, name: tech.name });
+    tacticMap.set(tech.tactic, existing);
+  }
+
+  const tactics = MITRE_TACTICS_ORDER.map(tactic => {
+    const techniques = tacticMap.get(tactic) || [];
+    return {
+      tactic,
+      techniques,
+      coverage: techniques.length > 0 ? Math.min(100, techniques.length * 33) : 0,
+    };
+  });
+
+  const coveredTactics = tactics.filter(t => t.techniques.length > 0).length;
+
+  return {
+    tactics,
+    totalTechniques: family.mitreTechniques.length,
+    coveredTactics,
+    totalTactics: MITRE_TACTICS_ORDER.length,
+  };
+}
+
+export function extractIOCsFromText(text: string): {
+  ips: string[];
+  domains: string[];
+  urls: string[];
+  emails: string[];
+  filePaths: string[];
+  registryKeys: string[];
+  mutexNames: string[];
+  hashes: { md5: string[]; sha1: string[]; sha256: string[] };
+} {
+  const ipRegex = /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;
+  const domainRegex = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|org|io|xyz|top|info|biz|cc|tk|ml|ga|cf|gq|ru|cn|de|uk|fr|nl|onion)\b/gi;
+  const urlRegex = /https?:\/\/[^\s"'<>\]]+/gi;
+  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+  const filePathWinRegex = /(?:[A-Z]:\\|%[A-Za-z]+%)(?:[^\s"'<>|*?]+)/gi;
+  const filePathUnixRegex = /(?:\/(?:tmp|opt|var|etc|usr|home|root)\/[^\s"'<>|*?]+)/gi;
+  const registryRegex = /HK(?:LM|CU|CR|U|CC)\\[^\s"'<>]+/gi;
+  const mutexRegex = /(?:Global\\|Local\\|Sessions\\)[^\s"'<>]+/gi;
+  const md5Regex = /\b[a-fA-F0-9]{32}\b/g;
+  const sha1Regex = /\b[a-fA-F0-9]{40}\b/g;
+  const sha256Regex = /\b[a-fA-F0-9]{64}\b/g;
+
+  const unique = (arr: string[]) => Array.from(new Set(arr));
+
+  const ips = unique((text.match(ipRegex) || []).filter(ip => !ip.startsWith("0.") && !ip.startsWith("255.")));
+  const urls = unique(text.match(urlRegex) || []);
+  const urlDomains = new Set(urls.map(u => { try { return new URL(u).hostname; } catch { return ""; } }).filter(Boolean));
+  const allDomains = unique((text.match(domainRegex) || []).filter(d => !urlDomains.has(d) && d.length > 4));
+  const emails = unique(text.match(emailRegex) || []);
+  const filePathsWin: string[] = text.match(filePathWinRegex) || [];
+  const filePathsUnix: string[] = text.match(filePathUnixRegex) || [];
+  const filePaths = unique(filePathsWin.concat(filePathsUnix));
+  const registryKeys = unique(text.match(registryRegex) || []);
+
+  const mutexCandidates: string[] = text.match(mutexRegex) || [];
+  const mutexFromContext: string[] = [];
+  const mutexKeywords = /mutex[:\s=]+["']?([^\s"']+)/gi;
+  let mx;
+  while ((mx = mutexKeywords.exec(text)) !== null) {
+    mutexFromContext.push(mx[1]);
+  }
+  const mutexNames = unique(mutexCandidates.concat(mutexFromContext));
+
+  const sha256 = unique(text.match(sha256Regex) || []);
+  const sha256Arr = sha256;
+  const sha1 = unique((text.match(sha1Regex) || []).filter(h => sha256Arr.indexOf(h) === -1 && !sha256Arr.some(s => s.includes(h))));
+  const sha1Arr = sha1;
+  const md5 = unique((text.match(md5Regex) || []).filter(h => sha1Arr.indexOf(h) === -1 && sha256Arr.indexOf(h) === -1 && !sha1Arr.some(s => s.includes(h)) && !sha256Arr.some(s => s.includes(h))));
+
+  return { ips, domains: allDomains, urls, emails, filePaths, registryKeys, mutexNames, hashes: { md5, sha1, sha256 } };
+}
+
+export function getThreatActor(familyName: string): ThreatActorInfo | null {
+  const family = UNIQUE_FAMILIES.find(f => f.name.toLowerCase() === familyName.toLowerCase() || f.aliases.some(a => a.toLowerCase() === familyName.toLowerCase()));
+  if (!family) return null;
+  return THREAT_ACTOR_MAP[family.name] || null;
+}
+
+export function getKillChain(familyName: string): { family: string; phases: KillChainPhase[] } | null {
+  const family = UNIQUE_FAMILIES.find(f => f.name.toLowerCase() === familyName.toLowerCase() || f.aliases.some(a => a.toLowerCase() === familyName.toLowerCase()));
+  if (!family) return null;
+  return { family: family.name, phases: mapToKillChain(family) };
+}
+
+export function getMitreHeatmap(familyName: string): {
+  family: string;
+  heatmap: ReturnType<typeof generateMitreHeatmap>;
+} | null {
+  const family = UNIQUE_FAMILIES.find(f => f.name.toLowerCase() === familyName.toLowerCase() || f.aliases.some(a => a.toLowerCase() === familyName.toLowerCase()));
+  if (!family) return null;
+  return { family: family.name, heatmap: generateMitreHeatmap(family) };
+}
+
 export async function lookupHash(hash: string): Promise<{
   hash: string;
   malwareBazaarResult: any;
@@ -2490,12 +2720,32 @@ export function generateYARARule(familyName: string): { rule: string; family: st
     }
   }
 
+  for (const reg of family.registryKeys.slice(0, 2)) {
+    const cleanReg = reg.replace(/\*/g, "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    if (cleanReg.length > 4) {
+      strings.push(`        $r${idx} = "${cleanReg}" ascii wide nocase`);
+      idx++;
+    }
+  }
+
+  for (const fp of family.filePaths.slice(0, 2)) {
+    const cleanFp = fp.replace(/%[^%]+%/g, "").replace(/\*/g, "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    if (cleanFp.length > 3) {
+      strings.push(`        $f${idx} = "${cleanFp}" ascii wide nocase`);
+      idx++;
+    }
+  }
+
   const conditionParts = [];
   if (idx <= 5) {
     conditionParts.push(`2 of them`);
-  } else {
+  } else if (idx <= 10) {
     conditionParts.push(`3 of them`);
+  } else {
+    conditionParts.push(`4 of them`);
   }
+
+  const fileSizeLimit = family.category === "Ransomware" ? "100MB" : family.category === "Mobile" ? "20MB" : "50MB";
 
   const rule = `rule ${safeName}_Detector
 {
@@ -2504,18 +2754,45 @@ export function generateYARARule(familyName: string): { rule: string; family: st
         author = "AegisAI360 Threat Intelligence"
         category = "${family.category}"
         risk_score = ${family.riskScore}
+        severity = "${family.riskScore >= 90 ? "critical" : family.riskScore >= 75 ? "high" : family.riskScore >= 50 ? "medium" : "low"}"
         first_seen = "${family.firstSeen}"
         last_active = "${family.lastActive}"
         reference = "AegisAI360 Trojan Knowledge Base"
+        hash_count = ${family.knownHashes.length}
 ${family.mitreTechniques.slice(0, 5).map((t, i) => `        mitre_${i} = "${t.id} - ${t.name}"`).join("\n")}
 
     strings:
 ${strings.join("\n")}
 
     condition:
-        (uint16(0) == 0x5A4D or uint32(0) == 0x464C457F) and
-        filesize < 50MB and
+        (
+            (uint16(0) == 0x5A4D and uint32(uint32(0x3C)) == 0x00004550) or
+            uint32(0) == 0x464C457F or
+            uint32(0) == 0xBEBAFECA or
+            uint16(0) == 0x6152 or
+            uint32(0) == 0x04034B50
+        ) and
+        filesize < ${fileSizeLimit} and
         ${conditionParts.join(" and ")}
+}
+
+rule ${safeName}_Memory_Detector
+{
+    meta:
+        description = "Memory-based detection for ${family.name}"
+        author = "AegisAI360 Threat Intelligence"
+        category = "${family.category}"
+        scan_context = "memory"
+
+    strings:
+${family.yaraStrings.slice(0, 5).map((s, i) => `        $mem${i} = "${s}" ascii wide nocase`).join("\n")}
+${family.mutexPatterns.slice(0, 3).map((m, i) => {
+    const clean = m.replace(/\*/g, "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    return clean.length > 2 ? `        $mx${i} = "${clean}" ascii wide` : "";
+  }).filter(Boolean).join("\n")}
+
+    condition:
+        2 of them
 }`;
 
   return { rule, family: family.name };
@@ -2628,6 +2905,86 @@ falsepositives:
     - Unlikely
 level: high`;
     rules.push(mutexRule);
+  }
+
+  if (family.knownDomains.length > 0) {
+    const dnsRule = `
+---
+title: ${family.name} DNS Query Detection
+id: ${generateUUID(family.name + "_dns")}
+status: experimental
+description: Detects DNS queries to known ${family.name} infrastructure
+author: AegisAI360 Threat Intelligence
+date: ${new Date().toISOString().split("T")[0]}
+tags:
+    - attack.command_and_control
+logsource:
+    category: dns_query
+    product: windows
+detection:
+    selection:
+        QueryName|contains:
+${family.knownDomains.map(d => `            - '${d}'`).join("\n")}
+    condition: selection
+falsepositives:
+    - Unlikely
+level: critical`;
+    rules.push(dnsRule);
+  }
+
+  if (family.filePaths.length > 0) {
+    const fileRule = `
+---
+title: ${family.name} File Creation Detection
+id: ${generateUUID(family.name + "_file")}
+status: experimental
+description: Detects ${family.name} file creation in known paths
+author: AegisAI360 Threat Intelligence
+date: ${new Date().toISOString().split("T")[0]}
+tags:
+    - attack.persistence
+    - attack.t1547.001
+logsource:
+    category: file_event
+    product: windows
+detection:
+    selection:
+        TargetFilename|contains:
+${family.filePaths.filter(f => !f.includes("*")).slice(0, 8).map(f => `            - '${f.replace(/%[^%]+%/g, "").replace(/'/g, "''")}'`).join("\n") || `            - '${family.filePaths[0].replace(/%[^%]+%/g, "").replace(/\*/g, "").replace(/'/g, "''")}'`}
+    condition: selection
+falsepositives:
+    - Legitimate software using similar paths
+level: medium`;
+    rules.push(fileRule);
+  }
+
+  const hasScheduledTask = family.behaviorProfile.persistence.some(p => p.toLowerCase().includes("scheduled task")) || family.commandLines.some(c => c.toLowerCase().includes("schtasks"));
+  if (hasScheduledTask) {
+    const taskRule = `
+---
+title: ${family.name} Scheduled Task Creation
+id: ${generateUUID(family.name + "_schtask")}
+status: experimental
+description: Detects ${family.name} scheduled task creation for persistence
+author: AegisAI360 Threat Intelligence
+date: ${new Date().toISOString().split("T")[0]}
+tags:
+    - attack.persistence
+    - attack.t1053.005
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        Image|endswith: '\\schtasks.exe'
+        CommandLine|contains:
+            - '${family.name}'
+${family.commandLines.filter(c => c.toLowerCase().includes("schtasks")).map(c => `            - '${c.replace(/'/g, "''")}'`).join("\n")}
+    condition: selection
+falsepositives:
+    - Legitimate scheduled task creation
+level: high`;
+    rules.push(taskRule);
   }
 
   return { rule: rules.join("\n"), family: family.name };

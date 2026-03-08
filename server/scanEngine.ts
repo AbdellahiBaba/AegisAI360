@@ -303,26 +303,61 @@ export async function scanHeaders(targetUrl: string): Promise<{
 }
 
 const VULN_PATHS = [
-  { path: "/.env", name: "Environment File", severity: "critical" as const },
-  { path: "/.git/config", name: "Git Repository", severity: "critical" as const },
-  { path: "/.git/HEAD", name: "Git HEAD", severity: "critical" as const },
-  { path: "/wp-admin/", name: "WordPress Admin", severity: "high" as const },
-  { path: "/phpmyadmin/", name: "phpMyAdmin", severity: "high" as const },
-  { path: "/admin/", name: "Admin Panel", severity: "medium" as const },
-  { path: "/administrator/", name: "Administrator Panel", severity: "medium" as const },
-  { path: "/server-status", name: "Apache Server Status", severity: "high" as const },
-  { path: "/server-info", name: "Apache Server Info", severity: "high" as const },
-  { path: "/.htpasswd", name: "htpasswd File", severity: "critical" as const },
-  { path: "/.htaccess", name: "htaccess File", severity: "high" as const },
-  { path: "/robots.txt", name: "Robots.txt", severity: "info" as const },
-  { path: "/sitemap.xml", name: "Sitemap", severity: "info" as const },
-  { path: "/crossdomain.xml", name: "Cross-Domain Policy", severity: "medium" as const },
-  { path: "/backup/", name: "Backup Directory", severity: "critical" as const },
-  { path: "/api/swagger", name: "Swagger Docs", severity: "medium" as const },
-  { path: "/api/docs", name: "API Documentation", severity: "medium" as const },
-  { path: "/.DS_Store", name: "Mac DS_Store", severity: "medium" as const },
-  { path: "/wp-config.php.bak", name: "WP Config Backup", severity: "critical" as const },
-  { path: "/debug/", name: "Debug Endpoint", severity: "high" as const },
+  { path: "/.env", name: "Environment File", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Remove .env from web root. Add to .gitignore. Use environment variables via hosting platform.", remediationSnippet: "# Nginx\nlocation ~ /\\.env { deny all; return 404; }\n# Apache\n<Files .env>\n  Require all denied\n</Files>" },
+  { path: "/.git/config", name: "Git Repository", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-538", remediation: "Remove .git directory from production. Block access via web server config.", remediationSnippet: "# Nginx\nlocation ~ /\\.git { deny all; return 404; }\n# Apache\nRedirectMatch 404 /\\.git" },
+  { path: "/.git/HEAD", name: "Git HEAD", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-538", remediation: "Remove .git directory from production deployments.", remediationSnippet: "# Nginx\nlocation ~ /\\.git { deny all; return 404; }" },
+  { path: "/wp-admin/", name: "WordPress Admin", severity: "high" as const, owaspCategory: "A01:2021 Broken Access Control", cweId: "CWE-284", remediation: "Restrict wp-admin access by IP. Use two-factor authentication. Rename login URL.", remediationSnippet: "# Nginx\nlocation /wp-admin/ {\n  allow 10.0.0.0/8;\n  deny all;\n}" },
+  { path: "/phpmyadmin/", name: "phpMyAdmin", severity: "high" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-284", remediation: "Remove phpMyAdmin from production. If needed, restrict to internal IPs and add authentication.", remediationSnippet: "# Nginx\nlocation /phpmyadmin/ {\n  allow 127.0.0.1;\n  deny all;\n}" },
+  { path: "/admin/", name: "Admin Panel", severity: "medium" as const, owaspCategory: "A01:2021 Broken Access Control", cweId: "CWE-284", remediation: "Ensure admin panel requires authentication. Restrict by IP if possible.", remediationSnippet: "# Nginx\nlocation /admin/ {\n  auth_basic \"Admin Area\";\n  auth_basic_user_file /etc/nginx/.htpasswd;\n}" },
+  { path: "/administrator/", name: "Administrator Panel", severity: "medium" as const, owaspCategory: "A01:2021 Broken Access Control", cweId: "CWE-284", remediation: "Restrict administrator panel access. Add IP allowlisting and multi-factor auth.", remediationSnippet: "" },
+  { path: "/server-status", name: "Apache Server Status", severity: "high" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Disable mod_status in production or restrict to localhost.", remediationSnippet: "# Apache\n<Location /server-status>\n  Require local\n</Location>" },
+  { path: "/server-info", name: "Apache Server Info", severity: "high" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Disable mod_info in production or restrict to localhost.", remediationSnippet: "# Apache\n<Location /server-info>\n  Require local\n</Location>" },
+  { path: "/.htpasswd", name: "htpasswd File", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-538", remediation: "Move .htpasswd outside web root. Block access via server config.", remediationSnippet: "# Apache\n<Files .htpasswd>\n  Require all denied\n</Files>" },
+  { path: "/.htaccess", name: "htaccess File", severity: "high" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-538", remediation: "Ensure .htaccess files are not publicly readable.", remediationSnippet: "# Apache\n<Files .htaccess>\n  Require all denied\n</Files>" },
+  { path: "/robots.txt", name: "Robots.txt", severity: "info" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Review robots.txt for sensitive path disclosure. Do not list internal paths.", remediationSnippet: "" },
+  { path: "/sitemap.xml", name: "Sitemap", severity: "info" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Ensure sitemap does not expose internal or restricted URLs.", remediationSnippet: "" },
+  { path: "/crossdomain.xml", name: "Cross-Domain Policy", severity: "medium" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-942", remediation: "Restrict crossdomain.xml to specific trusted domains. Avoid wildcard (*) access.", remediationSnippet: '<?xml version="1.0"?>\n<cross-domain-policy>\n  <allow-access-from domain="trusted.example.com"/>\n</cross-domain-policy>' },
+  { path: "/backup/", name: "Backup Directory", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-530", remediation: "Remove backup directory from web root. Store backups outside the document root.", remediationSnippet: "# Nginx\nlocation /backup/ { deny all; return 404; }" },
+  { path: "/api/swagger", name: "Swagger Docs", severity: "medium" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Disable Swagger UI in production or restrict access with authentication.", remediationSnippet: "" },
+  { path: "/api/docs", name: "API Documentation", severity: "medium" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Restrict API docs to authenticated users or disable in production.", remediationSnippet: "" },
+  { path: "/.DS_Store", name: "Mac DS_Store", severity: "medium" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-538", remediation: "Remove .DS_Store files. Add to .gitignore. Block access via server config.", remediationSnippet: "# Nginx\nlocation ~ /\\.DS_Store { deny all; return 404; }" },
+  { path: "/wp-config.php.bak", name: "WP Config Backup", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-530", remediation: "Remove backup files from web root. Never leave .bak or .old files in production.", remediationSnippet: "# Nginx\nlocation ~* \\.(bak|old|orig|save|swp|temp)$ { deny all; return 404; }" },
+  { path: "/debug/", name: "Debug Endpoint", severity: "high" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-489", remediation: "Disable debug endpoints in production. Remove or restrict access.", remediationSnippet: "" },
+  { path: "/wp-login.php", name: "WordPress Login", severity: "medium" as const, owaspCategory: "A07:2021 Identification and Authentication Failures", cweId: "CWE-307", remediation: "Rate limit login attempts. Use CAPTCHA and 2FA. Consider renaming login URL.", remediationSnippet: "# Nginx rate limiting\nlimit_req_zone $binary_remote_addr zone=wp_login:10m rate=1r/s;\nlocation /wp-login.php {\n  limit_req zone=wp_login burst=3;\n}" },
+  { path: "/wp-content/debug.log", name: "WordPress Debug Log", severity: "critical" as const, owaspCategory: "A09:2021 Security Logging and Monitoring Failures", cweId: "CWE-532", remediation: "Disable WP_DEBUG_LOG in production. Remove debug.log from web root.", remediationSnippet: "// wp-config.php\ndefine('WP_DEBUG', false);\ndefine('WP_DEBUG_LOG', false);" },
+  { path: "/wp-includes/", name: "WordPress Includes", severity: "low" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Block direct access to wp-includes directory.", remediationSnippet: "# Nginx\nlocation /wp-includes/ {\n  internal;\n}" },
+  { path: "/xmlrpc.php", name: "WordPress XML-RPC", severity: "high" as const, owaspCategory: "A07:2021 Identification and Authentication Failures", cweId: "CWE-307", remediation: "Disable XML-RPC if not needed. It enables brute-force amplification attacks.", remediationSnippet: "# Nginx\nlocation = /xmlrpc.php { deny all; return 404; }\n# Apache\n<Files xmlrpc.php>\n  Require all denied\n</Files>" },
+  { path: "/install.php", name: "Installer Script", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-489", remediation: "Remove installation scripts after setup is complete.", remediationSnippet: "" },
+  { path: "/setup.php", name: "Setup Script", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-489", remediation: "Remove setup scripts after installation is complete.", remediationSnippet: "" },
+  { path: "/config.php", name: "Config File", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Move configuration files outside web root or block direct access.", remediationSnippet: "# Nginx\nlocation ~ /config\\.php$ { deny all; return 404; }" },
+  { path: "/web.config", name: "IIS Config", severity: "high" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Ensure web.config is not directly accessible. IIS should block by default.", remediationSnippet: "" },
+  { path: "/composer.json", name: "Composer Config", severity: "medium" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Remove package manager files from production. They reveal dependency versions.", remediationSnippet: "# Nginx\nlocation ~ /(composer\\.json|composer\\.lock|package\\.json) { deny all; return 404; }" },
+  { path: "/package.json", name: "NPM Package", severity: "medium" as const, owaspCategory: "A06:2021 Vulnerable and Outdated Components", cweId: "CWE-200", remediation: "Remove package.json from production web root to prevent dependency disclosure.", remediationSnippet: "" },
+  { path: "/.env.local", name: "Local Environment", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Remove .env.local from production. Use hosting platform environment variables.", remediationSnippet: "" },
+  { path: "/.env.production", name: "Production Environment", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Never expose production environment files via web server.", remediationSnippet: "" },
+  { path: "/phpinfo.php", name: "PHP Info", severity: "high" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Remove phpinfo() files from production. They expose server configuration details.", remediationSnippet: "" },
+  { path: "/info.php", name: "PHP Info Alt", severity: "high" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Remove diagnostic PHP files from production.", remediationSnippet: "" },
+  { path: "/elmah.axd", name: "ELMAH Error Log", severity: "high" as const, owaspCategory: "A09:2021 Security Logging and Monitoring Failures", cweId: "CWE-532", remediation: "Restrict ELMAH access or disable in production.", remediationSnippet: "" },
+  { path: "/trace.axd", name: "ASP.NET Trace", severity: "high" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Disable tracing in production web.config.", remediationSnippet: '<configuration>\n  <system.web>\n    <trace enabled="false" />\n  </system.web>\n</configuration>' },
+  { path: "/actuator", name: "Spring Actuator", severity: "high" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Restrict Spring Actuator endpoints. Only expose /health and /info publicly.", remediationSnippet: "# application.properties\nmanagement.endpoints.web.exposure.include=health,info\nmanagement.endpoints.web.base-path=/internal/actuator" },
+  { path: "/actuator/env", name: "Spring Env", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Never expose /actuator/env publicly. It reveals environment variables and secrets.", remediationSnippet: "" },
+  { path: "/console", name: "H2 Console", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-489", remediation: "Disable H2 console in production.", remediationSnippet: "# application.properties\nspring.h2.console.enabled=false" },
+  { path: "/graphql", name: "GraphQL Endpoint", severity: "medium" as const, owaspCategory: "A01:2021 Broken Access Control", cweId: "CWE-200", remediation: "Disable GraphQL introspection in production. Implement rate limiting.", remediationSnippet: "" },
+  { path: "/.well-known/openid-configuration", name: "OpenID Config", severity: "info" as const, owaspCategory: "A07:2021 Identification and Authentication Failures", cweId: "CWE-200", remediation: "Review OpenID configuration for proper security settings.", remediationSnippet: "" },
+  { path: "/cgi-bin/", name: "CGI Bin", severity: "high" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Remove CGI scripts if not needed. Restrict access to cgi-bin directory.", remediationSnippet: "" },
+  { path: "/api/v1/", name: "API v1 Root", severity: "info" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Ensure API root does not expose sensitive metadata.", remediationSnippet: "" },
+  { path: "/.svn/entries", name: "SVN Repository", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-538", remediation: "Remove .svn directory from production deployments.", remediationSnippet: "# Nginx\nlocation ~ /\\.svn { deny all; return 404; }" },
+  { path: "/.hg/", name: "Mercurial Repository", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-538", remediation: "Remove .hg directory from production deployments.", remediationSnippet: "# Nginx\nlocation ~ /\\.hg { deny all; return 404; }" },
+  { path: "/wp-json/wp/v2/users", name: "WordPress User Enum", severity: "high" as const, owaspCategory: "A01:2021 Broken Access Control", cweId: "CWE-200", remediation: "Disable user enumeration via REST API. Restrict wp-json user endpoint.", remediationSnippet: "// functions.php\nadd_filter('rest_endpoints', function($endpoints) {\n  unset($endpoints['/wp/v2/users']);\n  return $endpoints;\n});" },
+  { path: "/drupal/", name: "Drupal Root", severity: "medium" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Ensure Drupal admin paths are restricted and up to date.", remediationSnippet: "" },
+  { path: "/user/login", name: "Drupal Login", severity: "medium" as const, owaspCategory: "A07:2021 Identification and Authentication Failures", cweId: "CWE-307", remediation: "Implement login rate limiting and CAPTCHA for Drupal login.", remediationSnippet: "" },
+  { path: "/CHANGELOG.txt", name: "Drupal Changelog", severity: "medium" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Remove CHANGELOG.txt to prevent version disclosure.", remediationSnippet: "" },
+  { path: "/jmx-console/", name: "JBoss JMX Console", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-284", remediation: "Restrict JMX console access. Disable in production.", remediationSnippet: "" },
+  { path: "/manager/html", name: "Tomcat Manager", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-284", remediation: "Restrict Tomcat manager to localhost. Use strong credentials.", remediationSnippet: '<!-- server.xml -->\n<Valve className="org.apache.catalina.valves.RemoteAddrValve" allow="127\\.0\\.0\\.1"/>' },
+  { path: "/solr/", name: "Apache Solr", severity: "high" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-284", remediation: "Restrict Solr admin access. Enable authentication.", remediationSnippet: "" },
+  { path: "/.aws/credentials", name: "AWS Credentials", severity: "critical" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-798", remediation: "Never store AWS credentials in web root. Use IAM roles or environment variables.", remediationSnippet: "" },
+  { path: "/docker-compose.yml", name: "Docker Compose", severity: "high" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Remove Docker configuration files from production web root.", remediationSnippet: "" },
+  { path: "/Dockerfile", name: "Dockerfile", severity: "medium" as const, owaspCategory: "A05:2021 Security Misconfiguration", cweId: "CWE-200", remediation: "Remove Dockerfile from production web root.", remediationSnippet: "" },
 ];
 
 interface VulnResult {
@@ -332,7 +367,20 @@ interface VulnResult {
   found: boolean;
   statusCode: number;
   details: string;
+  owaspCategory: string;
+  cweId: string;
+  remediation: string;
+  remediationSnippet: string;
+  riskScore: number;
 }
+
+const SEVERITY_RISK_SCORES: Record<string, number> = {
+  critical: 9.5,
+  high: 7.5,
+  medium: 5.0,
+  low: 3.0,
+  info: 0.0,
+};
 
 function checkVulnPath(baseUrl: string, vulnPath: typeof VULN_PATHS[0]): Promise<VulnResult> {
   return new Promise((resolve) => {
@@ -352,13 +400,19 @@ function checkVulnPath(baseUrl: string, vulnPath: typeof VULN_PATHS[0]): Promise
         } else {
           details = `Not accessible (HTTP ${res.statusCode})`;
         }
+        const effectiveSeverity = found && vulnPath.severity !== "info" ? vulnPath.severity : "info";
         resolve({
           path: vulnPath.path,
           name: vulnPath.name,
-          severity: found && vulnPath.severity !== "info" ? vulnPath.severity : "info",
+          severity: effectiveSeverity,
           found,
           statusCode: res.statusCode || 0,
           details,
+          owaspCategory: vulnPath.owaspCategory,
+          cweId: vulnPath.cweId,
+          remediation: vulnPath.remediation,
+          remediationSnippet: vulnPath.remediationSnippet,
+          riskScore: found ? SEVERITY_RISK_SCORES[effectiveSeverity] || 0 : 0,
         });
       });
     });
@@ -371,6 +425,11 @@ function checkVulnPath(baseUrl: string, vulnPath: typeof VULN_PATHS[0]): Promise
         found: false,
         statusCode: 0,
         details: "Connection failed",
+        owaspCategory: vulnPath.owaspCategory,
+        cweId: vulnPath.cweId,
+        remediation: vulnPath.remediation,
+        remediationSnippet: vulnPath.remediationSnippet,
+        riskScore: 0,
       });
     });
     req.on("timeout", () => {
@@ -382,6 +441,11 @@ function checkVulnPath(baseUrl: string, vulnPath: typeof VULN_PATHS[0]): Promise
         found: false,
         statusCode: 0,
         details: "Request timed out",
+        owaspCategory: vulnPath.owaspCategory,
+        cweId: vulnPath.cweId,
+        remediation: vulnPath.remediation,
+        remediationSnippet: vulnPath.remediationSnippet,
+        riskScore: 0,
       });
     });
     req.end();

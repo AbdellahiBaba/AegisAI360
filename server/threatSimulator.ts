@@ -328,15 +328,305 @@ export async function simulateAPT(orgId: number): Promise<{ eventsCreated: numbe
   return { eventsCreated: count, description: `APT Kill Chain: ${count} events - full attack lifecycle from recon to exfiltration` };
 }
 
+export async function simulateSupplyChain(orgId: number): Promise<{ eventsCreated: number; description: string }> {
+  const attackerIp = randomIp();
+  const c2Domain = randomDomain();
+  let count = 0;
+
+  const events = [
+    {
+      eventType: "anomaly", severity: "medium", source: "Package Monitor",
+      description: `Compromised npm package detected: event-stream@3.3.6 - unexpected dependency flatmap-stream added`,
+      techniqueId: "T1195.002", tactic: "Initial Access",
+    },
+    {
+      eventType: "malware", severity: "high", source: "Endpoint Protection",
+      description: `Backdoor payload activated from node_modules/flatmap-stream - obfuscated code executing post-install script`,
+      techniqueId: "T1059.007", tactic: "Execution",
+    },
+    {
+      eventType: "malware", severity: "high", source: "Endpoint Protection",
+      description: `Persistence established via cron job - backdoor writes to /etc/cron.d/sysupdate pointing to compromised binary`,
+      techniqueId: "T1053.003", tactic: "Persistence",
+    },
+    {
+      eventType: "anomaly", severity: "high", source: "Process Monitor",
+      description: `Suspicious child process spawned from node - /tmp/.cache/sysupdate executing with elevated privileges`,
+      techniqueId: "T1055", tactic: "Defense Evasion",
+    },
+    {
+      eventType: "anomaly", severity: "high", source: "File Integrity Monitor",
+      description: `Credential harvesting detected - .env files and AWS credentials read by compromised process`,
+      techniqueId: "T1552.001", tactic: "Credential Access",
+    },
+    {
+      eventType: "data_exfiltration", severity: "critical", source: "Network Monitor",
+      description: `Data exfiltration via HTTPS POST to ${c2Domain} (${attackerIp}) - API keys, database credentials, and environment variables sent`,
+      techniqueId: "T1041", tactic: "Exfiltration",
+    },
+  ];
+
+  for (const event of events) {
+    await createEvent(orgId, {
+      ...event,
+      sourceIp: event.tactic === "Initial Access" ? attackerIp : "10.0.5.20",
+      destinationIp: event.tactic === "Exfiltration" ? attackerIp : undefined,
+    });
+    count++;
+    await delay(300);
+  }
+
+  return { eventsCreated: count, description: `Supply Chain Attack: ${count} events - compromised package, backdoor, credential theft, exfiltration` };
+}
+
+export async function simulateInsiderThreat(orgId: number): Promise<{ eventsCreated: number; description: string }> {
+  let count = 0;
+
+  const events = [
+    {
+      eventType: "anomaly", severity: "low", source: "IAM Monitor",
+      description: `Off-hours login detected - user jsmith authenticated at 02:47 AM from unusual workstation WS-FINANCE-03`,
+      techniqueId: "T1078", tactic: "Initial Access",
+    },
+    {
+      eventType: "anomaly", severity: "medium", source: "AD Monitor",
+      description: `Privilege abuse detected - user jsmith accessing restricted file shares: \\\\fileserver\\executive-compensation, \\\\fileserver\\m-and-a`,
+      techniqueId: "T1078.002", tactic: "Privilege Escalation",
+    },
+    {
+      eventType: "anomaly", severity: "medium", source: "DLP",
+      description: `Unauthorized access to sensitive database - user jsmith querying customer_pii table with SELECT * (450K rows returned)`,
+      techniqueId: "T1213", tactic: "Collection",
+    },
+    {
+      eventType: "anomaly", severity: "high", source: "DLP",
+      description: `Bulk file download detected - user jsmith downloaded 2,847 files from confidential project repository in 12 minutes`,
+      techniqueId: "T1530", tactic: "Collection",
+    },
+    {
+      eventType: "anomaly", severity: "high", source: "Email Gateway",
+      description: `Data staging via email - user jsmith sent 14 emails with encrypted ZIP attachments to personal email address`,
+      techniqueId: "T1048.002", tactic: "Exfiltration",
+    },
+    {
+      eventType: "data_exfiltration", severity: "critical", source: "USB Monitor",
+      description: `USB mass storage device connected - 32GB drive mounted, 28.4GB of sensitive files copied including trade secrets and client data`,
+      techniqueId: "T1052.001", tactic: "Exfiltration",
+    },
+    {
+      eventType: "anomaly", severity: "critical", source: "IAM Monitor",
+      description: `Anti-forensics detected - user jsmith clearing browser history, deleting recent files, and wiping Recycle Bin`,
+      techniqueId: "T1070.004", tactic: "Defense Evasion",
+    },
+  ];
+
+  for (const event of events) {
+    await createEvent(orgId, {
+      ...event,
+      sourceIp: "10.0.3.45",
+    });
+    count++;
+    await delay(350);
+  }
+
+  return { eventsCreated: count, description: `Insider Threat: ${count} events - unauthorized access, bulk download, USB exfiltration, anti-forensics` };
+}
+
+export async function simulateZeroDay(orgId: number): Promise<{ eventsCreated: number; description: string }> {
+  const attackerIp = randomIp();
+  const c2Domain = randomDomain();
+  let count = 0;
+
+  const events = [
+    {
+      eventType: "intrusion_attempt", severity: "high", source: "WAF",
+      description: `Unknown exploit payload detected - novel HTTP deserialization attack bypassing WAF signatures on /api/v2/auth endpoint`,
+      techniqueId: "T1190", tactic: "Initial Access",
+    },
+    {
+      eventType: "malware", severity: "critical", source: "Endpoint Protection",
+      description: `Zero-day exploitation successful - arbitrary code execution achieved via memory corruption in libxml2 (no CVE assigned)`,
+      techniqueId: "T1203", tactic: "Execution",
+    },
+    {
+      eventType: "malware", severity: "high", source: "Endpoint Protection",
+      description: `Kernel-level rootkit installed - modified system call table entries for sys_read, sys_getdents64 to hide attacker processes`,
+      techniqueId: "T1014", tactic: "Defense Evasion",
+    },
+    {
+      eventType: "malware", severity: "high", source: "Endpoint Protection",
+      description: `Persistence via modified init system - systemd service 'syshealth-monitor' created pointing to /usr/lib/.hidden/beacon`,
+      techniqueId: "T1543.002", tactic: "Persistence",
+    },
+    {
+      eventType: "anomaly", severity: "high", source: "AD Monitor",
+      description: `Golden Ticket attack detected - forged Kerberos TGT used to access domain controller with KRBTGT hash`,
+      techniqueId: "T1558.001", tactic: "Credential Access",
+    },
+    {
+      eventType: "intrusion_attempt", severity: "critical", source: "Network Monitor",
+      description: `Lateral movement via WMI - attacker pivoting from web server to database servers using stolen domain admin credentials`,
+      techniqueId: "T1047", tactic: "Lateral Movement",
+    },
+    {
+      eventType: "data_exfiltration", severity: "critical", source: "Network Monitor",
+      description: `Covert channel exfiltration - data encoded in ICMP echo request payloads to ${attackerIp}, 3.2GB transferred over 6 hours`,
+      techniqueId: "T1048.003", tactic: "Exfiltration",
+    },
+  ];
+
+  for (const event of events) {
+    await createEvent(orgId, {
+      ...event,
+      sourceIp: event.tactic === "Initial Access" ? attackerIp : "10.0.1.25",
+      destinationIp: event.tactic === "Exfiltration" || event.tactic === "Lateral Movement" ? attackerIp : "10.0.1.1",
+    });
+    count++;
+    await delay(400);
+  }
+
+  return { eventsCreated: count, description: `Zero-Day Exploit: ${count} events - novel exploit, rootkit, golden ticket, covert exfiltration` };
+}
+
+export async function simulateCryptojacking(orgId: number): Promise<{ eventsCreated: number; description: string }> {
+  const attackerIp = randomIp();
+  const miningPool = "stratum+tcp://pool.minexmr.com:4444";
+  let count = 0;
+
+  const events = [
+    {
+      eventType: "intrusion_attempt", severity: "medium", source: "WAF",
+      description: `Exploit attempt on exposed Docker API - unauthenticated access to /v1.24/containers/create endpoint from ${attackerIp}`,
+      techniqueId: "T1190", tactic: "Initial Access",
+    },
+    {
+      eventType: "malware", severity: "high", source: "Container Runtime",
+      description: `Malicious container deployed - image alpine:latest pulled and executed with --privileged flag, downloading XMRig miner`,
+      techniqueId: "T1610", tactic: "Execution",
+    },
+    {
+      eventType: "anomaly", severity: "high", source: "Performance Monitor",
+      description: `CPU usage spike detected - all 16 cores at 98% utilization on server db-prod-03, process: /tmp/.X11-unix/xmrig`,
+      techniqueId: "T1496", tactic: "Impact",
+    },
+    {
+      eventType: "anomaly", severity: "medium", source: "Performance Monitor",
+      description: `Memory pressure alert - 94% RAM utilization on db-prod-03, legitimate services experiencing OOM kills`,
+      techniqueId: "T1496", tactic: "Impact",
+    },
+    {
+      eventType: "anomaly", severity: "high", source: "Network Monitor",
+      description: `Cryptocurrency mining traffic detected - outbound connection to ${miningPool} using Stratum protocol on port 4444`,
+      techniqueId: "T1571", tactic: "Command and Control",
+    },
+    {
+      eventType: "malware", severity: "high", source: "Endpoint Protection",
+      description: `Miner persistence mechanism - crontab modified to restart XMRig on reboot, watchdog script kills competing miners`,
+      techniqueId: "T1053.003", tactic: "Persistence",
+    },
+    {
+      eventType: "anomaly", severity: "critical", source: "Network Monitor",
+      description: `Lateral mining propagation - miner spreading to 4 additional servers via SSH key reuse: db-prod-04, web-01, web-02, cache-01`,
+      techniqueId: "T1021.004", tactic: "Lateral Movement",
+    },
+  ];
+
+  for (const event of events) {
+    await createEvent(orgId, {
+      ...event,
+      sourceIp: event.tactic === "Initial Access" ? attackerIp : "10.0.6.30",
+      destinationIp: event.tactic === "Command and Control" ? attackerIp : undefined,
+    });
+    count++;
+    await delay(300);
+  }
+
+  return { eventsCreated: count, description: `Cryptojacking: ${count} events - container exploit, XMRig deployment, CPU spike, lateral spread` };
+}
+
+export async function simulateDDoS(orgId: number): Promise<{ eventsCreated: number; description: string }> {
+  let count = 0;
+
+  const botnetIps = [
+    "203.0.113.10", "198.51.100.22", "192.0.2.44", "203.0.113.55",
+    "198.51.100.77", "192.0.2.88", "203.0.113.99", "198.51.100.111",
+  ];
+
+  await createEvent(orgId, {
+    eventType: "reconnaissance", severity: "medium", source: "IDS",
+    sourceIp: botnetIps[0],
+    destinationIp: "10.0.0.5",
+    description: `Unusual traffic pattern detected - SYN flood probe from ${botnetIps[0]} testing rate limits on web server`,
+    techniqueId: "T1498", tactic: "Impact",
+  });
+  count++;
+  await delay(200);
+
+  for (const ip of botnetIps) {
+    await createEvent(orgId, {
+      eventType: "intrusion_attempt", severity: "high", source: "Load Balancer",
+      sourceIp: ip,
+      destinationIp: "10.0.0.5",
+      port: 443,
+      protocol: "HTTPS",
+      description: `Volumetric DDoS traffic - ${Math.floor(Math.random() * 50 + 30)}Gbps flood from botnet node ${ip} targeting HTTPS endpoint`,
+      techniqueId: "T1498.001", tactic: "Impact",
+    });
+    count++;
+    await delay(150);
+  }
+
+  await createEvent(orgId, {
+    eventType: "anomaly", severity: "critical", source: "Network Monitor",
+    destinationIp: "10.0.0.5",
+    description: `Bandwidth saturation - inbound traffic exceeds 400Gbps, upstream ISP link at 100% capacity`,
+    techniqueId: "T1498", tactic: "Impact",
+  });
+  count++;
+  await delay(200);
+
+  await createEvent(orgId, {
+    eventType: "anomaly", severity: "critical", source: "Application Monitor",
+    sourceIp: "10.0.0.5",
+    description: `Service degradation - HTTP response times exceeded 30s, 78% of requests returning 503, connection pool exhausted`,
+    techniqueId: "T1499.001", tactic: "Impact",
+  });
+  count++;
+  await delay(200);
+
+  await createEvent(orgId, {
+    eventType: "anomaly", severity: "high", source: "DNS Monitor",
+    description: `DNS amplification component detected - spoofed DNS queries generating 50x amplified responses toward target infrastructure`,
+    techniqueId: "T1498.002", tactic: "Impact",
+  });
+  count++;
+  await delay(200);
+
+  await createEvent(orgId, {
+    eventType: "anomaly", severity: "critical", source: "Infrastructure Monitor",
+    description: `Cascading failure - database connection timeouts causing auth service, API gateway, and CDN origin to become unavailable`,
+    techniqueId: "T1499", tactic: "Impact",
+  });
+  count++;
+
+  return { eventsCreated: count, description: `DDoS Attack: ${count} events - volumetric flood from ${botnetIps.length} botnet nodes, service degradation, cascading failure` };
+}
+
 export const SCENARIOS: Record<string, {
   name: string;
   description: string;
+  mitre: string[];
   fn: (orgId: number) => Promise<{ eventsCreated: number; description: string }>;
 }> = {
-  brute_force: { name: "SSH Brute Force Attack", description: "Simulates 15+ rapid SSH login attempts from a single IP", fn: simulateBruteForce },
-  ransomware: { name: "Ransomware Outbreak", description: "Simulates ransomware dropper, C2 beacon, file encryption, and data exfiltration", fn: simulateRansomware },
-  phishing: { name: "Phishing Campaign", description: "Simulates targeted phishing emails with malicious attachments and credential harvesting", fn: simulatePhishing },
-  port_scan: { name: "Port Scan Sweep", description: "Simulates network reconnaissance scanning across common service ports", fn: simulatePortScan },
-  data_exfil: { name: "Data Exfiltration", description: "Simulates data collection, DNS tunneling, and bulk encrypted data transfer", fn: simulateDataExfiltration },
-  apt: { name: "APT Kill Chain", description: "Simulates a full Advanced Persistent Threat: recon, exploit, persistence, lateral movement, exfiltration", fn: simulateAPT },
+  brute_force: { name: "SSH Brute Force Attack", description: "Simulates 15+ rapid SSH login attempts from a single IP", mitre: ["T1078"], fn: simulateBruteForce },
+  ransomware: { name: "Ransomware Outbreak", description: "Simulates ransomware dropper, C2 beacon, file encryption, and data exfiltration", mitre: ["T1204", "T1071", "T1486", "T1041"], fn: simulateRansomware },
+  phishing: { name: "Phishing Campaign", description: "Simulates targeted phishing emails with malicious attachments and credential harvesting", mitre: ["T1566", "T1566.001", "T1078"], fn: simulatePhishing },
+  port_scan: { name: "Port Scan Sweep", description: "Simulates network reconnaissance scanning across common service ports", mitre: ["T1046"], fn: simulatePortScan },
+  data_exfil: { name: "Data Exfiltration", description: "Simulates data collection, DNS tunneling, and bulk encrypted data transfer", mitre: ["T1213", "T1048", "T1041"], fn: simulateDataExfiltration },
+  apt: { name: "APT Kill Chain", description: "Simulates a full Advanced Persistent Threat: recon, exploit, persistence, lateral movement, exfiltration", mitre: ["T1595", "T1190", "T1059.001", "T1558", "T1021", "T1003", "T1560", "T1041"], fn: simulateAPT },
+  supply_chain: { name: "Supply Chain Attack", description: "Simulates compromised package dependency leading to backdoor installation and credential theft", mitre: ["T1195.002", "T1059.007", "T1053.003", "T1055", "T1552.001", "T1041"], fn: simulateSupplyChain },
+  insider_threat: { name: "Insider Threat", description: "Simulates malicious insider with unauthorized data access, privilege abuse, and bulk data exfiltration", mitre: ["T1078", "T1078.002", "T1213", "T1530", "T1048.002", "T1052.001", "T1070.004"], fn: simulateInsiderThreat },
+  zero_day: { name: "Zero-Day Exploit", description: "Simulates unknown vulnerability exploitation with rootkit deployment and covert channel exfiltration", mitre: ["T1190", "T1203", "T1014", "T1543.002", "T1558.001", "T1047", "T1048.003"], fn: simulateZeroDay },
+  cryptojacking: { name: "Cryptojacking", description: "Simulates cryptocurrency miner deployment via container exploit with lateral propagation", mitre: ["T1190", "T1610", "T1496", "T1571", "T1053.003", "T1021.004"], fn: simulateCryptojacking },
+  ddos: { name: "DDoS Attack", description: "Simulates distributed denial-of-service with volumetric flood, bandwidth saturation, and service degradation", mitre: ["T1498", "T1498.001", "T1498.002", "T1499", "T1499.001"], fn: simulateDDoS },
 };

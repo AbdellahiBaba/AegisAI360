@@ -29,7 +29,7 @@ import { AlertEngine } from "./alertEngine";
 import { testChannel } from "./notificationService";
 import { scanPorts, lookupDNS, checkSSL, scanHeaders, scanVulnerabilities, isPrivateTarget } from "./scanEngine";
 import { enumerateSubdomains, bruteforceDirectories, fingerprintTechnology, detectWAF, whoisLookup, testSQLInjection, testXSS, identifyHash, crackHash, analyzePassword } from "./pentestEngine";
-import { lookupHash, classifyBehavior, generateYARARule, generateSigmaRule, extractIOCs, listFamilies } from "./trojanAnalyzer";
+import { lookupHash, classifyBehavior, generateYARARule, generateSigmaRule, extractIOCs, listFamilies, extractIOCsFromText, getThreatActor, getKillChain, getMitreHeatmap } from "./trojanAnalyzer";
 import { analyzePermissions, testMobileEndpoint, checkOWASPMobile, lookupDeviceVulnerabilities } from "./mobilePentestEngine";
 import { generateReverseShell, generateBindShell, generateWebShell, generateMeterpreterStager, encodePayload, getSupportedLanguages } from "./payloadGenerator";
 import { SCENARIOS } from "./threatSimulator";
@@ -3056,6 +3056,7 @@ export async function registerRoutes(
       id,
       name: s.name,
       description: s.description,
+      mitre: s.mitre,
     }));
     res.json(scenarios);
   });
@@ -3421,6 +3422,49 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to extract IOCs" });
+    }
+  });
+
+  app.post("/api/trojan/extract-iocs-text", requireAuth, async (req, res) => {
+    try {
+      const { text } = z.object({ text: z.string().min(1).max(50000) }).parse(req.body);
+      const result = extractIOCsFromText(text);
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to extract IOCs from text" });
+    }
+  });
+
+  app.post("/api/trojan/threat-actor", requireAuth, async (req, res) => {
+    try {
+      const { family } = z.object({ family: z.string().min(1) }).parse(req.body);
+      const result = getThreatActor(family);
+      if (!result) return res.json({ found: false, family });
+      res.json({ found: true, family, actor: result });
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to get threat actor" });
+    }
+  });
+
+  app.post("/api/trojan/kill-chain", requireAuth, async (req, res) => {
+    try {
+      const { family } = z.object({ family: z.string().min(1) }).parse(req.body);
+      const result = getKillChain(family);
+      if (!result) return res.status(404).json({ error: "Trojan family not found" });
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to get kill chain" });
+    }
+  });
+
+  app.post("/api/trojan/mitre-heatmap", requireAuth, async (req, res) => {
+    try {
+      const { family } = z.object({ family: z.string().min(1) }).parse(req.body);
+      const result = getMitreHeatmap(family);
+      if (!result) return res.status(404).json({ error: "Trojan family not found" });
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.message?.includes("parse") ? 400 : 500).json({ error: "Failed to generate MITRE heatmap" });
     }
   });
 

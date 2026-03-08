@@ -542,7 +542,7 @@ function VulnResults({ data, target }: { data: any; target: string }) {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card><CardContent className="p-3 text-center">
           <p className="text-[10px] text-muted-foreground uppercase">{t("scanner.checksRun")}</p>
           <p className="text-lg font-bold font-mono" data-testid="text-vuln-checks">{data.totalChecks}</p>
@@ -554,6 +554,12 @@ function VulnResults({ data, target }: { data: any; target: string }) {
         <Card><CardContent className="p-3 text-center">
           <p className="text-[10px] text-muted-foreground uppercase">{t("scanner.riskLevel")}</p>
           <SeverityBadge severity={data.riskLevel || "info"} />
+        </CardContent></Card>
+        <Card><CardContent className="p-3 text-center">
+          <p className="text-[10px] text-muted-foreground uppercase">Max CVSS</p>
+          <p className="text-lg font-bold font-mono" data-testid="text-vuln-max-cvss">
+            {dangerousVulns.length > 0 ? Math.max(...dangerousVulns.map((v: any) => v.riskScore || 0)).toFixed(1) : "0.0"}
+          </p>
         </CardContent></Card>
       </div>
 
@@ -567,19 +573,38 @@ function VulnResults({ data, target }: { data: any; target: string }) {
           </CardHeader>
           <CardContent className="px-4 pb-3 space-y-2">
             {dangerousVulns.map((v: any) => (
-              <div key={v.path} className="flex items-center justify-between gap-2 p-2 rounded bg-muted/50" data-testid={`remediation-vuln-${v.path}`}>
-                <div className="flex-1">
-                  <p className="text-xs font-medium">{t("scanner.vulnPathExplanation", { name: v.name, path: v.path })}</p>
-                  <p className="text-[10px] text-muted-foreground">{t("scanner.vulnPathWhy", { name: v.name })}</p>
+              <div key={v.path} className="p-2 rounded bg-muted/50 space-y-1.5" data-testid={`remediation-vuln-${v.path}`}>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex-1">
+                    <p className="text-xs font-medium">{t("scanner.vulnPathExplanation", { name: v.name, path: v.path })}</p>
+                    <p className="text-[10px] text-muted-foreground">{t("scanner.vulnPathWhy", { name: v.name })}</p>
+                  </div>
+                  <RemediationButton
+                    icon={ShieldBan}
+                    label={t("scanner.blockPath")}
+                    explanation={t("scanner.blockPathExplanation", { path: v.path })}
+                    onClick={() => remediation.mutate({ actionType: "block_path", target, details: { path: v.path, name: v.name, severity: v.severity } })}
+                    isPending={remediation.isPending}
+                    testId={`button-block-path-${v.path}`}
+                  />
                 </div>
-                <RemediationButton
-                  icon={ShieldBan}
-                  label={t("scanner.blockPath")}
-                  explanation={t("scanner.blockPathExplanation", { path: v.path })}
-                  onClick={() => remediation.mutate({ actionType: "block_path", target, details: { path: v.path, name: v.name, severity: v.severity } })}
-                  isPending={remediation.isPending}
-                  testId={`button-block-path-${v.path}`}
-                />
+                <div className="flex items-center gap-2 flex-wrap">
+                  {v.owaspCategory && <Badge variant="outline" className="text-[10px]" data-testid={`badge-owasp-${v.path}`}>{v.owaspCategory}</Badge>}
+                  {v.cweId && <Badge variant="outline" className="text-[10px]" data-testid={`badge-cwe-${v.path}`}>{v.cweId}</Badge>}
+                  {v.riskScore > 0 && <Badge className="text-[10px] bg-muted text-muted-foreground" data-testid={`badge-cvss-${v.path}`}>CVSS: {v.riskScore.toFixed(1)}</Badge>}
+                </div>
+                {v.remediation && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-muted-foreground uppercase font-semibold">Remediation</p>
+                    <p className="text-xs" data-testid={`text-remediation-${v.path}`}>{v.remediation}</p>
+                  </div>
+                )}
+                {v.remediationSnippet && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-muted-foreground uppercase font-semibold">Config Fix</p>
+                    <pre className="text-[10px] font-mono bg-background p-2 rounded overflow-x-auto" data-testid={`code-snippet-${v.path}`}>{v.remediationSnippet}</pre>
+                  </div>
+                )}
               </div>
             ))}
           </CardContent>
@@ -593,6 +618,8 @@ function VulnResults({ data, target }: { data: any; target: string }) {
               <TableRow>
                 <TableHead className="text-[10px] uppercase">{t("scanner.path")}</TableHead>
                 <TableHead className="text-[10px] uppercase">{t("common.name")}</TableHead>
+                <TableHead className="text-[10px] uppercase">OWASP</TableHead>
+                <TableHead className="text-[10px] uppercase">CWE</TableHead>
                 <TableHead className="text-[10px] uppercase">{t("common.status")}</TableHead>
                 <TableHead className="text-[10px] uppercase">{t("common.severity")}</TableHead>
                 <TableHead className="text-[10px] uppercase">{t("common.action")}</TableHead>
@@ -603,6 +630,8 @@ function VulnResults({ data, target }: { data: any; target: string }) {
                 <TableRow key={v.path} data-testid={`vuln-row-${v.path}`}>
                   <TableCell className="font-mono text-xs">{v.path}</TableCell>
                   <TableCell className="text-xs">{v.name}</TableCell>
+                  <TableCell className="text-[10px] font-mono max-w-[120px] truncate">{v.owaspCategory || "-"}</TableCell>
+                  <TableCell className="text-[10px] font-mono">{v.cweId || "-"}</TableCell>
                   <TableCell>
                     {v.found ? <Badge variant="destructive" className="text-[10px]">{t("scanner.found")}</Badge> :
                       <Badge variant="secondary" className="text-[10px]">{t("scanner.notFound")}</Badge>}

@@ -5,10 +5,15 @@ import { MatrixRain } from "@/components/matrix-rain";
 import { AegisLogo } from "@/components/logo";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Shield, Brain, Activity, Target, Bug, Database,
   Lock, Zap, Eye, ChevronRight, ArrowRight,
-  Globe, Server, Cpu, Radio, BookOpen
+  Globe, Server, Cpu, Radio, BookOpen,
+  Monitor, Scan, Mail, Search, Key, Wifi,
+  AlertTriangle, FileSearch, Crosshair, Terminal,
+  Network, ShieldCheck, Layers, Fingerprint,
+  Download, BarChart3, CheckCircle2
 } from "lucide-react";
 
 function TypewriterText({ texts, className }: { texts: string[]; className?: string }) {
@@ -87,15 +92,40 @@ const features = [
   { icon: Database, titleKey: "landing.featureIntelTitle", descKey: "landing.featureIntelDesc" },
 ];
 
-const capabilities = [
-  { icon: Lock, textKey: "landing.capFirewall" },
-  { icon: Eye, textKey: "landing.capHoneypot" },
-  { icon: Globe, textKey: "landing.capGeoBlock" },
-  { icon: Server, textKey: "landing.capForensics" },
-  { icon: Cpu, textKey: "landing.capPlaybooks" },
-  { icon: Radio, textKey: "landing.capWebsocket" },
-  { icon: BookOpen, textKey: "landing.capPolicies" },
-  { icon: Shield, textKey: "landing.capQuarantine" },
+const platformCapabilities = [
+  { icon: Monitor, title: "Agent-Based EDR", desc: "Deploy lightweight agents on endpoints for real-time process monitoring, registry persistence detection, and automated threat response." },
+  { icon: ShieldCheck, title: "Auto-Protect", desc: "One-click protection activation across all endpoints with automated defense mode, policy enforcement, and continuous monitoring." },
+  { icon: Bug, title: "Trojan Analysis", desc: "Deep behavioral analysis with IOC extraction, MITRE ATT&CK heatmap mapping, threat actor attribution, and YARA/Sigma rule generation." },
+  { icon: Crosshair, title: "Mobile Pentesting", desc: "OWASP Mobile Top 10 compliance checks, permission analysis, certificate pinning verification, and platform-specific security assessments." },
+  { icon: Lock, title: "SSL Inspector", desc: "Certificate chain validation, protocol version analysis, cipher suite auditing, and expiration monitoring for all your domains." },
+  { icon: Eye, title: "Dark Web Monitor", desc: "Continuous dark web surveillance for leaked credentials, exposed data, and threat actor mentions targeting your organization." },
+  { icon: Mail, title: "Email Analyzer", desc: "Header analysis, SPF/DKIM/DMARC validation, phishing detection, and malicious attachment scanning for suspicious emails." },
+  { icon: Search, title: "CVE Database", desc: "Searchable vulnerability database with CVSS scoring, affected product tracking, and automated patch priority recommendations." },
+  { icon: Key, title: "Password Auditor", desc: "Hash identification, dictionary attack simulation, entropy analysis, and organization-wide password policy compliance checking." },
+  { icon: Wifi, title: "Network Monitor", desc: "Real-time infrastructure monitoring with bandwidth analysis, ARP spoofing detection, traffic anomaly alerts, and packet capture." },
+  { icon: Database, title: "Threat Intelligence", desc: "Multi-source threat feeds from AbuseIPDB, OTX, MalwareBazaar, and URLScan with automated IOC correlation and enrichment." },
+  { icon: BarChart3, title: "Compliance Dashboard", desc: "Framework mapping for NIST, ISO 27001, PCI-DSS, HIPAA, and SOC 2 with automated evidence collection and gap analysis." },
+  { icon: Globe, title: "Honeypot System", desc: "Deploy decoy services to attract and analyze attacker behavior, capture TTPs, and generate actionable threat intelligence." },
+  { icon: Terminal, title: "Payload Generator", desc: "Create security testing payloads for XSS, SQLi, SSRF, and command injection to validate your application defenses." },
+  { icon: AlertTriangle, title: "Threat Simulation", desc: "Simulate ransomware, phishing, supply chain, and insider threat scenarios to test your detection and response capabilities." },
+];
+
+const howItWorks = [
+  { step: "01", icon: Download, title: "Deploy Agent", desc: "Install the lightweight AegisAI360 agent on your endpoints. Supports Windows, Linux, and macOS." },
+  { step: "02", icon: Scan, title: "Auto-Monitor", desc: "The agent continuously monitors processes, registry, network connections, and file system changes in real-time." },
+  { step: "03", icon: AlertTriangle, title: "Detect Threats", desc: "AI-powered analysis identifies threats, maps to MITRE ATT&CK, and generates severity-scored alerts instantly." },
+  { step: "04", icon: Zap, title: "Respond & Remediate", desc: "Automated playbooks execute countermeasures in milliseconds — block IPs, quarantine files, isolate hosts." },
+];
+
+const trustIndicators = [
+  "MITRE ATT&CK Aligned",
+  "NIST CSF Compliant",
+  "ISO 27001 Ready",
+  "SOC 2 Compatible",
+  "PCI-DSS Mapped",
+  "HIPAA Supportive",
+  "OWASP Top 10 Coverage",
+  "CIS Benchmarks",
 ];
 
 export default function LandingPage() {
@@ -200,9 +230,9 @@ export default function LandingPage() {
               return (
                 <div
                   key={feature.titleKey}
-                  className="group p-6 rounded-lg border border-border/50 bg-card/50 hover:border-primary/30 hover:bg-card transition-all duration-300"
+                  className="group p-6 rounded-md border border-border/50 bg-card/50 hover:border-primary/30 hover:bg-card transition-all duration-300"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
+                  <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
                     <Icon className="w-5 h-5 text-primary" />
                   </div>
                   <h3 className="text-sm font-semibold mb-2 tracking-wider uppercase">{t(feature.titleKey)}</h3>
@@ -217,15 +247,115 @@ export default function LandingPage() {
       <section className="relative py-24 px-4 border-t border-border/30">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
+            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">Complete Security Stack</span>
+            <h2 className="text-3xl md:text-4xl font-bold mt-3 mb-4">Platform Capabilities</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              15+ integrated security tools covering endpoint protection, offensive security, network defense, compliance, and threat intelligence — all in one unified platform.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {platformCapabilities.map((cap) => {
+              const Icon = cap.icon;
+              return (
+                <Card key={cap.title} className="p-5" data-testid={`card-capability-${cap.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                      <Icon className="w-4 h-4 text-primary" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-xs font-semibold tracking-wider uppercase mb-1">{cap.title}</h3>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">{cap.desc}</p>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="relative py-24 px-4 border-t border-border/30">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-16">
+            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">Getting Started</span>
+            <h2 className="text-3xl md:text-4xl font-bold mt-3 mb-4">How It Works</h2>
+            <p className="text-muted-foreground max-w-xl mx-auto">
+              From deployment to automated response in four simple steps.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {howItWorks.map((step) => {
+              const Icon = step.icon;
+              return (
+                <div key={step.step} className="text-center" data-testid={`step-${step.step}`}>
+                  <div className="relative mx-auto w-14 h-14 rounded-md bg-primary/10 flex items-center justify-center mb-4">
+                    <Icon className="w-6 h-6 text-primary" />
+                    <span className="absolute -top-2 -right-2 text-[10px] font-mono font-bold text-primary bg-background border border-primary/30 rounded-full w-6 h-6 flex items-center justify-center">
+                      {step.step}
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-semibold tracking-wider uppercase mb-2">{step.title}</h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{step.desc}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="relative py-24 px-4 border-t border-border/30">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">Compliance & Standards</span>
+            <h2 className="text-3xl md:text-4xl font-bold mt-3 mb-4">Trusted by Security Teams</h2>
+            <p className="text-muted-foreground max-w-xl mx-auto">
+              Built to meet the strictest security frameworks and compliance standards used by government and enterprise organizations.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {trustIndicators.map((indicator) => (
+              <div
+                key={indicator}
+                className="flex items-center gap-2 px-4 py-2 rounded-md border border-border/40 bg-card/30"
+                data-testid={`badge-trust-${indicator.toLowerCase().replace(/\s+/g, "-")}`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span className="text-xs font-mono tracking-wider">{indicator}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="relative py-24 px-4 border-t border-border/30">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">{t("landing.capabilitiesTitle")}</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {capabilities.map((cap) => {
+            {[
+              { icon: Lock, text: t("landing.capFirewall") },
+              { icon: Eye, text: t("landing.capHoneypot") },
+              { icon: Globe, text: t("landing.capGeoBlock") },
+              { icon: Server, text: t("landing.capForensics") },
+              { icon: Cpu, text: t("landing.capPlaybooks") },
+              { icon: Radio, text: t("landing.capWebsocket") },
+              { icon: BookOpen, text: t("landing.capPolicies") },
+              { icon: Shield, text: t("landing.capQuarantine") },
+              { icon: Scan, text: "Vulnerability Scanner" },
+              { icon: FileSearch, text: "Hash Analysis" },
+              { icon: Network, text: "Traffic Analysis" },
+              { icon: Fingerprint, text: "IOC Extraction" },
+              { icon: Layers, text: "Kill Chain Mapping" },
+              { icon: Crosshair, text: "Penetration Testing" },
+              { icon: Mail, text: "Phishing Detection" },
+              { icon: Key, text: "Credential Auditing" },
+            ].map((cap) => {
               const Icon = cap.icon;
               return (
-                <div key={cap.textKey} className="flex items-center gap-3 p-4 rounded-lg border border-border/30 bg-card/30">
+                <div key={cap.text} className="flex items-center gap-3 p-4 rounded-md border border-border/30 bg-card/30">
                   <Icon className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span className="text-xs tracking-wider">{t(cap.textKey)}</span>
+                  <span className="text-xs tracking-wider">{cap.text}</span>
                 </div>
               );
             })}
@@ -235,7 +365,7 @@ export default function LandingPage() {
 
       <section className="relative py-24 px-4 border-t border-border/30">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="p-8 md:p-12 rounded-xl border border-primary/20 bg-gradient-to-b from-primary/5 to-transparent">
+          <div className="p-8 md:p-12 rounded-md border border-primary/20 bg-gradient-to-b from-primary/5 to-transparent">
             <Shield className="w-12 h-12 text-primary mx-auto mb-6" />
             <h2 className="text-2xl md:text-3xl font-bold mb-4">{t("landing.ctaTitle")}</h2>
             <p className="text-muted-foreground mb-8 max-w-lg mx-auto">{t("landing.ctaDesc")}</p>

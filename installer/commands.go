@@ -218,6 +218,9 @@ func executeCommand(cmd Command) (string, string) {
         case "file_scan":
                 return runFileScan(), "done"
 
+        case "deep_scan":
+                return RunDeepScan(), "done"
+
         case "enable_monitoring":
                 return enableBackgroundMonitoring(), "done"
 
