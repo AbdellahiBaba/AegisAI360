@@ -12,8 +12,17 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Shield, ShieldCheck, ShieldAlert, ShieldOff,
   Flame, Bell, Radar, AlertTriangle, CheckCircle2,
-  Loader2, ChevronRight,
+  Loader2, Monitor, Send,
 } from "lucide-react";
+
+interface AgentDeployment {
+  agentId: number;
+  hostname: string;
+  status: string;
+  lastCommand: string;
+  commandStatus: string;
+  commandTime: string;
+}
 
 interface ProtectionStatus {
   score: number;
@@ -28,6 +37,10 @@ interface ProtectionStatus {
   unresolvedAlerts: number;
   lastScanDate: string | null;
   openThreats: number;
+  totalAgents: number;
+  onlineAgents: number;
+  monitoringAgents: number;
+  agentDeployments: AgentDeployment[];
 }
 
 interface ActivateResult {
@@ -35,17 +48,20 @@ interface ActivateResult {
   policiesActivated: number;
   alertRulesActivated: number;
   scansStarted: number;
+  agentsDeployed: number;
+  agentCommandsSent: number;
 }
 
 const PROGRESS_STEPS = [
   "protectionCenter.stepDefense",
   "protectionCenter.stepPolicies",
   "protectionCenter.stepAlertRules",
+  "protectionCenter.stepAgents",
   "protectionCenter.stepScanning",
   "protectionCenter.stepComplete",
 ];
 
-function ShieldIcon({ level, score }: { level: string; score: number }) {
+function ShieldIcon({ level }: { level: string }) {
   const sizeClass = "w-24 h-24";
   if (level === "protected") {
     return (
@@ -81,6 +97,16 @@ function getProgressColor(score: number) {
   return "bg-severity-critical";
 }
 
+function getCommandStatusBadge(status: string, t: (key: string) => string) {
+  if (status === "executed" || status === "completed") {
+    return <Badge variant="secondary" className="font-mono text-xs">{t("protectionCenter.commandExecuted")}</Badge>;
+  }
+  if (status === "failed") {
+    return <Badge variant="destructive" className="font-mono text-xs">{t("protectionCenter.commandFailed")}</Badge>;
+  }
+  return <Badge variant="outline" className="font-mono text-xs">{t("protectionCenter.commandPending")}</Badge>;
+}
+
 export default function ProtectionCenter() {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -97,7 +123,7 @@ export default function ProtectionCenter() {
       const res = await apiRequest("POST", "/api/protection/activate");
       return res.json() as Promise<ActivateResult>;
     },
-    onSuccess: (result) => {
+    onSuccess: () => {
       let step = 1;
       const interval = setInterval(() => {
         step++;
@@ -155,6 +181,30 @@ export default function ProtectionCenter() {
     },
   });
 
+  const deployAgentsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/protection/deploy-agents");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/protection/status"] });
+      if (data.agentsDeployed > 0) {
+        toast({
+          title: t("protectionCenter.deploySuccess"),
+          description: t("protectionCenter.deploySuccessDesc", { count: data.agentsDeployed }),
+        });
+      } else {
+        toast({
+          title: t("protectionCenter.noOnlineAgents"),
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: t("protectionCenter.deployFailed"), description: error.message, variant: "destructive" });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="p-4 md:p-6 space-y-6">
@@ -178,6 +228,8 @@ export default function ProtectionCenter() {
     activeAlertRules: 0, totalAlertRules: 0,
     activePolicies: 0, totalPolicies: 0,
     unresolvedAlerts: 0, lastScanDate: null, openThreats: 0,
+    totalAgents: 0, onlineAgents: 0, monitoringAgents: 0,
+    agentDeployments: [],
   };
 
   const isActivating = activateStep >= 0;
@@ -186,7 +238,7 @@ export default function ProtectionCenter() {
   return (
     <div className="p-4 md:p-6 space-y-6">
       <div className="flex flex-col items-center gap-4 py-8">
-        <ShieldIcon level={protectionStatus.level} score={protectionStatus.score} />
+        <ShieldIcon level={protectionStatus.level} />
 
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-bold font-mono tracking-wider uppercase" data-testid="text-protection-status">
@@ -223,7 +275,7 @@ export default function ProtectionCenter() {
         ) : (
           <Button
             size="lg"
-            className="font-mono uppercase tracking-wider text-sm px-8"
+            className="font-mono uppercase tracking-wider text-sm"
             onClick={() => activateMutation.mutate()}
             disabled={activateMutation.isPending || protectionStatus.score >= 100}
             data-testid="button-protect-me"
@@ -353,6 +405,50 @@ export default function ProtectionCenter() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-md ${protectionStatus.onlineAgents > 0 ? "bg-status-online/10" : "bg-muted"}`}>
+                  <Monitor className={`w-5 h-5 ${protectionStatus.onlineAgents > 0 ? "text-status-online" : "text-muted-foreground"}`} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium" data-testid="text-agent-monitoring-label">
+                    {t("protectionCenter.agentMonitoring")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {protectionStatus.totalAgents > 0
+                      ? t("protectionCenter.agentMonitoringStatus", {
+                          monitoring: protectionStatus.monitoringAgents,
+                          online: protectionStatus.onlineAgents,
+                        })
+                      : t("protectionCenter.noAgents")}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="font-mono text-xs" data-testid="badge-agent-count">
+                  {protectionStatus.onlineAgents}/{protectionStatus.totalAgents}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => deployAgentsMutation.mutate()}
+                  disabled={deployAgentsMutation.isPending || protectionStatus.totalAgents === 0}
+                  data-testid="button-deploy-all-agents"
+                >
+                  {deployAgentsMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin me-1" />
+                  ) : (
+                    <Send className="w-4 h-4 me-1" />
+                  )}
+                  {t("protectionCenter.deployToAll")}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-2">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-md ${protectionStatus.openThreats > 0 ? "bg-severity-critical/10" : "bg-muted"}`}>
                   <AlertTriangle className={`w-5 h-5 ${protectionStatus.openThreats > 0 ? "text-severity-critical" : "text-muted-foreground"}`} />
                 </div>
@@ -421,6 +517,40 @@ export default function ProtectionCenter() {
             </div>
           </CardContent>
         </Card>
+
+        {protectionStatus.agentDeployments && protectionStatus.agentDeployments.length > 0 && (
+          <Card className="md:col-span-2">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-mono" data-testid="text-agent-deployments-title">
+                {t("protectionCenter.agentDeployments")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-0">
+              <div className="space-y-2">
+                {protectionStatus.agentDeployments.map((dep) => (
+                  <div
+                    key={dep.agentId}
+                    className="flex items-center justify-between gap-3 flex-wrap py-2 border-b border-border last:border-0"
+                    data-testid={`row-agent-deployment-${dep.agentId}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${dep.status === "online" ? "bg-status-online" : "bg-muted-foreground"}`} />
+                      <span className="text-sm font-mono" data-testid={`text-agent-hostname-${dep.agentId}`}>
+                        {dep.hostname}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {dep.lastCommand}
+                      </span>
+                    </div>
+                    <div data-testid={`badge-agent-cmd-status-${dep.agentId}`}>
+                      {getCommandStatusBadge(dep.commandStatus, t)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

@@ -3113,16 +3113,46 @@ export async function registerRoutes(
       const scanResults = await storage.getScanResults(orgId);
       const lastScan = scanResults.length > 0 ? scanResults[0].createdAt : null;
 
-      let score = 0;
-      if (defenseMode === "auto") score += 25;
-      else if (defenseMode === "semi-auto") score += 10;
+      const allAgents = await storage.getAgentsByOrg(orgId);
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const onlineAgents = allAgents.filter(a => a.status === "online" && a.lastSeen && new Date(a.lastSeen) > fiveMinutesAgo);
+      const monitoringAgents = onlineAgents.filter(a => {
+        const telemetry = a.telemetry as any;
+        return telemetry?.monitoringEnabled === true;
+      });
 
-      if (activeFirewallRules > 0) score += Math.min(20, activeFirewallRules * 5);
-      if (activeAlertRules > 0) score += Math.min(20, activeAlertRules * 5);
+      const agentCommands = [];
+      for (const agent of allAgents) {
+        const cmds = await storage.getCommandsByAgent(agent.id);
+        const protectionCmds = cmds.filter(c =>
+          c.command === "security_scan" || c.command === "enable_monitoring" || c.command === "honeypot_monitor"
+        );
+        if (protectionCmds.length > 0) {
+          const latestCmd = protectionCmds[0];
+          agentCommands.push({
+            agentId: agent.id,
+            hostname: agent.hostname,
+            status: agent.status,
+            lastCommand: latestCmd.command,
+            commandStatus: latestCmd.status,
+            commandTime: latestCmd.createdAt,
+          });
+        }
+      }
+
+      let score = 0;
+      if (defenseMode === "auto") score += 20;
+      else if (defenseMode === "semi-auto") score += 8;
+
+      if (activeFirewallRules > 0) score += Math.min(15, activeFirewallRules * 4);
+      if (activeAlertRules > 0) score += Math.min(15, activeAlertRules * 4);
       if (activePolicies > 0) score += Math.min(15, activePolicies * 5);
       if (lastScan) score += 10;
       if (unresolvedAlerts === 0) score += 10;
       else score += Math.max(0, 10 - Math.min(10, unresolvedAlerts));
+
+      if (onlineAgents.length > 0) score += 5;
+      if (monitoringAgents.length > 0) score += Math.min(10, monitoringAgents.length * 5);
 
       score = Math.min(100, Math.max(0, score));
 
@@ -3143,6 +3173,10 @@ export async function registerRoutes(
         unresolvedAlerts,
         lastScanDate: lastScan,
         openThreats,
+        totalAgents: allAgents.length,
+        onlineAgents: onlineAgents.length,
+        monitoringAgents: monitoringAgents.length,
+        agentDeployments: agentCommands,
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch protection status" });
@@ -3250,6 +3284,51 @@ export async function registerRoutes(
       res.json({ resolved });
     } catch (error) {
       res.status(500).json({ error: "Failed to resolve threats" });
+    }
+  });
+
+  app.post("/api/protection/deploy-agents", requireRole("admin"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+
+      const allAgents = await storage.getAgentsByOrg(orgId);
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const onlineAgents = allAgents.filter(a => a.status === "online" && a.lastSeen && new Date(a.lastSeen) > fiveMinutesAgo);
+
+      let commandsSent = 0;
+      for (const agent of onlineAgents) {
+        await storage.createCommand({
+          agentId: agent.id,
+          command: "security_scan",
+          params: JSON.stringify({ source: "deploy_all" }),
+          status: "pending",
+        });
+        await storage.createCommand({
+          agentId: agent.id,
+          command: "enable_monitoring",
+          params: JSON.stringify({ source: "deploy_all" }),
+          status: "pending",
+        });
+        commandsSent += 2;
+      }
+
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId,
+        action: "deploy_protection_to_agents",
+        targetType: "agent",
+        targetId: "all",
+        details: `Deployed scan and monitoring commands to ${onlineAgents.length} online agent(s) (${commandsSent} commands)`,
+      });
+
+      res.json({
+        agentsDeployed: onlineAgents.length,
+        commandsSent,
+        totalAgents: allAgents.length,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to deploy to agents" });
     }
   });
 

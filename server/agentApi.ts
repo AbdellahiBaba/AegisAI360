@@ -340,7 +340,7 @@ export function createAgentRouter(): Router {
 
   router.post("/telemetry", async (req, res) => {
     try {
-      const { agentId, token, hostname, os, cpuUsage, ramUsage, ramTotalMB, ramFreeMB, cpus, uptime, agentVersion, topProcesses, netConnections, diskUsage, localIP, arch } = z.object({
+      const { agentId, token, hostname, os, cpuUsage, ramUsage, ramTotalMB, ramFreeMB, cpus, uptime, agentVersion, runMode, topProcesses, netConnections, diskUsage, localIP, arch } = z.object({
         agentId: z.number(),
         token: z.string(),
         hostname: z.string().optional(),
@@ -353,6 +353,7 @@ export function createAgentRouter(): Router {
         cpus: z.number().optional(),
         uptime: z.string().optional(),
         agentVersion: z.string().optional(),
+        runMode: z.string().optional(),
         topProcesses: z.array(z.string()).optional(),
         netConnections: z.number().optional(),
         diskUsage: z.string().optional(),
@@ -374,6 +375,7 @@ export function createAgentRouter(): Router {
       if (cpus !== undefined) telemetryData.cpus = cpus;
       if (uptime !== undefined) telemetryData.uptime = uptime;
       if (agentVersion !== undefined) telemetryData.agentVersion = agentVersion;
+      if (runMode !== undefined) telemetryData.runMode = runMode;
       if (topProcesses !== undefined) telemetryData.topProcesses = topProcesses;
       if (netConnections !== undefined) telemetryData.netConnections = netConnections;
       if (diskUsage !== undefined) telemetryData.diskUsage = diskUsage;

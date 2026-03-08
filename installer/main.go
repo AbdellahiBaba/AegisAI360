@@ -345,14 +345,18 @@ func installService() {
 
         failCmd := exec.Command("sc", "failure", serviceName,
                 "reset=", "86400",
-                "actions=", "restart/5000/restart/10000/restart/30000",
+                "actions=", "restart/5000/restart/5000/restart/5000",
         )
         failCmd.Run()
+
+        delayedAutoCmd := exec.Command("sc", "config", serviceName, "start=", "delayed-auto")
+        delayedAutoCmd.Run()
 
         addStartupRegistryEntry(absPath)
 
         fmt.Println("  Service installed successfully!")
-        fmt.Println("  Auto-start on boot: enabled (service + registry fallback)")
+        fmt.Println("  Auto-start on boot: enabled (delayed auto-start + registry fallback)")
+        fmt.Println("  Recovery policy: auto-restart on failure with 5-second delay")
         fmt.Println()
         fmt.Printf("  To start the service:  sc start %s\n", serviceName)
         fmt.Printf("  To stop the service:   sc stop %s\n", serviceName)

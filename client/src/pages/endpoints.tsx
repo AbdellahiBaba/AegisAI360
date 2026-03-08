@@ -241,6 +241,15 @@ function SystemInfoPanel({ telemetry, agent }: { telemetry: any; agent: any }) {
                 <span className="font-mono font-medium" data-testid="text-agent-id">{agent.id}</span>
               </div>
               <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Run Mode</span>
+                <Badge
+                  variant={telemetry.runMode === "service" ? "default" : "secondary"}
+                  data-testid="badge-run-mode"
+                >
+                  {telemetry.runMode === "service" ? "Windows Service" : telemetry.runMode === "tray" ? "System Tray" : telemetry.runMode === "terminal" ? "Terminal" : telemetry.runMode || "Unknown"}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Last Seen</span>
                 <span className="font-medium" data-testid="text-last-seen">{agent.lastSeen ? new Date(agent.lastSeen).toLocaleString() : "N/A"}</span>
               </div>
@@ -574,9 +583,14 @@ export default function Endpoints() {
                   </div>
                   <Badge variant="outline" className="text-xs">{agent.os || "Unknown"}</Badge>
                 </div>
-                <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground flex-wrap">
                   <span>{agent.ip || "No IP"}</span>
                   <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{timeSince(agent.lastSeen)}</span>
+                  {agent.telemetry?.runMode && (
+                    <Badge variant="outline" className="text-xs" data-testid={`badge-runmode-${agent.id}`}>
+                      {agent.telemetry.runMode === "service" ? "Service" : agent.telemetry.runMode === "tray" ? "Tray" : "Terminal"}
+                    </Badge>
+                  )}
                 </div>
                 {(agent.cpuUsage !== null || agent.ramUsage !== null) && (
                   <div className="flex gap-4 mt-2 text-xs">

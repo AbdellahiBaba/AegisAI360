@@ -211,7 +211,9 @@ export default function DownloadAgent() {
               <h4 className="text-sm font-medium" data-testid="text-method-service">Option C: Install as Windows Service</h4>
             </div>
             <p className="text-sm text-muted-foreground mb-2">
-              For production deployments, install the agent as a Windows service so it starts automatically on boot and runs in the background.
+              For production deployments, install the agent as a Windows service so it runs persistently in the background.
+              The service starts automatically on boot, and is configured with auto-restart recovery (5-second delay on failure).
+              Even if the terminal or PowerShell session is closed, the agent continues running and monitoring your system.
             </p>
             <div className="bg-zinc-950 text-zinc-100 rounded-lg p-4 font-mono text-sm space-y-2" data-testid="code-service-commands">
               <p className="text-zinc-500">:: First, run setup to save your configuration</p>
@@ -231,12 +233,25 @@ export default function DownloadAgent() {
             <ul className="list-disc list-inside space-y-1 ms-2">
               <li>The agent registers with AegisAI360 using the device token (one-time use)</li>
               <li>It starts sending heartbeats with CPU/RAM metrics every 30 seconds</li>
-              <li>It sends full system telemetry (disk, processes, network) every 30 seconds</li>
+              <li>It sends full system telemetry (disk, processes, network, run mode) every 30 seconds</li>
               <li>It polls for remote commands from the dashboard every 5 seconds</li>
               <li>It checks for agent updates every 5 minutes with SHA256 verification</li>
+              <li>It runs continuous background monitoring (process watchlist, file integrity, network connections)</li>
               <li>If disconnected, it automatically retries with exponential backoff</li>
               <li>Your endpoint will appear in the dashboard within seconds</li>
             </ul>
+          </div>
+
+          <div className="mt-4 p-3 bg-muted/50 rounded text-sm" data-testid="text-service-persistence-note">
+            <p className="font-medium mb-1 flex items-center gap-2">
+              <Shield className="w-4 h-4 text-primary" />
+              Service Persistence
+            </p>
+            <p className="text-muted-foreground">
+              When installed as a Windows Service, the agent runs as a background process under LocalSystem and survives terminal/PowerShell closure.
+              The service is configured with <strong>delayed auto-start</strong> (starts on boot) and <strong>automatic recovery</strong> (restarts within 5 seconds on failure).
+              The dashboard shows each agent's run mode (Service, Tray, or Terminal) so you can verify deployment status.
+            </p>
           </div>
 
           <div className="mt-4 p-3 bg-muted/50 rounded text-sm" data-testid="text-config-note">

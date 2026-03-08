@@ -100,6 +100,7 @@ type TelemetryRequest struct {
         CPUs           int      `json:"cpus"`
         Uptime         string   `json:"uptime"`
         AgentVersion   string   `json:"agentVersion"`
+        RunMode        string   `json:"runMode"`
         TopProcesses   []string `json:"topProcesses"`
         NetConnections int      `json:"netConnections"`
         DiskUsage      string   `json:"diskUsage"`
@@ -266,6 +267,7 @@ func sendTelemetry(cfg *AgentConfig, agentID float64) error {
                 CPUs:           info.CPUs,
                 Uptime:         info.Uptime,
                 AgentVersion:   info.AgentVersion,
+                RunMode:        info.RunMode,
                 TopProcesses:   info.TopProcesses,
                 NetConnections: info.NetConnections,
                 DiskUsage:      collectDiskUsage(),

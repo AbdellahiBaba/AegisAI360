@@ -17,6 +17,7 @@ type SystemInfo struct {
         CPUs           int      `json:"cpus"`
         GoVersion      string   `json:"goVersion"`
         AgentVersion   string   `json:"agentVersion"`
+        RunMode        string   `json:"runMode"`
         Uptime         string   `json:"uptime"`
         CPUUsage       float64  `json:"cpuUsage"`
         RAMUsage       float64  `json:"ramUsage"`
@@ -41,6 +42,7 @@ func collectSystemInfo() *SystemInfo {
                 CPUs:           runtime.NumCPU(),
                 GoVersion:      runtime.Version(),
                 AgentVersion:   agentVersion,
+                RunMode:        detectMode(),
                 Uptime:         getSystemUptime(),
                 CPUUsage:       cpu,
                 RAMUsage:       ram,

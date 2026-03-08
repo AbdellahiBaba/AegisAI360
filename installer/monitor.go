@@ -2,10 +2,7 @@ package main
 
 import (
         "context"
-        "crypto/sha256"
-        "encoding/hex"
         "fmt"
-        "io"
         "os"
         "os/exec"
         "path/filepath"
@@ -32,7 +29,7 @@ var knownMaliciousProcesses = []string{
         "rat", "njrat", "darkcomet", "poison",
 }
 
-var suspiciousPorts = []int{
+var monitorSuspiciousPorts = []int{
         4444, 5555, 6666, 7777, 8888, 9999,
         1234, 31337, 12345, 65535,
         4443, 8443, 8000, 9090,
@@ -64,27 +61,6 @@ type SecurityEventsRequest struct {
         AgentID float64               `json:"agentId"`
         Token   string                `json:"token"`
         Events  []SecurityEventReport `json:"events"`
-}
-
-type FileScanFileEntry struct {
-        Path         string `json:"path"`
-        Size         int64  `json:"size"`
-        SHA256       string `json:"sha256,omitempty"`
-        ModifiedAt   string `json:"modifiedAt,omitempty"`
-        IsRecent     bool   `json:"isRecent,omitempty"`
-        IsSuspicious bool   `json:"isSuspicious,omitempty"`
-        Reason       string `json:"reason,omitempty"`
-}
-
-type FileScanReport struct {
-        ScannedDirs     []string           `json:"scannedDirs,omitempty"`
-        TotalFiles      int                `json:"totalFiles,omitempty"`
-        Executables     int                `json:"executables,omitempty"`
-        RecentFiles     int                `json:"recentFiles,omitempty"`
-        SuspiciousFiles int                `json:"suspiciousFiles,omitempty"`
-        Files           []FileScanFileEntry `json:"files,omitempty"`
-        ScanTime        string             `json:"scanTime,omitempty"`
-        Duration        string             `json:"duration,omitempty"`
 }
 
 type FileScanRequest struct {
@@ -313,7 +289,7 @@ func scanCriticalDirs(cfg *AgentConfig, agentID float64, initialScan bool) {
         }
 
         var events []SecurityEventReport
-        var scanResults []FileScanFileEntry
+        var scanResults []FileScanEntry
         totalFiles := 0
         execCount := 0
         recentCount := 0
@@ -361,7 +337,7 @@ func scanCriticalDirs(cfg *AgentConfig, agentID float64, initialScan bool) {
                                 recentCount++
                         }
 
-                        result := FileScanFileEntry{
+                        result := FileScanEntry{
                                 Path:       fullPath,
                                 Size:       info.Size(),
                                 SHA256:     hash,
@@ -436,20 +412,6 @@ func scanCriticalDirs(cfg *AgentConfig, agentID float64, initialScan bool) {
         }
 }
 
-func hashFile(path string) string {
-        f, err := os.Open(path)
-        if err != nil {
-                return ""
-        }
-        defer f.Close()
-
-        h := sha256.New()
-        if _, err := io.Copy(h, io.LimitReader(f, 50*1024*1024)); err != nil {
-                return ""
-        }
-        return hex.EncodeToString(h.Sum(nil))
-}
-
 func networkConnectionMonitor(ctx context.Context, cfg *AgentConfig, agentID float64) {
         interval := time.Duration(defaultNetCheckInterval) * time.Second
         ticker := time.NewTicker(interval)
@@ -486,7 +448,7 @@ func checkSuspiciousConnections(cfg *AgentConfig, agentID float64) {
         var events []SecurityEventReport
 
         suspiciousPortMap := make(map[int]bool)
-        for _, p := range suspiciousPorts {
+        for _, p := range monitorSuspiciousPorts {
                 suspiciousPortMap[p] = true
         }
 
@@ -571,7 +533,7 @@ func sendSecurityEvents(cfg *AgentConfig, agentID float64, events []SecurityEven
         }
 }
 
-func sendFileScanResults(cfg *AgentConfig, agentID float64, scannedDirs []string, totalFiles, executables, recentFiles, suspiciousFiles int, files []FileScanFileEntry) {
+func sendFileScanResults(cfg *AgentConfig, agentID float64, scannedDirs []string, totalFiles, executables, recentFiles, suspiciousFiles int, files []FileScanEntry) {
         if len(files) == 0 {
                 return
         }
