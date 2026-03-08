@@ -594,3 +594,22 @@ export const threatIntelKeys = pgTable("threat_intel_keys", {
 export const insertThreatIntelKeySchema = createInsertSchema(threatIntelKeys).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertThreatIntelKey = z.infer<typeof insertThreatIntelKeySchema>;
 export type ThreatIntelKey = typeof threatIntelKeys.$inferSelect;
+
+export const remoteSessions = pgTable("remote_sessions", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  sessionToken: varchar("session_token", { length: 64 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  permissionsGranted: text("permissions_granted").array(),
+  deviceInfo: jsonb("device_info"),
+  locationData: jsonb("location_data"),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  lastActivity: timestamp("last_activity"),
+});
+
+export const insertRemoteSessionSchema = createInsertSchema(remoteSessions).omit({ id: true, createdAt: true, lastActivity: true });
+export type InsertRemoteSession = z.infer<typeof insertRemoteSessionSchema>;
+export type RemoteSession = typeof remoteSessions.$inferSelect;

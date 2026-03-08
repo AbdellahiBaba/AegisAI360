@@ -41,6 +41,8 @@ import {
   type ScheduledScan, type InsertScheduledScan,
   type SessionMetadata, type InsertSessionMetadata,
   type ThreatIntelKey, type InsertThreatIntelKey,
+  remoteSessions,
+  type RemoteSession, type InsertRemoteSession,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, gte, count, lt, ne } from "drizzle-orm";
@@ -238,6 +240,13 @@ export interface IStorage {
   updateSessionLastActive(sessionId: string): Promise<void>;
   deleteSessionMetadata(sessionId: string): Promise<void>;
   deleteAllSessionsExcept(userId: string, currentSessionId: string): Promise<string[]>;
+
+  createRemoteSession(session: InsertRemoteSession): Promise<RemoteSession>;
+  getRemoteSessionsByOrg(orgId: number): Promise<RemoteSession[]>;
+  getRemoteSessionByToken(token: string): Promise<RemoteSession | undefined>;
+  getRemoteSessionById(id: number, orgId: number): Promise<RemoteSession | undefined>;
+  updateRemoteSession(id: number, orgId: number, data: Partial<{ status: string; permissionsGranted: string[]; deviceInfo: any; locationData: any; lastActivity: Date }>): Promise<RemoteSession | undefined>;
+  deleteRemoteSession(id: number, orgId: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1089,6 +1098,35 @@ export class DatabaseStorage implements IStorage {
 
   async deleteThreatIntelKey(orgId: number, service: string): Promise<boolean> {
     const result = await db.delete(threatIntelKeys).where(and(eq(threatIntelKeys.organizationId, orgId), eq(threatIntelKeys.service, service)));
+    return (result as any).rowCount > 0;
+  }
+
+  async createRemoteSession(session: InsertRemoteSession): Promise<RemoteSession> {
+    const [created] = await db.insert(remoteSessions).values(session).returning();
+    return created;
+  }
+
+  async getRemoteSessionsByOrg(orgId: number): Promise<RemoteSession[]> {
+    return db.select().from(remoteSessions).where(eq(remoteSessions.organizationId, orgId)).orderBy(desc(remoteSessions.createdAt));
+  }
+
+  async getRemoteSessionByToken(token: string): Promise<RemoteSession | undefined> {
+    const [session] = await db.select().from(remoteSessions).where(eq(remoteSessions.sessionToken, token));
+    return session || undefined;
+  }
+
+  async getRemoteSessionById(id: number, orgId: number): Promise<RemoteSession | undefined> {
+    const [session] = await db.select().from(remoteSessions).where(and(eq(remoteSessions.id, id), eq(remoteSessions.organizationId, orgId)));
+    return session || undefined;
+  }
+
+  async updateRemoteSession(id: number, orgId: number, data: Partial<{ status: string; permissionsGranted: string[]; deviceInfo: any; locationData: any; lastActivity: Date }>): Promise<RemoteSession | undefined> {
+    const [updated] = await db.update(remoteSessions).set(data).where(and(eq(remoteSessions.id, id), eq(remoteSessions.organizationId, orgId))).returning();
+    return updated;
+  }
+
+  async deleteRemoteSession(id: number, orgId: number): Promise<boolean> {
+    const result = await db.delete(remoteSessions).where(and(eq(remoteSessions.id, id), eq(remoteSessions.organizationId, orgId)));
     return (result as any).rowCount > 0;
   }
 }

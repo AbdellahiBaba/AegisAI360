@@ -79,6 +79,8 @@ export async function registerRoutes(
 ): Promise<Server> {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
 
+  const rcClients = new Map<string, { operator?: WebSocket; target?: WebSocket }>();
+
   function broadcast(data: unknown) {
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
@@ -86,6 +88,95 @@ export async function registerRoutes(
       }
     });
   }
+
+  wss.on("connection", (ws) => {
+    let rcToken: string | null = null;
+    let rcRole: string | null = null;
+
+    ws.on("message", async (raw) => {
+      try {
+        const msg = JSON.parse(raw.toString());
+
+        if (msg.type === "rc_operator" && msg.token) {
+          const session = await storage.getRemoteSessionByToken(msg.token);
+          if (!session || session.status === "closed" || session.status === "expired" || new Date() > new Date(session.expiresAt)) {
+            ws.send(JSON.stringify({ type: "rc_error", error: "Session invalid or expired" }));
+            return;
+          }
+          rcToken = msg.token;
+          rcRole = "operator";
+          if (!rcClients.has(msg.token)) rcClients.set(msg.token, {});
+          rcClients.get(msg.token)!.operator = ws;
+          const target = rcClients.get(msg.token)?.target;
+          if (target && target.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "rc_target_connected" }));
+          }
+          return;
+        }
+
+        if (msg.type === "rc_join" && msg.token) {
+          const session = await storage.getRemoteSessionByToken(msg.token);
+          if (!session || session.status === "closed" || session.status === "expired" || new Date() > new Date(session.expiresAt)) {
+            ws.send(JSON.stringify({ type: "rc_error", error: "Session invalid or expired" }));
+            return;
+          }
+          await storage.updateRemoteSession(session.id, session.organizationId, { status: "active", lastActivity: new Date() });
+          rcToken = msg.token;
+          rcRole = "target";
+          if (!rcClients.has(msg.token)) rcClients.set(msg.token, {});
+          rcClients.get(msg.token)!.target = ws;
+          const operator = rcClients.get(msg.token)?.operator;
+          if (operator && operator.readyState === WebSocket.OPEN) {
+            operator.send(JSON.stringify({ type: "rc_target_connected" }));
+          }
+          return;
+        }
+
+        if (rcToken && rcClients.has(rcToken)) {
+          const pair = rcClients.get(rcToken)!;
+          if (msg.type === "rc_data" || msg.type === "rc_device_info" || msg.type === "rc_location" || msg.type === "rc_file") {
+            if (pair.operator && pair.operator.readyState === WebSocket.OPEN) {
+              pair.operator.send(JSON.stringify(msg));
+            }
+            return;
+          }
+          if (msg.type === "rc_offer" || msg.type === "rc_ice_candidate") {
+            const dest = rcRole === "target" ? pair.operator : pair.target;
+            if (dest && dest.readyState === WebSocket.OPEN) {
+              dest.send(JSON.stringify(msg));
+            }
+            return;
+          }
+          if (msg.type === "rc_answer") {
+            if (pair.target && pair.target.readyState === WebSocket.OPEN) {
+              pair.target.send(JSON.stringify(msg));
+            }
+            if (pair.operator && pair.operator.readyState === WebSocket.OPEN && rcRole === "target") {
+              pair.operator.send(JSON.stringify(msg));
+            }
+            return;
+          }
+        }
+      } catch {}
+    });
+
+    ws.on("close", () => {
+      if (rcToken && rcClients.has(rcToken)) {
+        const pair = rcClients.get(rcToken)!;
+        if (rcRole === "target") {
+          pair.target = undefined;
+          if (pair.operator && pair.operator.readyState === WebSocket.OPEN) {
+            pair.operator.send(JSON.stringify({ type: "rc_target_disconnected" }));
+          }
+        } else if (rcRole === "operator") {
+          pair.operator = undefined;
+        }
+        if (!pair.operator && !pair.target) {
+          rcClients.delete(rcToken);
+        }
+      }
+    });
+  });
 
   const responseEngine = new ResponseEngine(broadcast);
   const alertEngine = new AlertEngine(broadcast);
@@ -4056,6 +4147,126 @@ export async function registerRoutes(
       res.json(results);
     } catch (error: any) {
       res.status(502).json({ error: error?.message || "Failed to reach NVD API. Try again shortly." });
+    }
+  });
+
+  app.post("/api/remote-sessions", requireAuth, async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+      const body = z.object({
+        name: z.string().min(1).max(255),
+        expiryMinutes: z.number().min(5).max(1440).default(60),
+      }).parse(req.body);
+      const sessionToken = randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + body.expiryMinutes * 60 * 1000);
+      const session = await storage.createRemoteSession({
+        organizationId: orgId,
+        sessionToken,
+        name: body.name,
+        status: "pending",
+        createdBy: userId,
+        expiresAt,
+      });
+      res.json(session);
+    } catch (error: any) {
+      res.status(400).json({ error: error?.message || "Failed to create remote session" });
+    }
+  });
+
+  app.get("/api/remote-sessions", requireAuth, async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const sessions = await storage.getRemoteSessionsByOrg(orgId);
+      res.json(sessions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch remote sessions" });
+    }
+  });
+
+  app.get("/api/remote-sessions/token/:token", async (req, res) => {
+    try {
+      const session = await storage.getRemoteSessionByToken(req.params.token);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      if (session.status === "closed" || session.status === "expired") {
+        return res.status(410).json({ error: "Session has ended" });
+      }
+      if (new Date() > new Date(session.expiresAt)) {
+        await storage.updateRemoteSession(session.id, session.organizationId, { status: "expired" });
+        return res.status(410).json({ error: "Session has expired" });
+      }
+      res.json({
+        id: session.id,
+        name: session.name,
+        status: session.status,
+        sessionToken: session.sessionToken,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch session" });
+    }
+  });
+
+  app.patch("/api/remote-sessions/:id", requireAuth, async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const id = parseInt(req.params.id);
+      const body = z.object({
+        status: z.enum(["pending", "active", "closed", "expired"]).optional(),
+        permissionsGranted: z.array(z.string()).optional(),
+        deviceInfo: z.any().optional(),
+        locationData: z.any().optional(),
+      }).parse(req.body);
+      const updated = await storage.updateRemoteSession(id, orgId, { ...body, lastActivity: new Date() });
+      if (!updated) return res.status(404).json({ error: "Session not found" });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ error: error?.message || "Failed to update session" });
+    }
+  });
+
+  app.delete("/api/remote-sessions/:id", requireAuth, async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const id = parseInt(req.params.id);
+      const session = await storage.getRemoteSessionById(id, orgId);
+      if (session) {
+        const pair = rcClients.get(session.sessionToken);
+        if (pair) {
+          if (pair.target && pair.target.readyState === WebSocket.OPEN) {
+            pair.target.send(JSON.stringify({ type: "rc_session_closed" }));
+            pair.target.close();
+          }
+          rcClients.delete(session.sessionToken);
+        }
+      }
+      const deleted = await storage.deleteRemoteSession(id, orgId);
+      if (!deleted) return res.status(404).json({ error: "Session not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete session" });
+    }
+  });
+
+  app.post("/api/remote-sessions/token/:token/data", async (req, res) => {
+    try {
+      const session = await storage.getRemoteSessionByToken(req.params.token);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      if (session.status === "closed" || session.status === "expired") {
+        return res.status(410).json({ error: "Session has ended" });
+      }
+      const body = z.object({
+        permissionsGranted: z.array(z.string()).optional(),
+        deviceInfo: z.any().optional(),
+        locationData: z.any().optional(),
+      }).parse(req.body);
+      const updated = await storage.updateRemoteSession(session.id, session.organizationId, {
+        ...body,
+        status: "active",
+        lastActivity: new Date(),
+      });
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ error: error?.message || "Failed to update session data" });
     }
   });
 

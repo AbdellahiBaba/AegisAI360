@@ -67,6 +67,8 @@ import PasswordAuditorPage from "@/pages/password-auditor";
 import { CommandPalette } from "@/components/command-palette";
 import ScheduledScansPage from "@/pages/scheduled-scans";
 import ThreatSimulationPage from "@/pages/threat-simulation";
+import RemoteControlPage from "@/pages/remote-control";
+import RemoteTarget from "@/pages/remote-target";
 
 function AppRouter() {
   return (
@@ -112,6 +114,7 @@ function AppRouter() {
       <Route path="/password-auditor" component={PasswordAuditorPage} />
       <Route path="/scheduled-scans" component={ScheduledScansPage} />
       <Route path="/threat-simulation" component={ThreatSimulationPage} />
+      <Route path="/remote-control" component={RemoteControlPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -229,6 +232,11 @@ function PublicRouter() {
 function RootRouter() {
   const [location] = useLocation();
   const isPublicRoute = PUBLIC_ROUTES.some((route) => location === route);
+  const isRemoteTarget = location.startsWith("/rc/");
+
+  if (isRemoteTarget) {
+    return <Route path="/rc/:token" component={RemoteTarget} />;
+  }
 
   if (isPublicRoute) {
     return <PublicRouter />;

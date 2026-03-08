@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslation } from "react-i18next";
@@ -6,13 +7,14 @@ import {
   Network, Target, Clock, Radio, Lock, BookOpen, FileText,
   Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar, LifeBuoy, Server, Key,
   Monitor, Download, Terminal, Activity, ScanSearch, Smartphone, Eye, ShieldCheck,
-  Mail, KeyRound, ShieldBan, FileSearch, CalendarClock, Zap,
+  Mail, KeyRound, ShieldBan, FileSearch, CalendarClock, Zap, ChevronDown, Gamepad2,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
   SidebarHeader, SidebarFooter,
 } from "@/components/ui/sidebar";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AegisLogo } from "@/components/logo";
@@ -24,31 +26,41 @@ interface NavItem {
   icon: React.ElementType;
 }
 
-function NavGroup({ label, items, location }: { label: string; items: NavItem[]; location: string }) {
+function NavGroup({ label, items, location, defaultOpen = true }: { label: string; items: NavItem[]; location: string; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const hasActiveItem = items.some(item => location === item.url);
+
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel className="text-[9px] tracking-[0.3em] uppercase text-muted-foreground/60 font-semibold px-3">
-        {label}
-      </SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {items.map((item) => (
-            <SidebarMenuItem key={item.testId}>
-              <SidebarMenuButton
-                asChild
-                data-active={location === item.url}
-                className="data-[active=true]:bg-primary/10 data-[active=true]:text-primary data-[active=true]:font-semibold h-8"
-              >
-                <Link href={item.url} data-testid={`link-${item.testId}`}>
-                  <item.icon className="w-4 h-4" />
-                  <span className="text-xs">{item.title}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+    <Collapsible open={open || hasActiveItem} onOpenChange={setOpen}>
+      <SidebarGroup>
+        <CollapsibleTrigger className="w-full">
+          <SidebarGroupLabel className="text-[9px] tracking-[0.3em] uppercase text-muted-foreground/60 font-semibold px-3 cursor-pointer flex items-center justify-between gap-1 w-full">
+            <span>{label}</span>
+            <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${open || hasActiveItem ? "" : "-rotate-90"}`} />
+          </SidebarGroupLabel>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {items.map((item) => (
+                <SidebarMenuItem key={item.testId}>
+                  <SidebarMenuButton
+                    asChild
+                    data-active={location === item.url}
+                    className="data-[active=true]:bg-primary/10 data-[active=true]:text-primary data-[active=true]:font-semibold h-8"
+                  >
+                    <Link href={item.url} data-testid={`link-${item.testId}`}>
+                      <item.icon className="w-4 h-4" />
+                      <span className="text-xs">{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </CollapsibleContent>
+      </SidebarGroup>
+    </Collapsible>
   );
 }
 
@@ -65,24 +77,31 @@ export function AppSidebar() {
     { title: t("sidebar.aiAnalysis"), testId: "ai-analysis", url: "/ai-analysis", icon: Brain },
   ];
 
-  const detectItems: NavItem[] = [
+  const scanItems: NavItem[] = [
+    { title: t("sidebar.scanner"), testId: "scanner", url: "/scanner", icon: Radar },
+    { title: t("sidebar.sslInspector"), testId: "ssl-inspector", url: "/ssl-inspector", icon: ShieldBan },
+    { title: t("sidebar.passwordAuditor"), testId: "password-auditor", url: "/password-auditor", icon: KeyRound },
+    { title: t("sidebar.scheduledScans"), testId: "scheduled-scans", url: "/scheduled-scans", icon: CalendarClock },
+    { title: t("sidebar.cveDatabase"), testId: "cve-database", url: "/cve-database", icon: FileSearch },
+    { title: t("sidebar.emailAnalyzer"), testId: "email-analyzer", url: "/email-analyzer", icon: Mail },
+  ];
+
+  const monitorItems: NavItem[] = [
     { title: t("sidebar.securityEvents"), testId: "security-events", url: "/alerts", icon: ShieldAlert },
     { title: t("sidebar.attackHeatmap"), testId: "att&ck-heatmap", url: "/attack-map", icon: Target },
-    { title: t("sidebar.scanner"), testId: "scanner", url: "/scanner", icon: Radar },
     { title: t("sidebar.networkMonitor"), testId: "network-monitor", url: "/network-monitor", icon: Server },
     { title: t("sidebar.honeypot"), testId: "honeypot", url: "/honeypot", icon: Radio },
     { title: t("sidebar.alertRules"), testId: "alert-rules", url: "/alert-rules", icon: Bell },
-    { title: t("sidebar.hashTools"), testId: "hash-tools", url: "/hash-tools", icon: Key },
-    { title: "Traffic Analysis", testId: "traffic-analysis", url: "/traffic-analysis", icon: Activity },
-    { title: "Network Security", testId: "network-security", url: "/network-security", icon: ScanSearch },
-    { title: "Payload Generator", testId: "payload-generator", url: "/payload-generator", icon: Terminal },
-    { title: "Trojan Analyzer", testId: "trojan-analyzer", url: "/trojan-analyzer", icon: Bug },
-    { title: "Mobile Pentest", testId: "mobile-pentest", url: "/mobile-pentest", icon: Smartphone },
-    { title: "SSL Inspector", testId: "ssl-inspector", url: "/ssl-inspector", icon: ShieldBan },
-    { title: "Email Analyzer", testId: "email-analyzer", url: "/email-analyzer", icon: Mail },
-    { title: "Password Auditor", testId: "password-auditor", url: "/password-auditor", icon: KeyRound },
-    { title: "Scheduled Scans", testId: "scheduled-scans", url: "/scheduled-scans", icon: CalendarClock },
-    { title: "Threat Simulation", testId: "threat-simulation", url: "/threat-simulation", icon: Zap },
+    { title: t("sidebar.trafficAnalysis"), testId: "traffic-analysis", url: "/traffic-analysis", icon: Activity },
+  ];
+
+  const offensiveItems: NavItem[] = [
+    { title: t("sidebar.payloadGenerator"), testId: "payload-generator", url: "/payload-generator", icon: Terminal },
+    { title: t("sidebar.trojanAnalyzer"), testId: "trojan-analyzer", url: "/trojan-analyzer", icon: Bug },
+    { title: t("sidebar.mobilePentest"), testId: "mobile-pentest", url: "/mobile-pentest", icon: Smartphone },
+    { title: t("sidebar.networkSecurity"), testId: "network-security", url: "/network-security", icon: ScanSearch },
+    { title: t("sidebar.threatSimulation"), testId: "threat-simulation", url: "/threat-simulation", icon: Zap },
+    { title: t("sidebar.remoteControl"), testId: "remote-control", url: "/remote-control", icon: Gamepad2 },
   ];
 
   const respondItems: NavItem[] = [
@@ -91,27 +110,27 @@ export function AppSidebar() {
     { title: t("sidebar.playbooks"), testId: "playbooks", url: "/playbooks", icon: BookOpen },
     { title: t("sidebar.firewall"), testId: "firewall", url: "/firewall", icon: Flame },
     { title: t("sidebar.policies"), testId: "policies", url: "/policies", icon: FileText },
-    { title: "Compliance", testId: "compliance", url: "/compliance", icon: ShieldCheck },
+    { title: t("sidebar.compliance"), testId: "compliance", url: "/compliance", icon: ShieldCheck },
   ];
 
   const endpointItems: NavItem[] = [
-    { title: "Endpoints", testId: "endpoints", url: "/endpoints", icon: Monitor },
-    { title: "Deploy Agent", testId: "download-agent", url: "/download-agent", icon: Download },
+    { title: t("sidebar.endpoints"), testId: "endpoints", url: "/endpoints", icon: Monitor },
+    { title: t("sidebar.deployAgent"), testId: "download-agent", url: "/download-agent", icon: Download },
   ];
 
   const intelItems: NavItem[] = [
     { title: t("sidebar.threatIntel"), testId: "threat-intel", url: "/threat-intel", icon: Database },
     { title: t("sidebar.networkMap"), testId: "network-map", url: "/network-map", icon: Network },
     { title: t("sidebar.forensicTimeline"), testId: "forensic-timeline", url: "/forensics", icon: Clock },
-    { title: "Dark Web Monitor", testId: "dark-web-monitor", url: "/dark-web-monitor", icon: Eye },
-    { title: "CVE Database", testId: "cve-database", url: "/cve-database", icon: FileSearch },
+    { title: t("sidebar.darkWebMonitor"), testId: "dark-web-monitor", url: "/dark-web-monitor", icon: Eye },
+    { title: t("sidebar.hashTools"), testId: "hash-tools", url: "/hash-tools", icon: Key },
   ];
 
   const adminItems: NavItem[] = [
     { title: t("sidebar.settings"), testId: "settings", url: "/settings", icon: Settings },
     { title: t("sidebar.billing"), testId: "billing", url: "/billing", icon: CreditCard },
     { title: t("sidebar.support"), testId: "support", url: "/support", icon: LifeBuoy },
-    { title: "Agent Docs", testId: "docs-agent", url: "/docs/agent", icon: BookOpen },
+    { title: t("sidebar.agentDocs"), testId: "docs-agent", url: "/docs/agent", icon: BookOpen },
   ];
 
   const fullAdminItems = [
@@ -131,11 +150,13 @@ export function AppSidebar() {
 
       <SidebarContent className="py-1">
         <NavGroup label={t("sidebar.command")} items={commandItems} location={location} />
-        <NavGroup label={t("sidebar.detect")} items={detectItems} location={location} />
+        <NavGroup label={t("sidebar.scanAssess")} items={scanItems} location={location} />
+        <NavGroup label={t("sidebar.monitor")} items={monitorItems} location={location} />
+        <NavGroup label={t("sidebar.offensiveTools")} items={offensiveItems} location={location} defaultOpen={false} />
         <NavGroup label={t("sidebar.respond")} items={respondItems} location={location} />
-        <NavGroup label="ENDPOINTS" items={endpointItems} location={location} />
+        <NavGroup label={t("sidebar.endpointsGroup")} items={endpointItems} location={location} />
         <NavGroup label={t("sidebar.intel")} items={intelItems} location={location} />
-        <NavGroup label={t("sidebar.admin")} items={fullAdminItems} location={location} />
+        <NavGroup label={t("sidebar.admin")} items={fullAdminItems} location={location} defaultOpen={false} />
       </SidebarContent>
 
       <SidebarFooter className="p-3 space-y-2 border-t border-border/50">
