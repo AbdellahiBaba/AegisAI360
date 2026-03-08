@@ -3174,13 +3174,40 @@ export async function registerRoutes(
         }
       }
 
+      const agents = await storage.getAgentsByOrg(orgId);
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const onlineAgents = agents.filter(a => a.status === "online" && a.lastSeen && new Date(a.lastSeen) > fiveMinutesAgo);
+      let agentCommandsSent = 0;
+
+      for (const agent of onlineAgents) {
+        await storage.createCommand({
+          agentId: agent.id,
+          command: "security_scan",
+          params: JSON.stringify({ source: "auto_protect" }),
+          status: "pending",
+        });
+        await storage.createCommand({
+          agentId: agent.id,
+          command: "honeypot_monitor",
+          params: JSON.stringify({ ports: "23,445,1433,3389,5900,8080", duration: 300, source: "auto_protect" }),
+          status: "pending",
+        });
+        await storage.createCommand({
+          agentId: agent.id,
+          command: "enable_monitoring",
+          params: JSON.stringify({ source: "auto_protect" }),
+          status: "pending",
+        });
+        agentCommandsSent += 3;
+      }
+
       await storage.createAuditLog({
         organizationId: orgId,
         userId,
         action: "activate_full_protection",
         targetType: "organization",
         targetId: String(orgId),
-        details: `Full protection activated: defense=auto, ${policiesActivated} policies enabled, ${alertRulesActivated} alert rules enabled`,
+        details: `Full protection activated: defense=auto, ${policiesActivated} policies enabled, ${alertRulesActivated} alert rules enabled, ${agentCommandsSent} commands sent to ${onlineAgents.length} agent(s)`,
       });
 
       res.json({
@@ -3188,6 +3215,8 @@ export async function registerRoutes(
         policiesActivated,
         alertRulesActivated,
         scansStarted: 0,
+        agentsDeployed: onlineAgents.length,
+        agentCommandsSent,
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to activate protection" });

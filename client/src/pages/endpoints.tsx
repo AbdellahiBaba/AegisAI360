@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Monitor, Cpu, MemoryStick, Wifi, WifiOff, Terminal, Send, RefreshCw, Clock, Activity, ArrowDown, ArrowUp, HardDrive, Globe, Server, Layers, Info } from "lucide-react";
+import { Loader2, Monitor, Cpu, MemoryStick, Wifi, WifiOff, Terminal, Send, RefreshCw, Clock, Activity, ArrowDown, ArrowUp, HardDrive, Globe, Server, Layers, Info, FileSearch, AlertTriangle, FileText, Shield } from "lucide-react";
 import { useLocation } from "wouter";
 
 const COMMANDS = [
@@ -26,6 +26,7 @@ const COMMANDS = [
   { value: "rogue_scan", label: "Rogue Scan" },
   { value: "bandwidth_stats", label: "Bandwidth Stats" },
   { value: "vuln_scan", label: "Vuln Scan" },
+  { value: "file_scan", label: "File Scan" },
 ];
 
 function UsageBar({ label, value, max, unit, color }: { label: string; value: number; max?: number; unit?: string; color?: string }) {
@@ -294,6 +295,179 @@ function SystemInfoPanel({ telemetry, agent }: { telemetry: any; agent: any }) {
   );
 }
 
+function parseFileScanFromCommand(cmd: any): any | null {
+  if (cmd.command !== "file_scan" || cmd.status !== "done" || !cmd.result) return null;
+  const marker = "__FILE_SCAN_JSON__:";
+  const idx = cmd.result.indexOf(marker);
+  if (idx === -1) return null;
+  try {
+    return JSON.parse(cmd.result.substring(idx + marker.length));
+  } catch {
+    return null;
+  }
+}
+
+function formatBytes(b: number): string {
+  if (b > 1073741824) return `${(b / 1073741824).toFixed(1)} GB`;
+  if (b > 1048576) return `${(b / 1048576).toFixed(1)} MB`;
+  if (b > 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${b} B`;
+}
+
+function FileScanResults({ commands }: { commands: any[] | undefined }) {
+  const fileScanCommands = commands?.filter(c => c.command === "file_scan") || [];
+
+  if (fileScanCommands.length === 0) {
+    return (
+      <Card data-testid="card-no-file-scans">
+        <CardContent className="pt-6 text-center text-muted-foreground">
+          <FileSearch className="w-8 h-8 mx-auto mb-2 opacity-50" />
+          <p>No file scans have been run yet.</p>
+          <p className="text-xs mt-1">Use the "File Scan" button above to scan for suspicious files.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {fileScanCommands.map((cmd: any) => {
+        const report = parseFileScanFromCommand(cmd);
+        const isPending = cmd.status === "pending";
+        const isFailed = cmd.status === "failed";
+
+        return (
+          <Card key={cmd.id} data-testid={`card-file-scan-${cmd.id}`}>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <FileSearch className="w-4 h-4" />
+                  File Scan
+                  <span className="text-xs text-muted-foreground font-normal">
+                    {new Date(cmd.createdAt).toLocaleString()}
+                  </span>
+                </CardTitle>
+                <Badge variant={cmd.status === "done" ? "default" : cmd.status === "failed" ? "destructive" : "secondary"}>
+                  {isPending && <Loader2 className="w-3 h-3 me-1 animate-spin" />}
+                  {cmd.status}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isPending && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Scan in progress...
+                </div>
+              )}
+              {isFailed && (
+                <div className="flex items-center gap-2 text-sm text-destructive">
+                  <AlertTriangle className="w-4 h-4" />
+                  Scan failed. Check agent logs for details.
+                </div>
+              )}
+              {report && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <div className="text-center p-2 bg-muted/30 rounded" data-testid="stat-total-files">
+                      <p className="text-lg font-bold">{report.totalFiles?.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">Total Files</p>
+                    </div>
+                    <div className="text-center p-2 bg-muted/30 rounded" data-testid="stat-executables">
+                      <p className="text-lg font-bold">{report.executables?.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">Executables</p>
+                    </div>
+                    <div className="text-center p-2 bg-muted/30 rounded" data-testid="stat-recent">
+                      <p className="text-lg font-bold">{report.recentFiles?.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">Recent (24h)</p>
+                    </div>
+                    <div className={`text-center p-2 rounded ${report.suspiciousFiles > 0 ? "bg-destructive/10" : "bg-muted/30"}`} data-testid="stat-suspicious">
+                      <p className={`text-lg font-bold ${report.suspiciousFiles > 0 ? "text-destructive" : ""}`}>{report.suspiciousFiles}</p>
+                      <p className="text-xs text-muted-foreground">Suspicious</p>
+                    </div>
+                    <div className="text-center p-2 bg-muted/30 rounded" data-testid="stat-duration">
+                      <p className="text-lg font-bold">{report.duration || "N/A"}</p>
+                      <p className="text-xs text-muted-foreground">Duration</p>
+                    </div>
+                  </div>
+
+                  {report.scannedDirs && report.scannedDirs.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Scanned Directories</p>
+                      <div className="flex flex-wrap gap-1">
+                        {report.scannedDirs.map((dir: string, i: number) => (
+                          <Badge key={i} variant="outline" className="text-xs font-mono" data-testid={`badge-dir-${i}`}>{dir}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {report.files && report.files.filter((f: any) => f.isSuspicious).length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium flex items-center gap-1 mb-2">
+                        <AlertTriangle className="w-4 h-4 text-destructive" />
+                        Suspicious Files
+                      </p>
+                      <div className="space-y-1">
+                        {report.files.filter((f: any) => f.isSuspicious).map((file: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between gap-2 p-2 bg-destructive/5 rounded text-sm" data-testid={`row-suspicious-file-${i}`}>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-mono text-xs truncate">{file.path}</p>
+                              <p className="text-xs text-muted-foreground">{file.reason}</p>
+                            </div>
+                            <div className="text-right text-xs text-muted-foreground shrink-0">
+                              <p>{formatBytes(file.size)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {report.files && report.files.filter((f: any) => f.isRecent && !f.isSuspicious).length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium flex items-center gap-1 mb-2">
+                        <Clock className="w-4 h-4" />
+                        Recently Modified Executables (24h)
+                      </p>
+                      <div className="space-y-1 max-h-48 overflow-y-auto">
+                        {report.files.filter((f: any) => f.isRecent && !f.isSuspicious).slice(0, 20).map((file: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between gap-2 p-2 bg-muted/30 rounded text-sm" data-testid={`row-recent-file-${i}`}>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-mono text-xs truncate">{file.path}</p>
+                            </div>
+                            <div className="text-right text-xs text-muted-foreground shrink-0">
+                              <p>{formatBytes(file.size)}</p>
+                              {file.modifiedAt && <p>{new Date(file.modifiedAt).toLocaleString()}</p>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {report.suspiciousFiles === 0 && (
+                    <div className="flex items-center gap-2 p-3 bg-green-500/10 rounded text-sm" data-testid="text-scan-clean">
+                      <Shield className="w-4 h-4 text-green-600" />
+                      <span>No suspicious files detected. System appears clean.</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!report && cmd.status === "done" && cmd.result && (
+                <pre className="text-xs font-mono bg-muted/30 p-3 rounded overflow-x-auto max-h-48 whitespace-pre-wrap">
+                  {cmd.result.split("__FILE_SCAN_JSON__:")[0]}
+                </pre>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Endpoints() {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -425,7 +599,17 @@ export default function Endpoints() {
                       <Monitor className="w-5 h-5" />
                       {agentDetail.hostname}
                     </CardTitle>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={agentDetail.status !== "online" || sendCommandMutation.isPending}
+                        onClick={() => sendCommandMutation.mutate({ agentId: selectedAgent!, command: "file_scan" })}
+                        data-testid="button-file-scan"
+                      >
+                        <FileSearch className="w-4 h-4 me-1" />
+                        File Scan
+                      </Button>
                       <Button size="sm" variant="outline" onClick={() => navigate(`/endpoints/${selectedAgent}/terminal`)} data-testid="button-open-terminal">
                         <Terminal className="w-4 h-4 me-1" />
                         Terminal
@@ -451,6 +635,7 @@ export default function Endpoints() {
                 <TabsList className="w-full justify-start flex-wrap">
                   <TabsTrigger value="overview" data-testid="tab-overview">System Info</TabsTrigger>
                   <TabsTrigger value="commands" data-testid="tab-commands">Commands</TabsTrigger>
+                  <TabsTrigger value="file-scans" data-testid="tab-file-scans">File Scans</TabsTrigger>
                   <TabsTrigger value="bandwidth" data-testid="tab-bandwidth">Bandwidth</TabsTrigger>
                 </TabsList>
 
@@ -525,6 +710,10 @@ export default function Endpoints() {
                       )}
                     </CardContent>
                   </Card>
+                </TabsContent>
+
+                <TabsContent value="file-scans" className="mt-4">
+                  <FileScanResults commands={commands} />
                 </TabsContent>
 
                 <TabsContent value="bandwidth" className="mt-4">

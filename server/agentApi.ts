@@ -121,6 +121,7 @@ export function createAgentRouter(): Router {
         {
           name: "Files & Registry",
           commands: [
+            { command: "file_scan", description: "Scan common malware drop locations for suspicious executables", params: [] },
             { command: "file_search", description: "Search for files by pattern", params: [
               { name: "path", type: "string", required: false, description: "Search path (default: C:\\)" },
               { name: "pattern", type: "string", required: true, description: "File pattern (e.g. *.exe)" },
@@ -161,6 +162,8 @@ export function createAgentRouter(): Router {
         {
           name: "Terminal",
           commands: [
+            { command: "enable_monitoring", description: "Enable background monitoring (process, file, network)", params: [] },
+            { command: "disable_monitoring", description: "Disable background monitoring", params: [] },
             { command: "terminal_exec", description: "Execute a whitelisted terminal command", params: [{ name: "cmd", type: "string", required: true, description: "Command to execute" }] },
           ],
         },
@@ -738,6 +741,109 @@ export function createAgentRouter(): Router {
       res.json(logs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch terminal logs" });
+    }
+  });
+
+  router.post("/security-events", async (req, res) => {
+    try {
+      const { agentId, token, events } = z.object({
+        agentId: z.number(),
+        token: z.string(),
+        events: z.array(z.object({
+          eventType: z.string(),
+          severity: z.string().default("medium"),
+          description: z.string(),
+          source: z.string().default("agent-monitor"),
+          sourceIp: z.string().optional(),
+          rawData: z.string().optional(),
+        })),
+      }).parse(req.body);
+
+      const agent = await storage.getAgentById(agentId);
+      if (!agent || agent.deviceToken !== token) return res.status(401).json({ error: "Invalid agent credentials" });
+
+      const created = [];
+      for (const event of events) {
+        const se = await storage.createSecurityEvent({
+          organizationId: agent.organizationId,
+          eventType: event.eventType,
+          severity: event.severity,
+          source: event.source,
+          description: event.description,
+          sourceIp: event.sourceIp || agent.ip || null,
+          rawData: event.rawData || null,
+          status: "new",
+        });
+        created.push(se.id);
+        await storage.incrementUsage(agent.organizationId, "logsSent");
+      }
+
+      res.status(201).json({ ids: created, status: "ok" });
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to store security events" });
+    }
+  });
+
+  router.post("/file-scan", async (req, res) => {
+    try {
+      const { agentId, token, report } = z.object({
+        agentId: z.number(),
+        token: z.string(),
+        report: z.object({
+          scannedDirs: z.array(z.string()).optional(),
+          totalFiles: z.number().optional(),
+          executables: z.number().optional(),
+          recentFiles: z.number().optional(),
+          suspiciousFiles: z.number().optional(),
+          files: z.array(z.object({
+            path: z.string(),
+            size: z.number(),
+            sha256: z.string().optional(),
+            modifiedAt: z.string().optional(),
+            isRecent: z.boolean().optional(),
+            isSuspicious: z.boolean().optional(),
+            reason: z.string().optional(),
+          })).optional(),
+          scanTime: z.string().optional(),
+          duration: z.string().optional(),
+        }),
+      }).parse(req.body);
+
+      const agent = await storage.getAgentById(agentId);
+      if (!agent || agent.deviceToken !== token) return res.status(401).json({ error: "Invalid agent credentials" });
+
+      const suspiciousFiles = report.files?.filter(f => f.isSuspicious) || [];
+      if (suspiciousFiles.length > 0) {
+        for (const file of suspiciousFiles) {
+          await storage.createSecurityEvent({
+            organizationId: agent.organizationId,
+            eventType: "suspicious_file_detected",
+            severity: "high",
+            source: "agent-file-scan",
+            description: `Suspicious file detected: ${file.path} - ${file.reason || "Unknown reason"}`,
+            sourceIp: agent.ip || null,
+            rawData: JSON.stringify(file),
+            status: "new",
+          });
+        }
+      }
+
+      await storage.createSecurityEvent({
+        organizationId: agent.organizationId,
+        eventType: "file_scan_complete",
+        severity: suspiciousFiles.length > 0 ? "warning" : "info",
+        source: "agent-file-scan",
+        description: `File scan completed on ${agent.hostname}: ${report.totalFiles || 0} files scanned, ${report.executables || 0} executables, ${report.suspiciousFiles || 0} suspicious`,
+        sourceIp: agent.ip || null,
+        rawData: JSON.stringify(report),
+        status: "new",
+      });
+
+      res.status(201).json({ status: "ok", suspiciousCount: suspiciousFiles.length });
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to process file scan results" });
     }
   });
 

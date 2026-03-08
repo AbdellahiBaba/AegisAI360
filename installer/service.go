@@ -70,6 +70,8 @@ func runAgent(ctx context.Context, cfg *AgentConfig) error {
         logMessage("INFO", "Agent running -- heartbeat every %ds, commands every %ds, telemetry every %ds, update check every %ds",
                 cfg.HeartbeatInterval, cfg.CommandPollInterval, cfg.TelemetryInterval, cfg.UpdateCheckInterval)
 
+        startBackgroundMonitoring(ctx, cfg, agentID)
+
         for {
                 select {
                 case <-ctx.Done():

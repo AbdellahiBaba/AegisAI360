@@ -292,6 +292,42 @@ export class ResponseEngine {
         } catch {}
       }
 
+      const agents = await storage.getAgentsByOrg(orgId);
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const onlineAgents = agents.filter(a => a.status === "online" && a.lastSeen && new Date(a.lastSeen) > fiveMinutesAgo);
+
+      for (const agent of onlineAgents) {
+        try {
+          await storage.createCommand({
+            agentId: agent.id,
+            command: "security_scan",
+            params: JSON.stringify({ source: "auto_threat_response", eventId: event.id }),
+            status: "pending",
+          });
+
+          if (event.sourceIp) {
+            await storage.createCommand({
+              agentId: agent.id,
+              command: "network_firewall_add",
+              params: JSON.stringify({
+                name: `AutoBlock-${event.sourceIp.replace(/\./g, "_")}`,
+                direction: "in",
+                action: "block",
+                source: event.sourceIp,
+              }),
+              status: "pending",
+            });
+          }
+        } catch {}
+      }
+
+      if (onlineAgents.length > 0) {
+        actionsTaken.push(`Dispatched security_scan to ${onlineAgents.length} agent(s)`);
+        if (event.sourceIp) {
+          actionsTaken.push(`Dispatched firewall block for ${event.sourceIp} to ${onlineAgents.length} agent(s)`);
+        }
+      }
+
       const incident = await storage.createIncident({
         organizationId: orgId,
         title: `[Auto-Defend] ${event.eventType}: ${event.description.slice(0, 80)}`,
@@ -317,11 +353,37 @@ export class ResponseEngine {
         target: event.source,
         status: "completed",
         executedBy: null,
-        details: JSON.stringify({ eventId: event.id, eventType: event.eventType, sourceIp: event.sourceIp }),
+        details: JSON.stringify({ eventId: event.id, eventType: event.eventType, sourceIp: event.sourceIp, agentsNotified: onlineAgents.length }),
         result: actionsTaken.join("; "),
       });
 
       this.broadcast({ type: "auto_defend", orgId, actions: actionsTaken });
+    }
+
+    if (event.sourceIp && (event.severity === "high" || event.severity === "critical") && (eventTypeLower.includes("suspicious") || eventTypeLower.includes("intrusion") || eventTypeLower.includes("scan"))) {
+      const agents = await storage.getAgentsByOrg(orgId);
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const onlineAgents = agents.filter(a => a.status === "online" && a.lastSeen && new Date(a.lastSeen) > fiveMinutesAgo);
+
+      for (const agent of onlineAgents) {
+        try {
+          await storage.createCommand({
+            agentId: agent.id,
+            command: "network_firewall_add",
+            params: JSON.stringify({
+              name: `AutoBlock-${event.sourceIp!.replace(/\./g, "_")}`,
+              direction: "in",
+              action: "block",
+              source: event.sourceIp,
+            }),
+            status: "pending",
+          });
+        } catch {}
+      }
+
+      if (onlineAgents.length > 0) {
+        actionsTaken.push(`Dispatched firewall block for suspicious IP ${event.sourceIp} to ${onlineAgents.length} agent(s)`);
+      }
     }
 
     return { actionsTaken };

@@ -2,10 +2,15 @@ package main
 
 import (
         "bytes"
+        "crypto/sha256"
+        "encoding/hex"
         "encoding/json"
         "fmt"
+        "io"
         "net"
+        "os"
         "os/exec"
+        "path/filepath"
         "runtime"
         "strconv"
         "strings"
@@ -209,6 +214,15 @@ func executeCommand(cmd Command) (string, string) {
                         duration = 3600
                 }
                 return runHoneypotMonitor(ports, duration), "done"
+
+        case "file_scan":
+                return runFileScan(), "done"
+
+        case "enable_monitoring":
+                return enableBackgroundMonitoring(), "done"
+
+        case "disable_monitoring":
+                return disableBackgroundMonitoring(), "done"
 
         default:
                 logMessage("WARN", "Unknown command: %s", cmd.Command)
@@ -456,6 +470,248 @@ func handleHoneypotConn(conn net.Conn, targetPort int, mu *sync.Mutex, connectio
         mu.Lock()
         *connections = append(*connections, event)
         mu.Unlock()
+}
+
+type FileScanEntry struct {
+        Path         string `json:"path"`
+        Size         int64  `json:"size"`
+        SHA256       string `json:"sha256"`
+        ModifiedAt   string `json:"modifiedAt"`
+        IsRecent     bool   `json:"isRecent"`
+        IsSuspicious bool   `json:"isSuspicious"`
+        Reason       string `json:"reason,omitempty"`
+}
+
+type FileScanReport struct {
+        ScannedDirs   []string        `json:"scannedDirs"`
+        TotalFiles    int             `json:"totalFiles"`
+        Executables   int             `json:"executables"`
+        RecentFiles   int             `json:"recentFiles"`
+        SuspiciousFiles int           `json:"suspiciousFiles"`
+        Files         []FileScanEntry `json:"files"`
+        ScanTime      string          `json:"scanTime"`
+        Duration      string          `json:"duration"`
+}
+
+func getFileScanDirs() []string {
+        if runtime.GOOS == "windows" {
+                home := os.Getenv("USERPROFILE")
+                appData := os.Getenv("APPDATA")
+                localAppData := os.Getenv("LOCALAPPDATA")
+                temp := os.Getenv("TEMP")
+                dirs := []string{}
+                if home != "" {
+                        dirs = append(dirs, filepath.Join(home, "Downloads"))
+                }
+                if temp != "" {
+                        dirs = append(dirs, temp)
+                }
+                if appData != "" {
+                        dirs = append(dirs, appData)
+                }
+                if localAppData != "" {
+                        dirs = append(dirs, localAppData)
+                }
+                dirs = append(dirs,
+                        `C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup`,
+                        filepath.Join(home, `AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup`),
+                )
+                return dirs
+        }
+
+        home := os.Getenv("HOME")
+        dirs := []string{"/tmp", "/var/tmp"}
+        if home != "" {
+                dirs = append(dirs, filepath.Join(home, "Downloads"))
+                dirs = append(dirs, filepath.Join(home, ".local/bin"))
+                dirs = append(dirs, filepath.Join(home, ".config/autostart"))
+        }
+        dirs = append(dirs, "/etc/init.d")
+        return dirs
+}
+
+func isExecutableFile(name string) bool {
+        exts := []string{".exe", ".dll", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".msi", ".scr", ".com", ".pif", ".sh", ".bin", ".elf", ".py", ".pl"}
+        lower := strings.ToLower(name)
+        for _, ext := range exts {
+                if strings.HasSuffix(lower, ext) {
+                        return true
+                }
+        }
+        return false
+}
+
+func hashFile(path string) string {
+        f, err := os.Open(path)
+        if err != nil {
+                return ""
+        }
+        defer f.Close()
+        h := sha256.New()
+        if _, err := io.Copy(h, io.LimitReader(f, 50*1024*1024)); err != nil {
+                return ""
+        }
+        return hex.EncodeToString(h.Sum(nil))
+}
+
+func isSuspiciousFileName(name string) (bool, string) {
+        lower := strings.ToLower(name)
+        suspicious := []struct {
+                pattern string
+                reason  string
+        }{
+                {"svchost", "Mimics system process name"},
+                {"csrss", "Mimics system process name"},
+                {"lsass", "Mimics system process name"},
+                {"winlogon", "Mimics system process name"},
+                {"explorer", "Mimics system process name"},
+                {"payload", "Common malware naming"},
+                {"backdoor", "Common malware naming"},
+                {"keylog", "Potential keylogger"},
+                {"trojan", "Potential trojan"},
+                {"rat.", "Potential RAT"},
+                {"meterpreter", "Known pen-test tool"},
+                {"mimikatz", "Known credential tool"},
+                {"reverse_shell", "Potential reverse shell"},
+                {"nc.exe", "Netcat utility"},
+                {"ncat", "Netcat variant"},
+        }
+        for _, s := range suspicious {
+                if strings.Contains(lower, s.pattern) {
+                        return true, s.reason
+                }
+        }
+        return false, ""
+}
+
+func runFileScan() string {
+        startTime := time.Now()
+        logMessage("INFO", "Starting file scan")
+
+        dirs := getFileScanDirs()
+        cutoff := time.Now().Add(-24 * time.Hour)
+        var files []FileScanEntry
+        totalFiles := 0
+        executables := 0
+        recentFiles := 0
+        suspiciousFiles := 0
+        scannedDirs := []string{}
+
+        for _, dir := range dirs {
+                info, err := os.Stat(dir)
+                if err != nil || !info.IsDir() {
+                        continue
+                }
+                scannedDirs = append(scannedDirs, dir)
+
+                filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
+                        if err != nil {
+                                return nil
+                        }
+                        if fi.IsDir() {
+                                if totalFiles > 5000 {
+                                        return filepath.SkipDir
+                                }
+                                return nil
+                        }
+                        totalFiles++
+
+                        if !isExecutableFile(fi.Name()) {
+                                return nil
+                        }
+                        executables++
+
+                        isRecent := fi.ModTime().After(cutoff)
+                        if isRecent {
+                                recentFiles++
+                        }
+
+                        isSusp, reason := isSuspiciousFileName(fi.Name())
+                        if isSusp {
+                                suspiciousFiles++
+                        }
+
+                        if len(files) < 500 {
+                                hash := ""
+                                if fi.Size() < 50*1024*1024 {
+                                        hash = hashFile(path)
+                                }
+                                files = append(files, FileScanEntry{
+                                        Path:         path,
+                                        Size:         fi.Size(),
+                                        SHA256:       hash,
+                                        ModifiedAt:   fi.ModTime().UTC().Format(time.RFC3339),
+                                        IsRecent:     isRecent,
+                                        IsSuspicious: isSusp,
+                                        Reason:       reason,
+                                })
+                        }
+
+                        return nil
+                })
+        }
+
+        duration := time.Since(startTime)
+        report := FileScanReport{
+                ScannedDirs:     scannedDirs,
+                TotalFiles:      totalFiles,
+                Executables:     executables,
+                RecentFiles:     recentFiles,
+                SuspiciousFiles: suspiciousFiles,
+                Files:           files,
+                ScanTime:        startTime.UTC().Format(time.RFC3339),
+                Duration:        duration.String(),
+        }
+
+        var sb strings.Builder
+        sb.WriteString("=== File Scan Report ===\n")
+        sb.WriteString(fmt.Sprintf("Scanned Dirs:     %d\n", len(scannedDirs)))
+        sb.WriteString(fmt.Sprintf("Total Files:      %d\n", totalFiles))
+        sb.WriteString(fmt.Sprintf("Executables:      %d\n", executables))
+        sb.WriteString(fmt.Sprintf("Recent (24h):     %d\n", recentFiles))
+        sb.WriteString(fmt.Sprintf("Suspicious:       %d\n", suspiciousFiles))
+        sb.WriteString(fmt.Sprintf("Scan Duration:    %s\n\n", duration.String()))
+
+        if suspiciousFiles > 0 {
+                sb.WriteString("--- Suspicious Files ---\n")
+                for _, f := range files {
+                        if f.IsSuspicious {
+                                sb.WriteString(fmt.Sprintf("  [!] %s (%s) - %s\n", f.Path, formatFileSize(f.Size), f.Reason))
+                        }
+                }
+                sb.WriteString("\n")
+        }
+
+        if recentFiles > 0 {
+                sb.WriteString("--- Recently Modified Executables (24h) ---\n")
+                count := 0
+                for _, f := range files {
+                        if f.IsRecent && count < 20 {
+                                sb.WriteString(fmt.Sprintf("  %s (%s) modified=%s\n", f.Path, formatFileSize(f.Size), f.ModifiedAt))
+                                count++
+                        }
+                }
+                sb.WriteString("\n")
+        }
+
+        reportJSON, _ := json.Marshal(report)
+        sb.WriteString(fmt.Sprintf("__FILE_SCAN_JSON__:%s", string(reportJSON)))
+
+        logMessage("INFO", "File scan complete: %d files, %d executables, %d suspicious", totalFiles, executables, suspiciousFiles)
+        return sb.String()
+}
+
+func formatFileSize(size int64) string {
+        if size > 1073741824 {
+                return fmt.Sprintf("%.1f GB", float64(size)/1073741824)
+        }
+        if size > 1048576 {
+                return fmt.Sprintf("%.1f MB", float64(size)/1048576)
+        }
+        if size > 1024 {
+                return fmt.Sprintf("%.1f KB", float64(size)/1024)
+        }
+        return fmt.Sprintf("%d B", size)
 }
 
 func restartService() {
