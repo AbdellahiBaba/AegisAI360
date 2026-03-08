@@ -5,15 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Camera, Mic, MapPin, Smartphone, FolderOpen,
-  CheckCircle2, AlertTriangle, Shield, Loader2, XCircle,
+  CheckCircle2, AlertTriangle, Shield, Loader2, XCircle, Bell,
 } from "lucide-react";
 
 interface SessionInfo {
   id: number;
   name: string;
-  token: string;
   status: string;
-  createdAt: string;
+  sessionToken: string;
 }
 
 interface PermissionState {
@@ -40,6 +39,7 @@ export default function RemoteTarget() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Record<PermissionKey, PermissionState>>(initialPermissions);
+  const [pendingRequest, setPendingRequest] = useState<PermissionKey | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -48,6 +48,7 @@ export default function RemoteTarget() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const animFrameRef = useRef<number>(0);
+  const combinedStreamRef = useRef<MediaStream>(new MediaStream());
 
   const updatePermission = useCallback((key: PermissionKey, update: Partial<PermissionState>) => {
     setPermissions((prev) => ({ ...prev, [key]: { ...prev[key], ...update } }));
@@ -75,10 +76,10 @@ export default function RemoteTarget() {
         const res = await fetch(`/api/remote-sessions/token/${token}`);
         if (!res.ok) {
           if (res.status === 404) throw new Error("Session not found");
+          if (res.status === 410) throw new Error("This session has expired");
           throw new Error("Failed to load session");
         }
         const data = await res.json();
-        if (data.status === "expired") throw new Error("This session has expired");
         setSession(data);
       } catch (err: any) {
         setError(err.message || "An error occurred");
@@ -88,38 +89,6 @@ export default function RemoteTarget() {
     }
     if (token) fetchSession();
   }, [token]);
-
-  useEffect(() => {
-    if (!session) return;
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: "rc_join", token }));
-    };
-
-    ws.onmessage = async (evt) => {
-      try {
-        const msg = JSON.parse(evt.data);
-        if (msg.type === "rc_answer" && pcRef.current) {
-          await pcRef.current.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-        }
-        if (msg.type === "rc_ice_candidate" && pcRef.current && msg.candidate) {
-          await pcRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate));
-        }
-      } catch {}
-    };
-
-    return () => {
-      ws.close();
-      if (pcRef.current) pcRef.current.close();
-      if (audioContextRef.current) audioContextRef.current.close();
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    };
-  }, [session, token]);
-
-  const combinedStreamRef = useRef<MediaStream>(new MediaStream());
 
   const setupOrUpdateWebRTC = useCallback(async (newTracks: MediaStreamTrack[]) => {
     const combined = combinedStreamRef.current;
@@ -148,21 +117,16 @@ export default function RemoteTarget() {
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
     pcRef.current = pc;
-
     combined.getTracks().forEach((track) => pc.addTrack(track, combined));
-
     pc.onicecandidate = (evt) => {
-      if (evt.candidate) {
-        sendWS({ type: "rc_ice_candidate", candidate: evt.candidate, token });
-      }
+      if (evt.candidate) sendWS({ type: "rc_ice_candidate", candidate: evt.candidate, token });
     };
-
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     sendWS({ type: "rc_offer", sdp: offer, token });
   }, [sendWS, token]);
 
-  const handleCamera = async () => {
+  const handleCamera = useCallback(async () => {
     updatePermission("camera", { loading: true, error: null });
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -172,13 +136,15 @@ export default function RemoteTarget() {
       }
       await setupOrUpdateWebRTC(stream.getVideoTracks());
       updatePermission("camera", { granted: true, loading: false });
+      sendWS({ type: "rc_permission_granted", permission: "camera" });
       await postData({ permissionsGranted: ["camera"] });
     } catch (err: any) {
       updatePermission("camera", { loading: false, error: err.message || "Camera access denied" });
+      sendWS({ type: "rc_permission_denied", permission: "camera" });
     }
-  };
+  }, [setupOrUpdateWebRTC, sendWS, postData, updatePermission]);
 
-  const handleMicrophone = async () => {
+  const handleMicrophone = useCallback(async () => {
     updatePermission("microphone", { loading: true, error: null });
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -188,22 +154,17 @@ export default function RemoteTarget() {
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
       source.connect(analyser);
-
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
-
       const draw = () => {
         const canvas = audioCanvasRef.current;
         if (!canvas) return;
         const canvasCtx = canvas.getContext("2d");
         if (!canvasCtx) return;
-
         animFrameRef.current = requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
-
         canvasCtx.fillStyle = "rgba(0, 0, 0, 0.2)";
         canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
-
         const barWidth = (canvas.width / bufferLength) * 2.5;
         let x = 0;
         for (let i = 0; i < bufferLength; i++) {
@@ -214,23 +175,21 @@ export default function RemoteTarget() {
         }
       };
       draw();
-
       await setupOrUpdateWebRTC(stream.getAudioTracks());
       updatePermission("microphone", { granted: true, loading: false });
+      sendWS({ type: "rc_permission_granted", permission: "microphone" });
       await postData({ permissionsGranted: ["microphone"] });
     } catch (err: any) {
       updatePermission("microphone", { loading: false, error: err.message || "Microphone access denied" });
+      sendWS({ type: "rc_permission_denied", permission: "microphone" });
     }
-  };
+  }, [setupOrUpdateWebRTC, sendWS, postData, updatePermission]);
 
-  const handleLocation = async () => {
+  const handleLocation = useCallback(async () => {
     updatePermission("location", { loading: true, error: null });
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-        });
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 });
       });
       const locData = {
         latitude: position.coords.latitude,
@@ -242,12 +201,14 @@ export default function RemoteTarget() {
       sendWS({ type: "rc_location", data: locData, token });
       await postData({ permissionsGranted: ["location"], locationData: locData });
       updatePermission("location", { granted: true, loading: false });
+      sendWS({ type: "rc_permission_granted", permission: "location" });
     } catch (err: any) {
       updatePermission("location", { loading: false, error: err.message || "Location access denied" });
+      sendWS({ type: "rc_permission_denied", permission: "location" });
     }
-  };
+  }, [sendWS, postData, updatePermission, token]);
 
-  const handleDeviceInfo = async () => {
+  const handleDeviceInfo = useCallback(async () => {
     updatePermission("deviceInfo", { loading: true, error: null });
     try {
       const nav = navigator as any;
@@ -256,13 +217,12 @@ export default function RemoteTarget() {
         const battery = await nav.getBattery?.();
         if (battery) batteryLevel = Math.round(battery.level * 100);
       } catch {}
-
       const connection = nav.connection || nav.mozConnection || nav.webkitConnection;
-      const deviceData = {
+      const deviceData: Record<string, any> = {
         userAgent: navigator.userAgent,
         platform: navigator.platform,
         language: navigator.language,
-        languages: navigator.languages,
+        languages: Array.from(navigator.languages || []),
         hardwareConcurrency: navigator.hardwareConcurrency,
         deviceMemory: nav.deviceMemory || null,
         screenWidth: screen.width,
@@ -277,19 +237,23 @@ export default function RemoteTarget() {
         maxTouchPoints: navigator.maxTouchPoints,
         vendor: navigator.vendor,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        online: navigator.onLine,
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
       };
-
       sendWS({ type: "rc_device_info", data: deviceData, token });
       await postData({ permissionsGranted: ["deviceInfo"], deviceInfo: deviceData });
       updatePermission("deviceInfo", { granted: true, loading: false });
+      sendWS({ type: "rc_permission_granted", permission: "deviceInfo" });
     } catch (err: any) {
       updatePermission("deviceInfo", { loading: false, error: err.message || "Failed to collect device info" });
+      sendWS({ type: "rc_permission_denied", permission: "deviceInfo" });
     }
-  };
+  }, [sendWS, postData, updatePermission, token]);
 
-  const handleFiles = () => {
+  const handleFiles = useCallback(() => {
     fileInputRef.current?.click();
-  };
+  }, []);
 
   const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -305,19 +269,77 @@ export default function RemoteTarget() {
             reader.readAsDataURL(file);
           });
         }
-        const fileData = {
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          preview,
-        };
-        sendWS({ type: "rc_file", data: fileData, token });
+        sendWS({ type: "rc_file", data: { name: file.name, type: file.type, size: file.size, preview }, token });
       }
       updatePermission("files", { granted: true, loading: false });
+      sendWS({ type: "rc_permission_granted", permission: "files" });
     } catch (err: any) {
       updatePermission("files", { loading: false, error: err.message || "Failed to process files" });
     }
   };
+
+  const handlers: Record<PermissionKey, () => void> = {
+    camera: handleCamera,
+    microphone: handleMicrophone,
+    location: handleLocation,
+    deviceInfo: handleDeviceInfo,
+    files: handleFiles,
+  };
+
+  const handlePermissionRequest = useCallback((permission: PermissionKey) => {
+    if (permissions[permission]?.granted) return;
+    setPendingRequest(permission);
+  }, [permissions]);
+
+  const acceptRequest = useCallback(() => {
+    if (pendingRequest && handlers[pendingRequest]) {
+      handlers[pendingRequest]();
+    }
+    setPendingRequest(null);
+  }, [pendingRequest, handlers]);
+
+  const denyRequest = useCallback(() => {
+    if (pendingRequest) {
+      sendWS({ type: "rc_permission_denied", permission: pendingRequest });
+    }
+    setPendingRequest(null);
+  }, [pendingRequest, sendWS]);
+
+  useEffect(() => {
+    if (!session) return;
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "rc_join", token }));
+    };
+
+    ws.onmessage = async (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg.type === "rc_answer" && pcRef.current) {
+          await pcRef.current.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        }
+        if (msg.type === "rc_ice_candidate" && pcRef.current && msg.candidate) {
+          await pcRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate));
+        }
+        if (msg.type === "rc_request_permission" && msg.permission) {
+          handlePermissionRequest(msg.permission as PermissionKey);
+        }
+        if (msg.type === "rc_session_closed") {
+          setError("Session has been closed by the operator");
+        }
+      } catch {}
+    };
+
+    return () => {
+      ws.close();
+      if (pcRef.current) pcRef.current.close();
+      if (audioContextRef.current) audioContextRef.current.close();
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [session, token, handlePermissionRequest]);
 
   if (loading) {
     return (
@@ -344,22 +366,54 @@ export default function RemoteTarget() {
     );
   }
 
+  const permissionLabels: Record<PermissionKey, string> = {
+    camera: "Camera Access",
+    microphone: "Microphone Access",
+    location: "Location Access",
+    deviceInfo: "Device Information",
+    files: "File Access",
+  };
+
   const permissionItems: {
     key: PermissionKey;
     label: string;
     description: string;
     icon: typeof Camera;
-    handler: () => void;
   }[] = [
-    { key: "camera", label: "Camera", description: "Access device camera for visual verification", icon: Camera, handler: handleCamera },
-    { key: "microphone", label: "Microphone", description: "Access microphone for audio verification", icon: Mic, handler: handleMicrophone },
-    { key: "location", label: "Location", description: "Share current device location", icon: MapPin, handler: handleLocation },
-    { key: "deviceInfo", label: "Device Info", description: "Collect device specifications and system details", icon: Smartphone, handler: handleDeviceInfo },
-    { key: "files", label: "Files / Photos", description: "Select files or photos for verification", icon: FolderOpen, handler: handleFiles },
+    { key: "camera", label: "Camera", description: "Access device camera for visual verification", icon: Camera },
+    { key: "microphone", label: "Microphone", description: "Access microphone for audio verification", icon: Mic },
+    { key: "location", label: "Location", description: "Share current device location", icon: MapPin },
+    { key: "deviceInfo", label: "Device Info", description: "Collect device specifications and system details", icon: Smartphone },
+    { key: "files", label: "Files / Photos", description: "Select files or photos for verification", icon: FolderOpen },
   ];
 
   return (
     <div className="min-h-screen bg-background">
+      {pendingRequest && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" data-testid="modal-permission-request">
+          <Card className="max-w-sm w-full animate-in fade-in zoom-in-95">
+            <CardContent className="p-6 text-center space-y-4">
+              <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Bell className="w-6 h-6 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold" data-testid="text-request-title">Permission Request</h3>
+              <p className="text-sm text-muted-foreground" data-testid="text-request-message">
+                The system is requesting access to your <span className="font-medium text-foreground">{permissionLabels[pendingRequest]}</span>.
+                Your browser will ask for confirmation.
+              </p>
+              <div className="flex gap-3 justify-center pt-2">
+                <Button variant="outline" onClick={denyRequest} data-testid="button-deny-request">
+                  Deny
+                </Button>
+                <Button onClick={acceptRequest} data-testid="button-accept-request">
+                  Allow
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <div className="bg-amber-950/30 border-b border-amber-800/40">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
@@ -414,15 +468,11 @@ export default function RemoteTarget() {
                       ) : (
                         <Button
                           size="sm"
-                          onClick={item.handler}
+                          onClick={handlers[item.key]}
                           disabled={state.loading}
                           data-testid={`button-grant-${item.key}`}
                         >
-                          {state.loading ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            "Grant Access"
-                          )}
+                          {state.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Grant Access"}
                         </Button>
                       )}
                     </div>
@@ -430,24 +480,13 @@ export default function RemoteTarget() {
 
                   {item.key === "camera" && (permissions.camera.granted || permissions.camera.loading) && (
                     <div className="mt-3 rounded-md bg-black aspect-video max-w-xs mx-auto" data-testid="video-camera-preview">
-                      <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="w-full h-full rounded-md object-cover"
-                      />
+                      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full rounded-md object-cover" />
                     </div>
                   )}
 
                   {item.key === "microphone" && (permissions.microphone.granted || permissions.microphone.loading) && (
                     <div className="mt-3 rounded-md bg-black max-w-xs mx-auto" data-testid="canvas-audio-level">
-                      <canvas
-                        ref={audioCanvasRef}
-                        width={300}
-                        height={60}
-                        className="w-full rounded-md"
-                      />
+                      <canvas ref={audioCanvasRef} width={300} height={60} className="w-full rounded-md" />
                     </div>
                   )}
 
