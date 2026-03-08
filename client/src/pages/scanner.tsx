@@ -556,7 +556,7 @@ function VulnResults({ data, target }: { data: any; target: string }) {
           <SeverityBadge severity={data.riskLevel || "info"} />
         </CardContent></Card>
         <Card><CardContent className="p-3 text-center">
-          <p className="text-[10px] text-muted-foreground uppercase">Max CVSS</p>
+          <p className="text-[10px] text-muted-foreground uppercase">{t("scanner2.maxCvss")}</p>
           <p className="text-lg font-bold font-mono" data-testid="text-vuln-max-cvss">
             {dangerousVulns.length > 0 ? Math.max(...dangerousVulns.map((v: any) => v.riskScore || 0)).toFixed(1) : "0.0"}
           </p>
@@ -595,13 +595,13 @@ function VulnResults({ data, target }: { data: any; target: string }) {
                 </div>
                 {v.remediation && (
                   <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground uppercase font-semibold">Remediation</p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-semibold">{t("scanner2.remediation")}</p>
                     <p className="text-xs" data-testid={`text-remediation-${v.path}`}>{v.remediation}</p>
                   </div>
                 )}
                 {v.remediationSnippet && (
                   <div className="space-y-1">
-                    <p className="text-[10px] text-muted-foreground uppercase font-semibold">Config Fix</p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-semibold">{t("scanner2.configFix")}</p>
                     <pre className="text-[10px] font-mono bg-background p-2 rounded overflow-x-auto" data-testid={`code-snippet-${v.path}`}>{v.remediationSnippet}</pre>
                   </div>
                 )}
@@ -1416,7 +1416,7 @@ export default function ScannerPage() {
                 data-testid="button-export-scanner-pdf"
               >
                 <Download className="w-3.5 h-3.5 me-1.5" />
-                Export PDF
+                {t("scanner2.exportPdf")}
               </Button>
             )}
           </div>

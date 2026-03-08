@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from "react-i18next";
 import {
   Bug, Loader2, Search, Shield, FileCode, Database, Copy, Check,
   AlertTriangle, Activity, Globe, Server, FolderOpen, Hash,
@@ -75,6 +76,7 @@ function CodeBlock({ code, title }: { code: string; title: string }) {
 }
 
 function HashLookupTab() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [hash, setHash] = useState("");
   const [result, setResult] = useState<any>(null);
@@ -85,7 +87,7 @@ function HashLookupTab() {
       return res.json();
     },
     onSuccess: (data) => setResult(data),
-    onError: () => toast({ title: "Hash lookup failed", variant: "destructive" }),
+    onError: () => toast({ title: t("trojanAnalyzer.hashLookupFailed"), variant: "destructive" }),
   });
 
   return (
@@ -96,7 +98,7 @@ function HashLookupTab() {
           <Input
             value={hash}
             onChange={(e) => setHash(e.target.value)}
-            placeholder="Enter MD5, SHA1, or SHA256 hash..."
+            placeholder={t("trojanAnalyzer.hashLookupPlaceholder")}
             className="ps-9 font-mono text-xs"
             data-testid="input-trojan-hash"
             onKeyDown={(e) => e.key === "Enter" && hash.trim() && mutation.mutate(hash.trim())}
@@ -108,9 +110,9 @@ function HashLookupTab() {
           data-testid="button-trojan-lookup"
         >
           {mutation.isPending ? (
-            <><Loader2 className="w-4 h-4 me-2 animate-spin" />Analyzing</>
+            <><Loader2 className="w-4 h-4 me-2 animate-spin" />{t("trojanAnalyzer.analyzing")}</>
           ) : (
-            <><Search className="w-4 h-4 me-2" />Lookup</>
+            <><Search className="w-4 h-4 me-2" />{t("trojanAnalyzer.lookup")}</>
           )}
         </Button>
       </div>
@@ -119,7 +121,7 @@ function HashLookupTab() {
         <Card>
           <CardContent className="p-6 flex items-center justify-center gap-3">
             <Loader2 className="w-5 h-5 animate-spin text-primary" />
-            <span className="text-xs text-muted-foreground font-mono">Querying MalwareBazaar & knowledge base...</span>
+            <span className="text-xs text-muted-foreground font-mono">{t("trojanAnalyzer.queryingDatabases")}</span>
           </CardContent>
         </Card>
       )}
@@ -134,16 +136,16 @@ function HashLookupTab() {
               data-testid="button-export-trojan-pdf"
             >
               <Download className="w-3.5 h-3.5 me-1.5" />
-              Export PDF
+              {t("trojanAnalyzer.exportPdf")}
             </Button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Card><CardContent className="p-3 text-center">
-              <p className="text-[10px] text-muted-foreground uppercase">Family</p>
+              <p className="text-[10px] text-muted-foreground uppercase">{t("trojanAnalyzer.family")}</p>
               <p className="text-sm font-bold font-mono" data-testid="text-trojan-family">{result.family || "Unknown"}</p>
             </CardContent></Card>
             <Card><CardContent className="p-3 text-center">
-              <p className="text-[10px] text-muted-foreground uppercase">Category</p>
+              <p className="text-[10px] text-muted-foreground uppercase">{t("trojanAnalyzer.category")}</p>
               {result.category ? (
                 <Badge className={`text-[10px] ${categoryColor[result.category] || "bg-muted text-muted-foreground"}`} data-testid="text-trojan-category">
                   {result.category}
@@ -153,7 +155,7 @@ function HashLookupTab() {
               )}
             </CardContent></Card>
             <Card><CardContent className="p-3 text-center">
-              <p className="text-[10px] text-muted-foreground uppercase">Risk Score</p>
+              <p className="text-[10px] text-muted-foreground uppercase">{t("trojanAnalyzer.riskScore")}</p>
               <p className={`text-lg font-bold font-mono ${
                 (result.riskScore || 0) >= 80 ? "text-severity-critical" :
                 (result.riskScore || 0) >= 60 ? "text-severity-high" :
@@ -161,7 +163,7 @@ function HashLookupTab() {
               }`} data-testid="text-trojan-risk">{result.riskScore || 0}/100</p>
             </CardContent></Card>
             <Card><CardContent className="p-3 text-center">
-              <p className="text-[10px] text-muted-foreground uppercase">Detection</p>
+              <p className="text-[10px] text-muted-foreground uppercase">{t("trojanAnalyzer.detection")}</p>
               <p className="text-sm font-mono" data-testid="text-trojan-detection">{result.detectionRate || "N/A"}</p>
             </CardContent></Card>
           </div>
@@ -169,8 +171,8 @@ function HashLookupTab() {
           {result.firstSeen && (
             <Card>
               <CardContent className="p-4 space-y-2">
-                <div className="flex justify-between text-xs flex-wrap gap-1"><span className="text-muted-foreground">First Seen</span><span className="font-mono" data-testid="text-trojan-first-seen">{result.firstSeen}</span></div>
-                <div className="flex justify-between text-xs flex-wrap gap-1"><span className="text-muted-foreground">Last Seen</span><span className="font-mono" data-testid="text-trojan-last-seen">{result.lastSeen || "N/A"}</span></div>
+                <div className="flex justify-between text-xs flex-wrap gap-1"><span className="text-muted-foreground">{t("trojanAnalyzer.firstSeen")}</span><span className="font-mono" data-testid="text-trojan-first-seen">{result.firstSeen}</span></div>
+                <div className="flex justify-between text-xs flex-wrap gap-1"><span className="text-muted-foreground">{t("trojanAnalyzer.lastSeen")}</span><span className="font-mono" data-testid="text-trojan-last-seen">{result.lastSeen || "N/A"}</span></div>
                 {result.description && (
                   <div className="text-xs text-muted-foreground pt-2 border-t" data-testid="text-trojan-description">{result.description}</div>
                 )}
@@ -183,7 +185,7 @@ function HashLookupTab() {
               <CardHeader className="pb-2 pt-3 px-4">
                 <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
                   <Globe className="w-4 h-4 text-severity-high" />
-                  Known C2 Infrastructure
+                  {t("trojanAnalyzer.knownC2")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-3 space-y-1">
@@ -199,7 +201,7 @@ function HashLookupTab() {
               <CardHeader className="pb-2 pt-3 px-4">
                 <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
                   <Shield className="w-4 h-4 text-primary" />
-                  MITRE ATT&CK Techniques
+                  {t("trojanAnalyzer.mitreTechniques")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-3">
@@ -219,7 +221,7 @@ function HashLookupTab() {
               <CardHeader className="pb-2 pt-3 px-4">
                 <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
                   <Database className="w-4 h-4 text-primary" />
-                  Knowledge Base Match
+                  {t("trojanAnalyzer.knowledgeBaseMatch")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-3 space-y-2">
@@ -241,7 +243,7 @@ function HashLookupTab() {
             <Card>
               <CardContent className="p-4 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-severity-medium" />
-                <span className="text-xs text-muted-foreground">No matches found in MalwareBazaar or knowledge base for this hash.</span>
+                <span className="text-xs text-muted-foreground">{t("trojanAnalyzer.noMatchFound")}</span>
               </CardContent>
             </Card>
           )}
@@ -252,6 +254,7 @@ function HashLookupTab() {
 }
 
 function BehaviorAnalysisTab() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [networkConnections, setNetworkConnections] = useState("");
   const [registryMods, setRegistryMods] = useState("");
@@ -266,7 +269,7 @@ function BehaviorAnalysisTab() {
       return res.json();
     },
     onSuccess: (data) => setResult(data),
-    onError: () => toast({ title: "Classification failed", variant: "destructive" }),
+    onError: () => toast({ title: t("trojanAnalyzer.classificationFailed"), variant: "destructive" }),
   });
 
   const handleSubmit = () => {
@@ -286,13 +289,13 @@ function BehaviorAnalysisTab() {
         <CardHeader className="pb-2 pt-3 px-4">
           <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
             <Activity className="w-4 h-4 text-primary" />
-            Observed Indicators
+            {t("trojanAnalyzer.observedIndicators")}
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-3">
           <div className="space-y-1.5">
             <label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
-              <Globe className="w-3 h-3" /> Network Connections (one per line)
+              <Globe className="w-3 h-3" /> {t("trojanAnalyzer.networkConnections")}
             </label>
             <Textarea
               value={networkConnections}
@@ -305,7 +308,7 @@ function BehaviorAnalysisTab() {
           </div>
           <div className="space-y-1.5">
             <label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
-              <FolderOpen className="w-3 h-3" /> Registry Modifications (one per line)
+              <FolderOpen className="w-3 h-3" /> {t("trojanAnalyzer.registryModifications")}
             </label>
             <Textarea
               value={registryMods}
@@ -318,7 +321,7 @@ function BehaviorAnalysisTab() {
           </div>
           <div className="space-y-1.5">
             <label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
-              <FileCode className="w-3 h-3" /> File Paths Created/Modified (one per line)
+              <FileCode className="w-3 h-3" /> {t("trojanAnalyzer.filePaths")}
             </label>
             <Textarea
               value={filePaths}
@@ -332,7 +335,7 @@ function BehaviorAnalysisTab() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
-                <Server className="w-3 h-3" /> Process Names (one per line)
+                <Server className="w-3 h-3" /> {t("trojanAnalyzer.processNames")}
               </label>
               <Textarea
                 value={processNames}
@@ -345,7 +348,7 @@ function BehaviorAnalysisTab() {
             </div>
             <div className="space-y-1.5">
               <label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
-                <Hash className="w-3 h-3" /> Mutex Names (one per line)
+                <Hash className="w-3 h-3" /> {t("trojanAnalyzer.mutexNames")}
               </label>
               <Textarea
                 value={mutexNames}
@@ -363,9 +366,9 @@ function BehaviorAnalysisTab() {
             data-testid="button-classify-behavior"
           >
             {mutation.isPending ? (
-              <><Loader2 className="w-4 h-4 me-2 animate-spin" />Classifying</>
+              <><Loader2 className="w-4 h-4 me-2 animate-spin" />{t("trojanAnalyzer.classifying")}</>
             ) : (
-              <><Activity className="w-4 h-4 me-2" />Classify Behavior</>
+              <><Activity className="w-4 h-4 me-2" />{t("trojanAnalyzer.classifyBehavior")}</>
             )}
           </Button>
         </CardContent>
@@ -375,7 +378,7 @@ function BehaviorAnalysisTab() {
         <Card>
           <CardContent className="p-6 flex items-center justify-center gap-3">
             <Loader2 className="w-5 h-5 animate-spin text-primary" />
-            <span className="text-xs text-muted-foreground font-mono">Analyzing behavioral indicators...</span>
+            <span className="text-xs text-muted-foreground font-mono">{t("trojanAnalyzer.analyzingIndicators")}</span>
           </CardContent>
         </Card>
       )}
@@ -395,7 +398,7 @@ function BehaviorAnalysisTab() {
                     (result.confidence || 0) >= 60 ? "bg-severity-high text-white" :
                     (result.confidence || 0) >= 40 ? "bg-severity-medium text-black" : "bg-muted text-muted-foreground"
                   }`} data-testid="text-confidence">
-                    {result.confidence || 0}% Confidence
+                    {result.confidence || 0}% {t("trojanAnalyzer.confidence")}
                   </Badge>
                 </div>
                 {result.category && (
@@ -413,7 +416,7 @@ function BehaviorAnalysisTab() {
               <CardHeader className="pb-2 pt-3 px-4">
                 <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
                   <Eye className="w-4 h-4 text-severity-high" />
-                  Matched Indicators
+                  {t("trojanAnalyzer.matchedIndicators")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-3 space-y-1">
@@ -433,7 +436,7 @@ function BehaviorAnalysisTab() {
           {result.behavioralBreakdown && (
             <Card>
               <CardHeader className="pb-2 pt-3 px-4">
-                <CardTitle className="text-xs font-medium tracking-wider uppercase">Behavioral Breakdown</CardTitle>
+                <CardTitle className="text-xs font-medium tracking-wider uppercase">{t("trojanAnalyzer.behavioralBreakdown")}</CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-3 space-y-2">
                 {Object.entries(result.behavioralBreakdown).map(([key, val]: [string, any]) => (
@@ -460,7 +463,7 @@ function BehaviorAnalysisTab() {
             <Card>
               <CardContent className="p-4 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-severity-medium" />
-                <span className="text-xs text-muted-foreground">No known Trojan family matched the provided indicators.</span>
+                <span className="text-xs text-muted-foreground">{t("trojanAnalyzer.noFamilyMatched")}</span>
               </CardContent>
             </Card>
           )}
@@ -471,6 +474,7 @@ function BehaviorAnalysisTab() {
 }
 
 function DetectionRulesTab() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [selectedFamily, setSelectedFamily] = useState("");
   const [yaraRule, setYaraRule] = useState<string | null>(null);
@@ -486,7 +490,7 @@ function DetectionRulesTab() {
       return res.json();
     },
     onSuccess: (data) => setYaraRule(data.rule || data.yaraRule || JSON.stringify(data, null, 2)),
-    onError: () => toast({ title: "YARA rule generation failed", variant: "destructive" }),
+    onError: () => toast({ title: t("trojanAnalyzer.yaraFailed"), variant: "destructive" }),
   });
 
   const sigmaMutation = useMutation({
@@ -495,7 +499,7 @@ function DetectionRulesTab() {
       return res.json();
     },
     onSuccess: (data) => setSigmaRule(data.rule || data.sigmaRule || JSON.stringify(data, null, 2)),
-    onError: () => toast({ title: "Sigma rule generation failed", variant: "destructive" }),
+    onError: () => toast({ title: t("trojanAnalyzer.sigmaFailed"), variant: "destructive" }),
   });
 
   const handleGenerate = () => {
@@ -513,11 +517,11 @@ function DetectionRulesTab() {
       <div className="flex gap-2">
         <Select value={selectedFamily} onValueChange={setSelectedFamily}>
           <SelectTrigger className="flex-1" data-testid="select-trojan-family-rules">
-            <SelectValue placeholder="Select Trojan family..." />
+            <SelectValue placeholder={t("trojanAnalyzer.selectFamily")} />
           </SelectTrigger>
           <SelectContent>
             {familiesLoading ? (
-              <div className="p-2 text-xs text-muted-foreground">Loading families...</div>
+              <div className="p-2 text-xs text-muted-foreground">{t("trojanAnalyzer.loadingFamilies")}</div>
             ) : (
               familyList.map((f) => (
                 <SelectItem key={f} value={f}>{f}</SelectItem>
@@ -531,9 +535,9 @@ function DetectionRulesTab() {
           data-testid="button-generate-rules"
         >
           {yaraMutation.isPending || sigmaMutation.isPending ? (
-            <><Loader2 className="w-4 h-4 me-2 animate-spin" />Generating</>
+            <><Loader2 className="w-4 h-4 me-2 animate-spin" />{t("trojanAnalyzer.generating")}</>
           ) : (
-            <><FileCode className="w-4 h-4 me-2" />Generate Rules</>
+            <><FileCode className="w-4 h-4 me-2" />{t("trojanAnalyzer.generateRules")}</>
           )}
         </Button>
       </div>
@@ -542,7 +546,7 @@ function DetectionRulesTab() {
         <Card>
           <CardContent className="p-6 flex items-center justify-center gap-3">
             <Loader2 className="w-5 h-5 animate-spin text-primary" />
-            <span className="text-xs text-muted-foreground font-mono">Generating detection rules for {selectedFamily}...</span>
+            <span className="text-xs text-muted-foreground font-mono">{t("trojanAnalyzer.generatingRulesFor", { family: selectedFamily })}</span>
           </CardContent>
         </Card>
       )}
@@ -552,11 +556,11 @@ function DetectionRulesTab() {
           <CardHeader className="pb-2 pt-3 px-4">
             <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
               <FileCode className="w-4 h-4 text-primary" />
-              YARA Rule
+              {t("trojanAnalyzer.yaraRule")}
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
-            <CodeBlock code={yaraRule} title="YARA Rule" />
+            <CodeBlock code={yaraRule} title={t("trojanAnalyzer.yaraRule")} />
           </CardContent>
         </Card>
       )}
@@ -566,11 +570,11 @@ function DetectionRulesTab() {
           <CardHeader className="pb-2 pt-3 px-4">
             <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
               <FileCode className="w-4 h-4 text-primary" />
-              Sigma Rule
+              {t("trojanAnalyzer.sigmaRule")}
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
-            <CodeBlock code={sigmaRule} title="Sigma Rule" />
+            <CodeBlock code={sigmaRule} title={t("trojanAnalyzer.sigmaRule")} />
           </CardContent>
         </Card>
       )}
@@ -579,6 +583,7 @@ function DetectionRulesTab() {
 }
 
 function IOCExplorerTab() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [selectedFamily, setSelectedFamily] = useState("");
   const [iocs, setIocs] = useState<any>(null);
@@ -593,7 +598,7 @@ function IOCExplorerTab() {
       return res.json();
     },
     onSuccess: (data) => setIocs(data),
-    onError: () => toast({ title: "IOC extraction failed", variant: "destructive" }),
+    onError: () => toast({ title: t("trojanAnalyzer.iocExtractionFailed"), variant: "destructive" }),
   });
 
   const familyList: string[] = Array.isArray(families) ? families.map((f: any) => typeof f === "string" ? f : f.name || f.family) : [];
@@ -627,11 +632,11 @@ function IOCExplorerTab() {
       <div className="flex gap-2">
         <Select value={selectedFamily} onValueChange={setSelectedFamily}>
           <SelectTrigger className="flex-1" data-testid="select-trojan-family-iocs">
-            <SelectValue placeholder="Select Trojan family..." />
+            <SelectValue placeholder={t("trojanAnalyzer.selectFamily")} />
           </SelectTrigger>
           <SelectContent>
             {familiesLoading ? (
-              <div className="p-2 text-xs text-muted-foreground">Loading families...</div>
+              <div className="p-2 text-xs text-muted-foreground">{t("trojanAnalyzer.loadingFamilies")}</div>
             ) : (
               familyList.map((f) => (
                 <SelectItem key={f} value={f}>{f}</SelectItem>
@@ -645,9 +650,9 @@ function IOCExplorerTab() {
           data-testid="button-extract-iocs"
         >
           {mutation.isPending ? (
-            <><Loader2 className="w-4 h-4 me-2 animate-spin" />Extracting</>
+            <><Loader2 className="w-4 h-4 me-2 animate-spin" />{t("trojanAnalyzer.extracting")}</>
           ) : (
-            <><Database className="w-4 h-4 me-2" />Extract IOCs</>
+            <><Database className="w-4 h-4 me-2" />{t("trojanAnalyzer.extractIOCs")}</>
           )}
         </Button>
       </div>
@@ -656,7 +661,7 @@ function IOCExplorerTab() {
         <Card>
           <CardContent className="p-6 flex items-center justify-center gap-3">
             <Loader2 className="w-5 h-5 animate-spin text-primary" />
-            <span className="text-xs text-muted-foreground font-mono">Extracting IOCs for {selectedFamily}...</span>
+            <span className="text-xs text-muted-foreground font-mono">{t("trojanAnalyzer.extractingIOCsFor", { family: selectedFamily })}</span>
           </CardContent>
         </Card>
       )}
@@ -665,11 +670,11 @@ function IOCExplorerTab() {
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <span className="text-xs text-muted-foreground">
-              IOCs for <span className="font-semibold text-foreground">{selectedFamily}</span>
+              {t("trojanAnalyzer.iocsFor")} <span className="font-semibold text-foreground">{selectedFamily}</span>
             </span>
             <Button variant="outline" size="sm" onClick={exportIOCs} data-testid="button-export-iocs">
               <Copy className="w-3.5 h-3.5 me-1.5" />
-              Export JSON
+              {t("trojanAnalyzer.exportJson")}
             </Button>
           </div>
 
@@ -707,6 +712,7 @@ function IOCExplorerTab() {
 }
 
 function IOCExtractorTab() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [text, setText] = useState("");
   const [result, setResult] = useState<any>(null);
@@ -717,17 +723,17 @@ function IOCExtractorTab() {
       return res.json();
     },
     onSuccess: (data) => setResult(data),
-    onError: () => toast({ title: "IOC extraction failed", variant: "destructive" }),
+    onError: () => toast({ title: t("trojanAnalyzer.iocExtractionFailed"), variant: "destructive" }),
   });
 
-  const iocTypeConfig: Record<string, { icon: React.ElementType; label: string }> = {
-    ips: { icon: Globe, label: "IP Addresses" },
-    domains: { icon: Globe, label: "Domains" },
-    urls: { icon: Link, label: "URLs" },
-    emails: { icon: Mail, label: "Email Addresses" },
-    filePaths: { icon: FileCode, label: "File Paths" },
-    registryKeys: { icon: FolderOpen, label: "Registry Keys" },
-    mutexNames: { icon: Server, label: "Mutex Names" },
+  const iocTypeConfig: Record<string, { icon: React.ElementType; labelKey: string }> = {
+    ips: { icon: Globe, labelKey: "trojanAnalyzer.ipAddresses" },
+    domains: { icon: Globe, labelKey: "trojanAnalyzer.domains" },
+    urls: { icon: Link, labelKey: "trojanAnalyzer.urls" },
+    emails: { icon: Mail, labelKey: "trojanAnalyzer.emailAddresses" },
+    filePaths: { icon: FileCode, labelKey: "trojanAnalyzer.filePathsLabel" },
+    registryKeys: { icon: FolderOpen, labelKey: "trojanAnalyzer.registryKeys" },
+    mutexNames: { icon: Server, labelKey: "trojanAnalyzer.mutexNamesLabel" },
   };
 
   const totalIOCs = result ? (
@@ -754,14 +760,14 @@ function IOCExtractorTab() {
         <CardHeader className="pb-2 pt-3 px-4">
           <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
             <FileText className="w-4 h-4 text-primary" />
-            Paste Text for IOC Extraction
+            {t("trojanAnalyzer.pasteTextForIOC")}
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-3">
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Paste malware analysis reports, threat intelligence feeds, incident logs, or any text containing IOCs..."
+            placeholder={t("trojanAnalyzer.pasteTextPlaceholder")}
             className="font-mono text-xs resize-none"
             rows={8}
             data-testid="input-ioc-text"
@@ -772,9 +778,9 @@ function IOCExtractorTab() {
             data-testid="button-extract-iocs-text"
           >
             {mutation.isPending ? (
-              <><Loader2 className="w-4 h-4 me-2 animate-spin" />Extracting</>
+              <><Loader2 className="w-4 h-4 me-2 animate-spin" />{t("trojanAnalyzer.extracting")}</>
             ) : (
-              <><Target className="w-4 h-4 me-2" />Extract IOCs</>
+              <><Target className="w-4 h-4 me-2" />{t("trojanAnalyzer.extractIOCs")}</>
             )}
           </Button>
         </CardContent>
@@ -784,10 +790,10 @@ function IOCExtractorTab() {
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <span className="text-xs text-muted-foreground">
-              Found <span className="font-semibold text-foreground" data-testid="text-ioc-count">{totalIOCs}</span> indicators
+              {t("trojanAnalyzer.foundIndicators", { count: totalIOCs })}
             </span>
             <Button variant="outline" size="sm" onClick={exportAll} data-testid="button-export-extracted-iocs">
-              <Download className="w-3.5 h-3.5 me-1.5" />Export JSON
+              <Download className="w-3.5 h-3.5 me-1.5" />{t("trojanAnalyzer.exportJson")}
             </Button>
           </div>
 
@@ -800,7 +806,7 @@ function IOCExtractorTab() {
                 <CardHeader className="pb-2 pt-3 px-4">
                   <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
                     <IconComp className="w-4 h-4 text-primary" />
-                    {cfg.label}
+                    {t(cfg.labelKey)}
                     <Badge variant="secondary" className="text-[10px] ml-auto">{items.length}</Badge>
                   </CardTitle>
                 </CardHeader>
@@ -823,7 +829,7 @@ function IOCExtractorTab() {
               <CardHeader className="pb-2 pt-3 px-4">
                 <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
                   <Hash className="w-4 h-4 text-primary" />
-                  File Hashes
+                  {t("trojanAnalyzer.fileHashes")}
                   <Badge variant="secondary" className="text-[10px] ml-auto">
                     {(result.hashes.md5?.length || 0) + (result.hashes.sha1?.length || 0) + (result.hashes.sha256?.length || 0)}
                   </Badge>
@@ -871,7 +877,7 @@ function IOCExtractorTab() {
             <Card>
               <CardContent className="p-4 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-severity-medium" />
-                <span className="text-xs text-muted-foreground">No IOCs could be extracted from the provided text.</span>
+                <span className="text-xs text-muted-foreground">{t("trojanAnalyzer.noIOCsExtracted")}</span>
               </CardContent>
             </Card>
           )}
@@ -882,6 +888,7 @@ function IOCExtractorTab() {
 }
 
 function ThreatProfileTab() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [selectedFamily, setSelectedFamily] = useState("");
   const [heatmap, setHeatmap] = useState<any>(null);
@@ -898,7 +905,7 @@ function ThreatProfileTab() {
       return res.json();
     },
     onSuccess: (data) => setHeatmap(data),
-    onError: () => toast({ title: "Heatmap generation failed", variant: "destructive" }),
+    onError: () => toast({ title: t("trojanAnalyzer.heatmapFailed"), variant: "destructive" }),
   });
 
   const actorMut = useMutation({
@@ -915,7 +922,7 @@ function ThreatProfileTab() {
       return res.json();
     },
     onSuccess: (data) => setKillChain(data),
-    onError: () => toast({ title: "Kill chain mapping failed", variant: "destructive" }),
+    onError: () => toast({ title: t("trojanAnalyzer.killChainFailed"), variant: "destructive" }),
   });
 
   const handleAnalyze = () => {
@@ -943,11 +950,11 @@ function ThreatProfileTab() {
       <div className="flex gap-2">
         <Select value={selectedFamily} onValueChange={setSelectedFamily}>
           <SelectTrigger className="flex-1" data-testid="select-trojan-family-profile">
-            <SelectValue placeholder="Select Trojan family..." />
+            <SelectValue placeholder={t("trojanAnalyzer.selectFamily")} />
           </SelectTrigger>
           <SelectContent>
             {familiesLoading ? (
-              <div className="p-2 text-xs text-muted-foreground">Loading families...</div>
+              <div className="p-2 text-xs text-muted-foreground">{t("trojanAnalyzer.loadingFamilies")}</div>
             ) : (
               familyList.map((f) => (
                 <SelectItem key={f} value={f}>{f}</SelectItem>
@@ -961,9 +968,9 @@ function ThreatProfileTab() {
           data-testid="button-analyze-profile"
         >
           {isLoading ? (
-            <><Loader2 className="w-4 h-4 me-2 animate-spin" />Analyzing</>
+            <><Loader2 className="w-4 h-4 me-2 animate-spin" />{t("trojanAnalyzer.analyzing")}</>
           ) : (
-            <><Crosshair className="w-4 h-4 me-2" />Analyze</>
+            <><Crosshair className="w-4 h-4 me-2" />{t("trojanAnalyzer.analyze")}</>
           )}
         </Button>
       </div>
@@ -972,7 +979,7 @@ function ThreatProfileTab() {
         <Card>
           <CardContent className="p-6 flex items-center justify-center gap-3">
             <Loader2 className="w-5 h-5 animate-spin text-primary" />
-            <span className="text-xs text-muted-foreground font-mono">Building threat profile for {selectedFamily}...</span>
+            <span className="text-xs text-muted-foreground font-mono">{t("trojanAnalyzer.buildingProfile", { family: selectedFamily })}</span>
           </CardContent>
         </Card>
       )}
@@ -982,7 +989,7 @@ function ThreatProfileTab() {
           <CardHeader className="pb-2 pt-3 px-4">
             <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
               <Users className="w-4 h-4 text-severity-critical" />
-              Threat Actor Attribution
+              {t("trojanAnalyzer.threatActorAttribution")}
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-3">
@@ -991,11 +998,11 @@ function ThreatProfileTab() {
                 <p className="text-sm font-semibold" data-testid="text-actor-name">{actor.actor.name}</p>
                 <p className="text-[11px] text-muted-foreground">{actor.actor.origin}</p>
               </div>
-              <Badge variant="outline" className="text-[10px]" data-testid="text-actor-since">Active since {actor.actor.activeSince}</Badge>
+              <Badge variant="outline" className="text-[10px]" data-testid="text-actor-since">{t("trojanAnalyzer.activeSince", { year: actor.actor.activeSince })}</Badge>
             </div>
             <p className="text-xs text-muted-foreground" data-testid="text-actor-description">{actor.actor.description}</p>
             <div className="space-y-1.5">
-              <span className="text-[10px] text-muted-foreground font-medium">Aliases</span>
+              <span className="text-[10px] text-muted-foreground font-medium">{t("trojanAnalyzer.aliases")}</span>
               <div className="flex flex-wrap gap-1">
                 {actor.actor.aliases.map((alias: string, i: number) => (
                   <Badge key={i} variant="secondary" className="text-[10px]">{alias}</Badge>
@@ -1003,7 +1010,7 @@ function ThreatProfileTab() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <span className="text-[10px] text-muted-foreground font-medium">Target Sectors</span>
+              <span className="text-[10px] text-muted-foreground font-medium">{t("trojanAnalyzer.targetSectors")}</span>
               <div className="flex flex-wrap gap-1">
                 {actor.actor.targetSectors.map((sector: string, i: number) => (
                   <Badge key={i} variant="outline" className="text-[10px]">{sector}</Badge>
@@ -1019,7 +1026,7 @@ function ThreatProfileTab() {
           <CardHeader className="pb-2 pt-3 px-4">
             <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
               <Target className="w-4 h-4 text-severity-high" />
-              Cyber Kill Chain Mapping
+              {t("trojanAnalyzer.cyberKillChain")}
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
@@ -1038,13 +1045,13 @@ function ThreatProfileTab() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-semibold">{phase.phase}</span>
-                      {phase.active && <Badge variant="secondary" className="text-[9px]">Active</Badge>}
+                      {phase.active && <Badge variant="secondary" className="text-[9px]">{t("trojanAnalyzer.active")}</Badge>}
                     </div>
                     <p className="text-[10px] text-muted-foreground">{phase.description}</p>
                     {phase.techniques.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {phase.techniques.map((t: string, j: number) => (
-                          <span key={j} className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{t}</span>
+                        {phase.techniques.map((tech: string, j: number) => (
+                          <span key={j} className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{tech}</span>
                         ))}
                       </div>
                     )}
@@ -1061,9 +1068,9 @@ function ThreatProfileTab() {
           <CardHeader className="pb-2 pt-3 px-4">
             <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
               <Grid3X3 className="w-4 h-4 text-primary" />
-              MITRE ATT&CK Heatmap
+              {t("trojanAnalyzer.mitreHeatmap")}
               <span className="text-[10px] text-muted-foreground font-normal ml-auto">
-                {heatmap.heatmap.coveredTactics}/{heatmap.heatmap.totalTactics} tactics covered
+                {t("trojanAnalyzer.tacticsCovered", { covered: heatmap.heatmap.coveredTactics, total: heatmap.heatmap.totalTactics })}
               </span>
             </CardTitle>
           </CardHeader>
@@ -1101,13 +1108,13 @@ function ThreatProfileTab() {
             </div>
             <div className="flex items-center gap-4 mt-3 pt-3 border-t flex-wrap">
               <span className="text-[10px] text-muted-foreground" data-testid="text-heatmap-total">
-                Total Techniques: <span className="font-semibold text-foreground">{heatmap.heatmap.totalTechniques}</span>
+                {t("trojanAnalyzer.totalTechniques")}: <span className="font-semibold text-foreground">{heatmap.heatmap.totalTechniques}</span>
               </span>
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                <span>Coverage:</span>
-                <span className="inline-block w-3 h-3 rounded-sm bg-primary" /> Low
-                <span className="inline-block w-3 h-3 rounded-sm bg-severity-medium" /> Medium
-                <span className="inline-block w-3 h-3 rounded-sm bg-severity-critical" /> High
+                <span>{t("trojanAnalyzer.coverage")}:</span>
+                <span className="inline-block w-3 h-3 rounded-sm bg-primary" /> {t("trojanAnalyzer.coverageLow")}
+                <span className="inline-block w-3 h-3 rounded-sm bg-severity-medium" /> {t("trojanAnalyzer.coverageMedium")}
+                <span className="inline-block w-3 h-3 rounded-sm bg-severity-critical" /> {t("trojanAnalyzer.coverageHigh")}
               </div>
             </div>
           </CardContent>
@@ -1118,7 +1125,7 @@ function ThreatProfileTab() {
         <Card>
           <CardContent className="p-4 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-severity-medium" />
-            <span className="text-xs text-muted-foreground">Select a family and click Analyze to view threat profile.</span>
+            <span className="text-xs text-muted-foreground">{t("trojanAnalyzer.selectAndAnalyze")}</span>
           </CardContent>
         </Card>
       )}
@@ -1127,37 +1134,38 @@ function ThreatProfileTab() {
 }
 
 export default function TrojanAnalyzerPage() {
+  const { t } = useTranslation();
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-5xl mx-auto">
       <div>
         <h1 className="text-lg font-semibold flex items-center gap-2" data-testid="text-trojan-analyzer-title">
           <Bug className="w-5 h-5 text-primary" />
-          Trojan Analyzer
+          {t("trojanAnalyzer.title")}
         </h1>
         <p className="text-xs text-muted-foreground mt-1">
-          Real malware analysis — hash lookup, behavioral classification, detection rules, IOC extraction, MITRE mapping & threat actor attribution
+          {t("trojanAnalyzer.subtitle")}
         </p>
       </div>
 
       <Tabs defaultValue="hash-lookup" className="space-y-4">
         <TabsList className="flex flex-wrap w-full gap-1">
           <TabsTrigger value="hash-lookup" data-testid="tab-hash-lookup" className="text-xs flex-1 min-w-0">
-            <Search className="w-3.5 h-3.5 me-1.5" />Hash
+            <Search className="w-3.5 h-3.5 me-1.5" />{t("trojanAnalyzer.tabHash")}
           </TabsTrigger>
           <TabsTrigger value="behavior" data-testid="tab-behavior" className="text-xs flex-1 min-w-0">
-            <Activity className="w-3.5 h-3.5 me-1.5" />Behavior
+            <Activity className="w-3.5 h-3.5 me-1.5" />{t("trojanAnalyzer.tabBehavior")}
           </TabsTrigger>
           <TabsTrigger value="detection-rules" data-testid="tab-detection-rules" className="text-xs flex-1 min-w-0">
-            <FileCode className="w-3.5 h-3.5 me-1.5" />Rules
+            <FileCode className="w-3.5 h-3.5 me-1.5" />{t("trojanAnalyzer.tabRules")}
           </TabsTrigger>
           <TabsTrigger value="ioc-explorer" data-testid="tab-ioc-explorer" className="text-xs flex-1 min-w-0">
-            <Database className="w-3.5 h-3.5 me-1.5" />IOCs
+            <Database className="w-3.5 h-3.5 me-1.5" />{t("trojanAnalyzer.tabIOCs")}
           </TabsTrigger>
           <TabsTrigger value="ioc-extractor" data-testid="tab-ioc-extractor" className="text-xs flex-1 min-w-0">
-            <Target className="w-3.5 h-3.5 me-1.5" />Extract
+            <Target className="w-3.5 h-3.5 me-1.5" />{t("trojanAnalyzer.tabExtract")}
           </TabsTrigger>
           <TabsTrigger value="threat-profile" data-testid="tab-threat-profile" className="text-xs flex-1 min-w-0">
-            <Crosshair className="w-3.5 h-3.5 me-1.5" />Profile
+            <Crosshair className="w-3.5 h-3.5 me-1.5" />{t("trojanAnalyzer.tabProfile")}
           </TabsTrigger>
         </TabsList>
 

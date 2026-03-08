@@ -13,20 +13,20 @@ import { Loader2, Monitor, Cpu, MemoryStick, Wifi, WifiOff, Terminal, Send, Refr
 import { useLocation } from "wouter";
 
 const COMMANDS = [
-  { value: "run_system_scan", label: "System Scan" },
-  { value: "security_scan", label: "Security Audit" },
-  { value: "ping", label: "Ping Test" },
-  { value: "process_list", label: "List Processes" },
-  { value: "service_list", label: "List Services" },
-  { value: "wifi_list", label: "WiFi Networks" },
-  { value: "network_scan", label: "Network Scan" },
-  { value: "disk_usage", label: "Disk Usage" },
-  { value: "packet_capture", label: "Packet Capture" },
-  { value: "arp_monitor", label: "ARP Monitor" },
-  { value: "rogue_scan", label: "Rogue Scan" },
-  { value: "bandwidth_stats", label: "Bandwidth Stats" },
-  { value: "vuln_scan", label: "Vuln Scan" },
-  { value: "file_scan", label: "File Scan" },
+  { value: "run_system_scan", labelKey: "endpoints.cmdSystemScan" },
+  { value: "security_scan", labelKey: "endpoints.cmdSecurityAudit" },
+  { value: "ping", labelKey: "endpoints.cmdPingTest" },
+  { value: "process_list", labelKey: "endpoints.cmdListProcesses" },
+  { value: "service_list", labelKey: "endpoints.cmdListServices" },
+  { value: "wifi_list", labelKey: "endpoints.cmdWifiNetworks" },
+  { value: "network_scan", labelKey: "endpoints.cmdNetworkScan" },
+  { value: "disk_usage", labelKey: "endpoints.cmdDiskUsage" },
+  { value: "packet_capture", labelKey: "endpoints.cmdPacketCapture" },
+  { value: "arp_monitor", labelKey: "endpoints.cmdArpMonitor" },
+  { value: "rogue_scan", labelKey: "endpoints.cmdRogueScan" },
+  { value: "bandwidth_stats", labelKey: "endpoints.cmdBandwidthStats" },
+  { value: "vuln_scan", labelKey: "endpoints.cmdVulnScan" },
+  { value: "file_scan", labelKey: "endpoints.cmdFileScan" },
 ];
 
 function UsageBar({ label, value, max, unit, color }: { label: string; value: number; max?: number; unit?: string; color?: string }) {
@@ -90,13 +90,14 @@ function parseProcessString(proc: string): { name: string; cpu: string; mem: str
 }
 
 function SystemInfoPanel({ telemetry, agent }: { telemetry: any; agent: any }) {
+  const { t } = useTranslation();
   if (!telemetry) {
     return (
       <Card data-testid="card-system-info-empty">
         <CardContent className="pt-6 text-center text-muted-foreground">
           <Info className="w-8 h-8 mx-auto mb-2 opacity-50" />
-          <p>No detailed telemetry data available yet.</p>
-          <p className="text-xs mt-1">Telemetry data will appear once the agent sends system information.</p>
+          <p>{t("endpoints.noTelemetry")}</p>
+          <p className="text-xs mt-1">{t("endpoints.telemetryHint")}</p>
         </CardContent>
       </Card>
     );
@@ -116,25 +117,25 @@ function SystemInfoPanel({ telemetry, agent }: { telemetry: any; agent: any }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card data-testid="card-sysinfo-hostname">
           <CardContent className="pt-4 pb-3">
-            <p className="text-xs text-muted-foreground">Hostname</p>
+            <p className="text-xs text-muted-foreground">{t("endpoints.hostname")}</p>
             <p className="font-medium text-sm truncate" data-testid="text-sysinfo-hostname">{telemetry.hostname || agent.hostname}</p>
           </CardContent>
         </Card>
         <Card data-testid="card-sysinfo-os">
           <CardContent className="pt-4 pb-3">
-            <p className="text-xs text-muted-foreground">OS / Arch</p>
+            <p className="text-xs text-muted-foreground">{t("endpoints.osArch")}</p>
             <p className="font-medium text-sm truncate" data-testid="text-sysinfo-os">{telemetry.os || agent.os || "Unknown"}</p>
           </CardContent>
         </Card>
         <Card data-testid="card-sysinfo-uptime">
           <CardContent className="pt-4 pb-3">
-            <p className="text-xs text-muted-foreground">Uptime</p>
+            <p className="text-xs text-muted-foreground">{t("endpoints.uptime")}</p>
             <p className="font-medium text-sm" data-testid="text-sysinfo-uptime">{telemetry.uptime || "N/A"}</p>
           </CardContent>
         </Card>
         <Card data-testid="card-sysinfo-version">
           <CardContent className="pt-4 pb-3">
-            <p className="text-xs text-muted-foreground">Agent Version</p>
+            <p className="text-xs text-muted-foreground">{t("endpoints.agentVersion")}</p>
             <p className="font-medium text-sm" data-testid="text-sysinfo-version">{telemetry.agentVersion || "N/A"}</p>
           </CardContent>
         </Card>
@@ -145,8 +146,8 @@ function SystemInfoPanel({ telemetry, agent }: { telemetry: any; agent: any }) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <Cpu className="w-4 h-4" />
-              CPU Usage
-              {telemetry.cpus && <Badge variant="outline" className="text-xs">{telemetry.cpus} cores</Badge>}
+              {t("endpoints.cpuUsage")}
+              {telemetry.cpus && <Badge variant="outline" className="text-xs">{telemetry.cpus} {t("endpoints.cores")}</Badge>}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -158,7 +159,7 @@ function SystemInfoPanel({ telemetry, agent }: { telemetry: any; agent: any }) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <MemoryStick className="w-4 h-4" />
-              Memory Usage
+              {t("endpoints.memoryUsage")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -179,7 +180,7 @@ function SystemInfoPanel({ telemetry, agent }: { telemetry: any; agent: any }) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <HardDrive className="w-4 h-4" />
-              Disk Usage
+              {t("endpoints.diskUsage")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -202,24 +203,24 @@ function SystemInfoPanel({ telemetry, agent }: { telemetry: any; agent: any }) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <Globe className="w-4 h-4" />
-              Network
+              {t("endpoints.network")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Local IP</span>
+                <span className="text-muted-foreground">{t("endpoints.localIp")}</span>
                 <span className="font-mono font-medium" data-testid="text-local-ip">{telemetry.localIP || agent.ip || "N/A"}</span>
               </div>
               {netConnections != null && (
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Active Connections</span>
+                  <span className="text-muted-foreground">{t("endpoints.activeConnections")}</span>
                   <Badge variant="outline" data-testid="text-net-connections">{netConnections}</Badge>
                 </div>
               )}
               {telemetry.arch && (
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Architecture</span>
+                  <span className="text-muted-foreground">{t("endpoints.architecture")}</span>
                   <span className="font-medium" data-testid="text-arch">{telemetry.arch}</span>
                 </div>
               )}
@@ -231,31 +232,31 @@ function SystemInfoPanel({ telemetry, agent }: { telemetry: any; agent: any }) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <Server className="w-4 h-4" />
-              Agent Details
+              {t("endpoints.agentDetails")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Agent ID</span>
+                <span className="text-muted-foreground">{t("endpoints.agentId")}</span>
                 <span className="font-mono font-medium" data-testid="text-agent-id">{agent.id}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Run Mode</span>
+                <span className="text-muted-foreground">{t("endpoints.runMode")}</span>
                 <Badge
                   variant={telemetry.runMode === "service" ? "default" : "secondary"}
                   data-testid="badge-run-mode"
                 >
-                  {telemetry.runMode === "service" ? "Windows Service" : telemetry.runMode === "tray" ? "System Tray" : telemetry.runMode === "terminal" ? "Terminal" : telemetry.runMode || "Unknown"}
+                  {telemetry.runMode === "service" ? t("endpoints.runModeService") : telemetry.runMode === "tray" ? t("endpoints.runModeTray") : telemetry.runMode === "terminal" ? t("endpoints.runModeTerminal") : telemetry.runMode || "Unknown"}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Last Seen</span>
+                <span className="text-muted-foreground">{t("endpoints.lastSeen")}</span>
                 <span className="font-medium" data-testid="text-last-seen">{agent.lastSeen ? new Date(agent.lastSeen).toLocaleString() : "N/A"}</span>
               </div>
               {telemetry.lastUpdated && (
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Telemetry Updated</span>
+                  <span className="text-muted-foreground">{t("endpoints.telemetryUpdated")}</span>
                   <span className="text-xs text-muted-foreground" data-testid="text-telemetry-updated">{new Date(telemetry.lastUpdated).toLocaleString()}</span>
                 </div>
               )}
@@ -269,7 +270,7 @@ function SystemInfoPanel({ telemetry, agent }: { telemetry: any; agent: any }) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <Layers className="w-4 h-4" />
-              Top Processes
+              {t("endpoints.topProcesses")}
               <Badge variant="outline" className="text-xs">{topProcesses.length}</Badge>
             </CardTitle>
           </CardHeader>
@@ -278,9 +279,9 @@ function SystemInfoPanel({ telemetry, agent }: { telemetry: any; agent: any }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-1.5 pe-4 font-medium">Process</th>
-                    <th className="text-right py-1.5 px-2 font-medium">CPU</th>
-                    <th className="text-right py-1.5 ps-2 font-medium">Memory</th>
+                    <th className="text-left py-1.5 pe-4 font-medium">{t("endpoints.process")}</th>
+                    <th className="text-right py-1.5 px-2 font-medium">{t("endpoints.cpu")}</th>
+                    <th className="text-right py-1.5 ps-2 font-medium">{t("endpoints.memory")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -324,6 +325,7 @@ function formatBytes(b: number): string {
 }
 
 function FileScanResults({ commands }: { commands: any[] | undefined }) {
+  const { t } = useTranslation();
   const fileScanCommands = commands?.filter(c => c.command === "file_scan") || [];
 
   if (fileScanCommands.length === 0) {
@@ -331,8 +333,8 @@ function FileScanResults({ commands }: { commands: any[] | undefined }) {
       <Card data-testid="card-no-file-scans">
         <CardContent className="pt-6 text-center text-muted-foreground">
           <FileSearch className="w-8 h-8 mx-auto mb-2 opacity-50" />
-          <p>No file scans have been run yet.</p>
-          <p className="text-xs mt-1">Use the "File Scan" button above to scan for suspicious files.</p>
+          <p>{t("endpoints.noFileScans")}</p>
+          <p className="text-xs mt-1">{t("endpoints.fileScanHint")}</p>
         </CardContent>
       </Card>
     );
@@ -351,7 +353,7 @@ function FileScanResults({ commands }: { commands: any[] | undefined }) {
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <FileSearch className="w-4 h-4" />
-                  File Scan
+                  {t("endpoints.fileScan")}
                   <span className="text-xs text-muted-foreground font-normal">
                     {new Date(cmd.createdAt).toLocaleString()}
                   </span>
@@ -366,13 +368,13 @@ function FileScanResults({ commands }: { commands: any[] | undefined }) {
               {isPending && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Scan in progress...
+                  {t("endpoints.scanInProgress")}
                 </div>
               )}
               {isFailed && (
                 <div className="flex items-center gap-2 text-sm text-destructive">
                   <AlertTriangle className="w-4 h-4" />
-                  Scan failed. Check agent logs for details.
+                  {t("endpoints.scanFailed")}
                 </div>
               )}
               {report && (
@@ -380,29 +382,29 @@ function FileScanResults({ commands }: { commands: any[] | undefined }) {
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     <div className="text-center p-2 bg-muted/30 rounded" data-testid="stat-total-files">
                       <p className="text-lg font-bold">{report.totalFiles?.toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">Total Files</p>
+                      <p className="text-xs text-muted-foreground">{t("endpoints.totalFiles")}</p>
                     </div>
                     <div className="text-center p-2 bg-muted/30 rounded" data-testid="stat-executables">
                       <p className="text-lg font-bold">{report.executables?.toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">Executables</p>
+                      <p className="text-xs text-muted-foreground">{t("endpoints.executables")}</p>
                     </div>
                     <div className="text-center p-2 bg-muted/30 rounded" data-testid="stat-recent">
                       <p className="text-lg font-bold">{report.recentFiles?.toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">Recent (24h)</p>
+                      <p className="text-xs text-muted-foreground">{t("endpoints.recent24h")}</p>
                     </div>
                     <div className={`text-center p-2 rounded ${report.suspiciousFiles > 0 ? "bg-destructive/10" : "bg-muted/30"}`} data-testid="stat-suspicious">
                       <p className={`text-lg font-bold ${report.suspiciousFiles > 0 ? "text-destructive" : ""}`}>{report.suspiciousFiles}</p>
-                      <p className="text-xs text-muted-foreground">Suspicious</p>
+                      <p className="text-xs text-muted-foreground">{t("endpoints.suspicious")}</p>
                     </div>
                     <div className="text-center p-2 bg-muted/30 rounded" data-testid="stat-duration">
                       <p className="text-lg font-bold">{report.duration || "N/A"}</p>
-                      <p className="text-xs text-muted-foreground">Duration</p>
+                      <p className="text-xs text-muted-foreground">{t("endpoints.duration")}</p>
                     </div>
                   </div>
 
                   {report.scannedDirs && report.scannedDirs.length > 0 && (
                     <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-1">Scanned Directories</p>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">{t("endpoints.scannedDirectories")}</p>
                       <div className="flex flex-wrap gap-1">
                         {report.scannedDirs.map((dir: string, i: number) => (
                           <Badge key={i} variant="outline" className="text-xs font-mono" data-testid={`badge-dir-${i}`}>{dir}</Badge>
@@ -415,7 +417,7 @@ function FileScanResults({ commands }: { commands: any[] | undefined }) {
                     <div>
                       <p className="text-sm font-medium flex items-center gap-1 mb-2">
                         <AlertTriangle className="w-4 h-4 text-destructive" />
-                        Suspicious Files
+                        {t("endpoints.suspiciousFiles")}
                       </p>
                       <div className="space-y-1">
                         {report.files.filter((f: any) => f.isSuspicious).map((file: any, i: number) => (
@@ -437,7 +439,7 @@ function FileScanResults({ commands }: { commands: any[] | undefined }) {
                     <div>
                       <p className="text-sm font-medium flex items-center gap-1 mb-2">
                         <Clock className="w-4 h-4" />
-                        Recently Modified Executables (24h)
+                        {t("endpoints.recentModifiedExe")}
                       </p>
                       <div className="space-y-1 max-h-48 overflow-y-auto">
                         {report.files.filter((f: any) => f.isRecent && !f.isSuspicious).slice(0, 20).map((file: any, i: number) => (
@@ -458,7 +460,7 @@ function FileScanResults({ commands }: { commands: any[] | undefined }) {
                   {report.suspiciousFiles === 0 && (
                     <div className="flex items-center gap-2 p-3 bg-green-500/10 rounded text-sm" data-testid="text-scan-clean">
                       <Shield className="w-4 h-4 text-green-600" />
-                      <span>No suspicious files detected. System appears clean.</span>
+                      <span>{t("endpoints.systemClean")}</span>
                     </div>
                   )}
                 </div>
@@ -516,11 +518,11 @@ export default function Endpoints() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Command sent" });
+      toast({ title: t("endpoints.commandSent") });
       queryClient.invalidateQueries({ queryKey: ["/api/agent", selectedAgent, "commands"] });
     },
     onError: () => {
-      toast({ title: "Failed to send command", variant: "destructive" });
+      toast({ title: t("endpoints.commandSendFailed"), variant: "destructive" });
     },
   });
 
@@ -550,12 +552,12 @@ export default function Endpoints() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-endpoints-title">Endpoint Agents</h1>
-          <p className="text-muted-foreground text-sm">{agents?.length || 0} agents registered</p>
+          <h1 className="text-2xl font-bold" data-testid="text-endpoints-title">{t("endpoints.title")}</h1>
+          <p className="text-muted-foreground text-sm">{t("endpoints.agentsRegistered", { count: agents?.length || 0 })}</p>
         </div>
         <Button onClick={() => navigate("/download-agent")} data-testid="button-download-agent">
           <Monitor className="w-4 h-4 me-2" />
-          Deploy New Agent
+          {t("endpoints.deployNewAgent")}
         </Button>
       </div>
 
@@ -564,7 +566,7 @@ export default function Endpoints() {
           {agents?.length === 0 && (
             <Card data-testid="card-no-agents">
               <CardContent className="pt-6 text-center text-muted-foreground">
-                No agents registered yet. Deploy an agent to get started.
+                {t("endpoints.noAgents")}
               </CardContent>
             </Card>
           )}
@@ -588,7 +590,7 @@ export default function Endpoints() {
                   <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{timeSince(agent.lastSeen)}</span>
                   {agent.telemetry?.runMode && (
                     <Badge variant="outline" className="text-xs" data-testid={`badge-runmode-${agent.id}`}>
-                      {agent.telemetry.runMode === "service" ? "Service" : agent.telemetry.runMode === "tray" ? "Tray" : "Terminal"}
+                      {agent.telemetry.runMode === "service" ? t("endpoints.runModeService") : agent.telemetry.runMode === "tray" ? t("endpoints.runModeTray") : t("endpoints.runModeTerminal")}
                     </Badge>
                   )}
                 </div>
@@ -622,11 +624,11 @@ export default function Endpoints() {
                         data-testid="button-file-scan"
                       >
                         <FileSearch className="w-4 h-4 me-1" />
-                        File Scan
+                        {t("endpoints.fileScan")}
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => navigate(`/endpoints/${selectedAgent}/terminal`)} data-testid="button-open-terminal">
                         <Terminal className="w-4 h-4 me-1" />
-                        Terminal
+                        {t("endpoints.terminal")}
                       </Button>
                       <Badge className={agentDetail.status === "online" ? "bg-green-600" : "bg-red-600"}>
                         {agentDetail.status === "online" ? <Wifi className="w-3 h-3 me-1" /> : <WifiOff className="w-3 h-3 me-1" />}
@@ -647,10 +649,10 @@ export default function Endpoints() {
 
               <Tabs value={activeTab} onValueChange={setActiveTab} data-testid="tabs-agent-detail">
                 <TabsList className="w-full justify-start flex-wrap">
-                  <TabsTrigger value="overview" data-testid="tab-overview">System Info</TabsTrigger>
-                  <TabsTrigger value="commands" data-testid="tab-commands">Commands</TabsTrigger>
-                  <TabsTrigger value="file-scans" data-testid="tab-file-scans">File Scans</TabsTrigger>
-                  <TabsTrigger value="bandwidth" data-testid="tab-bandwidth">Bandwidth</TabsTrigger>
+                  <TabsTrigger value="overview" data-testid="tab-overview">{t("endpoints.tabSystemInfo")}</TabsTrigger>
+                  <TabsTrigger value="commands" data-testid="tab-commands">{t("endpoints.tabCommands")}</TabsTrigger>
+                  <TabsTrigger value="file-scans" data-testid="tab-file-scans">{t("endpoints.tabFileScans")}</TabsTrigger>
+                  <TabsTrigger value="bandwidth" data-testid="tab-bandwidth">{t("endpoints.tabBandwidth")}</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="overview" className="mt-4">
@@ -660,22 +662,22 @@ export default function Endpoints() {
                 <TabsContent value="commands" className="mt-4 space-y-4">
                   <Card data-testid="card-send-command">
                     <CardHeader>
-                      <CardTitle className="text-lg">Send Command</CardTitle>
+                      <CardTitle className="text-lg">{t("endpoints.sendCommand")}</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="flex gap-2">
                         <Select value={command} onValueChange={setCommand}>
                           <SelectTrigger className="w-[200px]" data-testid="select-command">
-                            <SelectValue placeholder="Select command" />
+                            <SelectValue placeholder={t("endpoints.selectCommand")} />
                           </SelectTrigger>
                           <SelectContent>
                             {COMMANDS.map((c) => (
-                              <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                              <SelectItem key={c.value} value={c.value}>{t(c.labelKey)}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                         <Input
-                          placeholder="Parameters (optional)"
+                          placeholder={t("endpoints.paramsOptional")}
                           value={params}
                           onChange={(e) => setParams(e.target.value)}
                           className="flex-1"
@@ -695,7 +697,7 @@ export default function Endpoints() {
                   <Card data-testid="card-command-history">
                     <CardHeader>
                       <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-lg">Command History</CardTitle>
+                        <CardTitle className="text-lg">{t("endpoints.commandHistory")}</CardTitle>
                         <Button size="sm" variant="ghost" onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/agent", selectedAgent, "commands"] })} data-testid="button-refresh-commands">
                           <RefreshCw className="w-4 h-4" />
                         </Button>
@@ -703,7 +705,7 @@ export default function Endpoints() {
                     </CardHeader>
                     <CardContent>
                       {!commands?.length ? (
-                        <p className="text-muted-foreground text-sm text-center py-4">No commands sent yet</p>
+                        <p className="text-muted-foreground text-sm text-center py-4">{t("endpoints.noCommandsSent")}</p>
                       ) : (
                         <div className="space-y-2 max-h-80 overflow-y-auto">
                           {commands.map((cmd: any) => (
@@ -736,7 +738,7 @@ export default function Endpoints() {
                       <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
                           <Activity className="w-4 h-4" />
-                          Bandwidth Monitor
+                          {t("endpoints.bandwidthMonitor")}
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
@@ -770,7 +772,7 @@ export default function Endpoints() {
                   ) : (
                     <Card>
                       <CardContent className="pt-6 text-center text-muted-foreground">
-                        No bandwidth data available yet. Send a "Bandwidth Stats" command to collect data.
+                        {t("endpoints.noBandwidthData")}
                       </CardContent>
                     </Card>
                   )}
@@ -780,7 +782,7 @@ export default function Endpoints() {
           ) : (
             <Card>
               <CardContent className="pt-6 text-center text-muted-foreground">
-                Select an agent from the list to view details
+                {t("endpoints.selectAgent")}
               </CardContent>
             </Card>
           )}

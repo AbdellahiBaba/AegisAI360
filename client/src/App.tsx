@@ -40,6 +40,9 @@ import PricingPage from "@/pages/public/pricing";
 import PrivacyPage from "@/pages/public/privacy";
 import TermsPage from "@/pages/public/terms";
 import RefundPage from "@/pages/public/refund";
+import ContactPage from "@/pages/public/contact";
+import FaqPage from "@/pages/public/faq";
+import SecurityPage from "@/pages/public/security";
 import LandingPage from "@/pages/landing";
 import HashToolsPage from "@/pages/hash-tools";
 import ChoosePlan from "@/pages/choose-plan";
@@ -203,7 +206,7 @@ function AuthenticatedApp() {
   return <AppLayout />;
 }
 
-const PUBLIC_ROUTES = ["/about", "/features", "/pricing", "/privacy", "/terms", "/refund"];
+const PUBLIC_ROUTES = ["/about", "/features", "/pricing", "/privacy", "/terms", "/refund", "/contact", "/faq", "/security"];
 
 function PublicRouter() {
   return (
@@ -214,6 +217,9 @@ function PublicRouter() {
       <Route path="/privacy" component={PrivacyPage} />
       <Route path="/terms" component={TermsPage} />
       <Route path="/refund" component={RefundPage} />
+      <Route path="/contact" component={ContactPage} />
+      <Route path="/faq" component={FaqPage} />
+      <Route path="/security" component={SecurityPage} />
     </Switch>
   );
 }

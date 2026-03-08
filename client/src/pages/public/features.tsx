@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { PublicLayout } from "@/components/public-layout";
 import { Card } from "@/components/ui/card";
+import { CyberRadar } from "@/components/cyber-network";
 import {
   Brain, Activity, ShieldCheck, Target, Siren, Globe,
   Monitor, Scan, Mail, Search, Key, Wifi,
@@ -11,160 +12,50 @@ import {
 
 const featureCategories = [
   {
-    category: "Threat Detection & Intelligence",
+    categoryKey: "feat.catThreatDetection",
     features: [
-      {
-        icon: Brain,
-        title: "AI Threat Analysis",
-        desc: "Advanced machine learning models analyze security events in real-time, providing expert-level threat assessment, behavioral pattern recognition, and actionable recommendations.",
-        capabilities: ["Real-time event classification", "Behavioral anomaly detection", "Natural language threat queries", "Automated severity scoring"],
-      },
-      {
-        icon: Activity,
-        title: "Real-Time Monitoring",
-        desc: "Live security event feeds via WebSocket connections with instant alerting, customizable dashboards, and complete situational awareness across your infrastructure.",
-        capabilities: ["WebSocket live feeds", "Custom alert rules", "Severity-based filtering", "24/7 continuous monitoring"],
-      },
-      {
-        icon: Target,
-        title: "MITRE ATT&CK Mapping",
-        desc: "Full tactical heatmap coverage across the MITRE ATT&CK framework. Track adversary techniques, measure detection gaps, and prioritize defensive improvements.",
-        capabilities: ["Technique coverage heatmap", "Detection gap analysis", "Tactic-level scoring", "Framework alignment reports"],
-      },
-      {
-        icon: Globe,
-        title: "Threat Intelligence Feeds",
-        desc: "Multi-source threat intelligence from AbuseIPDB, OTX AlienVault, MalwareBazaar, Google Safe Browsing, and URLScan with automated IOC correlation.",
-        capabilities: ["5+ integrated threat feeds", "Automated IOC enrichment", "Threat scoring & correlation", "Bulk indicator import"],
-      },
-      {
-        icon: Eye,
-        title: "Dark Web Monitoring",
-        desc: "Continuous surveillance of dark web marketplaces, forums, and paste sites for leaked credentials, exposed data, and threat actor mentions.",
-        capabilities: ["Credential leak detection", "Brand mention tracking", "Data exposure alerts", "Threat actor monitoring"],
-      },
-      {
-        icon: AlertTriangle,
-        title: "Threat Simulation",
-        desc: "Simulate ransomware, phishing, supply chain attacks, insider threats, and zero-day exploits to validate detection and response capabilities.",
-        capabilities: ["Ransomware simulation", "Phishing campaign tests", "Supply chain scenarios", "MITRE-mapped exercises"],
-      },
+      { icon: Brain, titleKey: "feat.aiThreatTitle", descKey: "feat.aiThreatDesc", capKeys: ["feat.aiThreatC1", "feat.aiThreatC2", "feat.aiThreatC3", "feat.aiThreatC4"] },
+      { icon: Activity, titleKey: "feat.realtimeTitle", descKey: "feat.realtimeDesc", capKeys: ["feat.realtimeC1", "feat.realtimeC2", "feat.realtimeC3", "feat.realtimeC4"] },
+      { icon: Target, titleKey: "feat.mitreTitle", descKey: "feat.mitreDesc", capKeys: ["feat.mitreC1", "feat.mitreC2", "feat.mitreC3", "feat.mitreC4"] },
+      { icon: Globe, titleKey: "feat.intelTitle", descKey: "feat.intelDesc", capKeys: ["feat.intelC1", "feat.intelC2", "feat.intelC3", "feat.intelC4"] },
+      { icon: Eye, titleKey: "feat.darkwebTitle", descKey: "feat.darkwebDesc", capKeys: ["feat.darkwebC1", "feat.darkwebC2", "feat.darkwebC3", "feat.darkwebC4"] },
+      { icon: AlertTriangle, titleKey: "feat.simTitle", descKey: "feat.simDesc", capKeys: ["feat.simC1", "feat.simC2", "feat.simC3", "feat.simC4"] },
     ],
   },
   {
-    category: "Offensive Security & Testing",
+    categoryKey: "feat.catOffensiveSec",
     features: [
-      {
-        icon: Scan,
-        title: "Vulnerability Scanner",
-        desc: "Comprehensive web application scanning with OWASP Top 10 mapping, CWE identification, CVSS risk scoring, and detailed remediation guidance.",
-        capabilities: ["OWASP Top 10 coverage", "CWE ID mapping", "CVSS risk scoring", "Config-level remediation"],
-      },
-      {
-        icon: Crosshair,
-        title: "Mobile Penetration Testing",
-        desc: "OWASP Mobile Top 10 compliance checks including insecure storage, authentication flaws, certificate pinning, and platform-specific security assessments.",
-        capabilities: ["OWASP Mobile Top 10", "Permission risk analysis", "Certificate pinning checks", "iOS & Android coverage"],
-      },
-      {
-        icon: Terminal,
-        title: "Payload Generator",
-        desc: "Generate security testing payloads for XSS, SQL injection, SSRF, command injection, and other common vulnerability classes to validate defenses.",
-        capabilities: ["XSS payload variants", "SQLi test strings", "SSRF bypass payloads", "Encoding & obfuscation"],
-      },
-      {
-        icon: Lock,
-        title: "SSL/TLS Inspector",
-        desc: "Certificate chain validation, protocol version analysis, cipher suite auditing, HSTS verification, and expiration monitoring for all domains.",
-        capabilities: ["Certificate chain analysis", "Cipher suite grading", "Protocol version check", "Expiry monitoring"],
-      },
-      {
-        icon: Key,
-        title: "Password Auditor",
-        desc: "Hash identification and cracking simulation, entropy analysis, password policy compliance checking, and organizational credential hygiene assessments.",
-        capabilities: ["Hash type identification", "Dictionary attack testing", "Entropy calculation", "Policy compliance checks"],
-      },
-      {
-        icon: Mail,
-        title: "Email Security Analyzer",
-        desc: "Comprehensive email header analysis with SPF/DKIM/DMARC validation, phishing indicator detection, and malicious attachment identification.",
-        capabilities: ["SPF/DKIM/DMARC checks", "Header forgery detection", "Phishing scoring", "Attachment analysis"],
-      },
+      { icon: Scan, titleKey: "feat.vulnScanTitle", descKey: "feat.vulnScanDesc", capKeys: ["feat.vulnScanC1", "feat.vulnScanC2", "feat.vulnScanC3", "feat.vulnScanC4"] },
+      { icon: Crosshair, titleKey: "feat.mobilePentestTitle", descKey: "feat.mobilePentestDesc", capKeys: ["feat.mobilePentestC1", "feat.mobilePentestC2", "feat.mobilePentestC3", "feat.mobilePentestC4"] },
+      { icon: Terminal, titleKey: "feat.payloadTitle", descKey: "feat.payloadDesc", capKeys: ["feat.payloadC1", "feat.payloadC2", "feat.payloadC3", "feat.payloadC4"] },
+      { icon: Lock, titleKey: "feat.sslTitle", descKey: "feat.sslDesc", capKeys: ["feat.sslC1", "feat.sslC2", "feat.sslC3", "feat.sslC4"] },
+      { icon: Key, titleKey: "feat.passwordTitle", descKey: "feat.passwordDesc", capKeys: ["feat.passwordC1", "feat.passwordC2", "feat.passwordC3", "feat.passwordC4"] },
+      { icon: Mail, titleKey: "feat.emailTitle", descKey: "feat.emailDesc", capKeys: ["feat.emailC1", "feat.emailC2", "feat.emailC3", "feat.emailC4"] },
     ],
   },
   {
-    category: "Endpoint Protection",
+    categoryKey: "feat.catEndpointProt",
     features: [
-      {
-        icon: Monitor,
-        title: "Agent-Based EDR",
-        desc: "Lightweight endpoint agents with real-time process monitoring, registry persistence detection, DLL sideloading checks, and PowerShell script analysis.",
-        capabilities: ["Process watchlist (50+ signatures)", "Registry persistence monitoring", "DLL sideloading detection", "Encoded command detection"],
-      },
-      {
-        icon: ShieldCheck,
-        title: "Auto-Protect System",
-        desc: "One-click protection activation across all endpoints with automated defense mode, real-time policy enforcement, and continuous threat scanning.",
-        capabilities: ["One-click activation", "Auto defense mode", "Policy enforcement", "Continuous scanning"],
-      },
-      {
-        icon: Zap,
-        title: "Automated Response",
-        desc: "Automated response playbooks execute countermeasures in milliseconds — IP blocking, asset isolation, file quarantine, and domain sinkholing.",
-        capabilities: ["Sub-50ms response", "IP/domain blocking", "File quarantine", "Host isolation"],
-      },
-      {
-        icon: Siren,
-        title: "Incident Management",
-        desc: "Structured incident workflow from detection to resolution with forensic timeline, evidence preservation, team assignment, and post-incident reporting.",
-        capabilities: ["Kanban-style workflow", "Forensic timeline", "Team assignment", "Playbook integration"],
-      },
+      { icon: Monitor, titleKey: "feat.edrTitle", descKey: "feat.edrDesc", capKeys: ["feat.edrC1", "feat.edrC2", "feat.edrC3", "feat.edrC4"] },
+      { icon: ShieldCheck, titleKey: "feat.autoProtTitle", descKey: "feat.autoProtDesc", capKeys: ["feat.autoProtC1", "feat.autoProtC2", "feat.autoProtC3", "feat.autoProtC4"] },
+      { icon: Zap, titleKey: "feat.autoRespTitle", descKey: "feat.autoRespDesc", capKeys: ["feat.autoRespC1", "feat.autoRespC2", "feat.autoRespC3", "feat.autoRespC4"] },
+      { icon: Siren, titleKey: "feat.incidentTitle", descKey: "feat.incidentDesc", capKeys: ["feat.incidentC1", "feat.incidentC2", "feat.incidentC3", "feat.incidentC4"] },
     ],
   },
   {
-    category: "Network Security",
+    categoryKey: "feat.catNetworkSec",
     features: [
-      {
-        icon: Wifi,
-        title: "Infrastructure Monitor",
-        desc: "Real-time network infrastructure monitoring with bandwidth analysis, ARP spoofing detection, traffic anomaly alerts, and deep packet inspection.",
-        capabilities: ["Bandwidth monitoring", "ARP spoof detection", "Traffic anomaly alerts", "Packet capture & analysis"],
-      },
-      {
-        icon: Network,
-        title: "Network Topology Map",
-        desc: "Visual network asset inventory with risk assessment, connectivity mapping, and real-time status monitoring for all infrastructure components.",
-        capabilities: ["Asset discovery", "Risk scoring", "Topology visualization", "Status monitoring"],
-      },
+      { icon: Wifi, titleKey: "feat.infraTitle", descKey: "feat.infraDesc", capKeys: ["feat.infraC1", "feat.infraC2", "feat.infraC3", "feat.infraC4"] },
+      { icon: Network, titleKey: "feat.topoTitle", descKey: "feat.topoDesc", capKeys: ["feat.topoC1", "feat.topoC2", "feat.topoC3", "feat.topoC4"] },
     ],
   },
   {
-    category: "Compliance & Reporting",
+    categoryKey: "feat.catComplianceRep",
     features: [
-      {
-        icon: BarChart3,
-        title: "Compliance Dashboard",
-        desc: "Multi-framework compliance mapping for NIST CSF, ISO 27001, PCI-DSS, HIPAA, and SOC 2 with automated evidence collection and continuous gap analysis.",
-        capabilities: ["5+ framework support", "Automated evidence collection", "Gap analysis reports", "Compliance scoring"],
-      },
-      {
-        icon: Search,
-        title: "CVE Database",
-        desc: "Searchable vulnerability database with CVSS scoring, affected product tracking, exploit availability indicators, and automated patch priority recommendations.",
-        capabilities: ["Full CVE search", "CVSS scoring", "Exploit tracking", "Patch prioritization"],
-      },
-      {
-        icon: Bug,
-        title: "Trojan Analyzer",
-        desc: "Deep behavioral analysis with automated IOC extraction, MITRE ATT&CK heatmap visualization, threat actor attribution, and YARA/Sigma rule generation.",
-        capabilities: ["IOC auto-extraction", "MITRE heatmap", "Threat actor attribution", "YARA/Sigma generation"],
-      },
-      {
-        icon: FileSearch,
-        title: "Forensic Timeline",
-        desc: "Comprehensive audit logging and chronological event reconstruction for incident investigation, compliance auditing, and post-breach analysis.",
-        capabilities: ["Chronological reconstruction", "Action-type filtering", "CSV export", "Tamper-proof logging"],
-      },
+      { icon: BarChart3, titleKey: "feat.complianceTitle", descKey: "feat.complianceDesc", capKeys: ["feat.complianceC1", "feat.complianceC2", "feat.complianceC3", "feat.complianceC4"] },
+      { icon: Search, titleKey: "feat.cveTitle", descKey: "feat.cveDesc", capKeys: ["feat.cveC1", "feat.cveC2", "feat.cveC3", "feat.cveC4"] },
+      { icon: Bug, titleKey: "feat.trojanTitle", descKey: "feat.trojanDesc", capKeys: ["feat.trojanC1", "feat.trojanC2", "feat.trojanC3", "feat.trojanC4"] },
+      { icon: FileSearch, titleKey: "feat.forensicTitle", descKey: "feat.forensicDesc", capKeys: ["feat.forensicC1", "feat.forensicC2", "feat.forensicC3", "feat.forensicC4"] },
     ],
   },
 ];
@@ -186,46 +77,60 @@ export default function FeaturesPage() {
         </div>
       </section>
 
-      {featureCategories.map((category) => (
-        <section key={category.category} className="py-12 px-6 border-t border-border/30">
-          <div className="max-w-6xl mx-auto">
-            <div className="mb-8">
-              <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">{category.category}</span>
-              <div className="h-px w-12 bg-primary/30 mt-2" />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {category.features.map((feature) => {
-                const Icon = feature.icon;
-                return (
-                  <Card key={feature.title} className="p-6" data-testid={`card-feature-${feature.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                    <div className="flex items-start gap-4">
-                      <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                        <Icon className="w-5 h-5 text-primary" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-sm font-semibold tracking-wide uppercase mb-2">
-                          {feature.title}
-                        </h3>
-                        <p className="text-xs text-muted-foreground leading-relaxed mb-3">
-                          {feature.desc}
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {feature.capabilities.map((cap) => (
-                            <span
-                              key={cap}
-                              className="text-[10px] font-mono tracking-wider px-2 py-0.5 rounded-md border border-border/50 bg-muted/30 text-muted-foreground"
-                            >
-                              {cap}
-                            </span>
-                          ))}
+      {featureCategories.map((category, catIndex) => (
+        <section key={category.categoryKey}>
+          <div className="py-12 px-6 border-t border-border/30">
+            <div className="max-w-6xl mx-auto">
+              <div className="mb-8">
+                <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">{t(category.categoryKey)}</span>
+                <div className="h-px w-12 bg-primary/30 mt-2" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {category.features.map((feature) => {
+                  const Icon = feature.icon;
+                  return (
+                    <Card key={feature.titleKey} className="p-6" data-testid={`card-feature-${feature.titleKey}`}>
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                          <Icon className="w-5 h-5 text-primary" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-sm font-semibold tracking-wide uppercase mb-2">
+                            {t(feature.titleKey)}
+                          </h3>
+                          <p className="text-xs text-muted-foreground leading-relaxed mb-3">
+                            {t(feature.descKey)}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {feature.capKeys.map((capKey) => (
+                              <span
+                                key={capKey}
+                                className="text-[10px] font-mono tracking-wider px-2 py-0.5 rounded-md border border-border/50 bg-muted/30 text-muted-foreground"
+                              >
+                                {t(capKey)}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </Card>
-                );
-              })}
+                    </Card>
+                  );
+                })}
+              </div>
             </div>
           </div>
+          {catIndex === 0 && (
+            <div className="py-12 px-6 border-t border-border/30">
+              <div className="max-w-md mx-auto">
+                <div className="text-center mb-6">
+                  <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">{t("feat.radarLabel")}</span>
+                  <h3 className="text-lg font-bold mt-2">{t("feat.radarTitle")}</h3>
+                  <p className="text-xs text-muted-foreground mt-1">{t("feat.radarDesc")}</p>
+                </div>
+                <CyberRadar />
+              </div>
+            </div>
+          )}
         </section>
       ))}
     </PublicLayout>

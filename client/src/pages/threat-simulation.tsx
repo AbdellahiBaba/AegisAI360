@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,21 +18,22 @@ interface Scenario {
   mitre: string[];
 }
 
-const SCENARIO_META: Record<string, { icon: typeof Shield; category: string }> = {
-  brute_force: { icon: Lock, category: "Credential Attack" },
-  ransomware: { icon: Skull, category: "Malware" },
-  phishing: { icon: Mail, category: "Social Engineering" },
-  port_scan: { icon: Search, category: "Reconnaissance" },
-  data_exfil: { icon: Database, category: "Data Theft" },
-  apt: { icon: Target, category: "Advanced Threat" },
-  supply_chain: { icon: Package, category: "Supply Chain" },
-  insider_threat: { icon: UserX, category: "Insider Threat" },
-  zero_day: { icon: Bug, category: "Zero-Day" },
-  cryptojacking: { icon: Cpu, category: "Cryptojacking" },
-  ddos: { icon: Wifi, category: "DDoS" },
+const SCENARIO_META: Record<string, { icon: typeof Shield; categoryKey: string }> = {
+  brute_force: { icon: Lock, categoryKey: "threatSimulation.catCredentialAttack" },
+  ransomware: { icon: Skull, categoryKey: "threatSimulation.catMalware" },
+  phishing: { icon: Mail, categoryKey: "threatSimulation.catSocialEngineering" },
+  port_scan: { icon: Search, categoryKey: "threatSimulation.catReconnaissance" },
+  data_exfil: { icon: Database, categoryKey: "threatSimulation.catDataTheft" },
+  apt: { icon: Target, categoryKey: "threatSimulation.catAdvancedThreat" },
+  supply_chain: { icon: Package, categoryKey: "threatSimulation.catSupplyChain" },
+  insider_threat: { icon: UserX, categoryKey: "threatSimulation.catInsiderThreat" },
+  zero_day: { icon: Bug, categoryKey: "threatSimulation.catZeroDay" },
+  cryptojacking: { icon: Cpu, categoryKey: "threatSimulation.catCryptojacking" },
+  ddos: { icon: Wifi, categoryKey: "threatSimulation.catDDoS" },
 };
 
 export default function ThreatSimulationPage() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [runningScenario, setRunningScenario] = useState<string | null>(null);
 
@@ -49,24 +51,24 @@ export default function ThreatSimulationPage() {
     },
     onSuccess: (data, scenarioId) => {
       toast({
-        title: "Simulation Started",
-        description: `${data.scenario} is generating security events...`,
+        title: t("threatSimulation.simulationStarted"),
+        description: t("threatSimulation.simulationStartedDesc", { scenario: data.scenario }),
       });
       setTimeout(() => {
         setRunningScenario(null);
         queryClient.invalidateQueries({ queryKey: ["/api/events"] });
         queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
         toast({
-          title: "Simulation Complete",
-          description: `Events have been generated. Check the Security Events page.`,
+          title: t("threatSimulation.simulationComplete"),
+          description: t("threatSimulation.simulationCompleteDesc"),
         });
       }, 5000);
     },
     onError: () => {
       setRunningScenario(null);
       toast({
-        title: "Simulation Failed",
-        description: "Failed to run the simulation. You may need admin privileges.",
+        title: t("threatSimulation.simulationFailed"),
+        description: t("threatSimulation.simulationFailedDesc"),
         variant: "destructive",
       });
     },
@@ -85,16 +87,16 @@ export default function ThreatSimulationPage() {
       <div className="flex items-center gap-3 flex-wrap">
         <Zap className="w-6 h-6 text-primary" />
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Threat Simulation</h1>
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">{t("threatSimulation.title")}</h1>
           <p className="text-sm text-muted-foreground" data-testid="text-page-description">
-            Run attack emulations to test your security posture and generate realistic security events
+            {t("threatSimulation.subtitle")}
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {scenarios?.map((scenario) => {
-          const meta = SCENARIO_META[scenario.id] || { icon: Shield, category: "Attack" };
+          const meta = SCENARIO_META[scenario.id] || { icon: Shield, categoryKey: "threatSimulation.catAttack" };
           const Icon = meta.icon;
           const isRunning = runningScenario === scenario.id;
 
@@ -110,7 +112,7 @@ export default function ThreatSimulationPage() {
                       {scenario.name}
                     </CardTitle>
                     <Badge variant="secondary" className="mt-1" data-testid={`badge-category-${scenario.id}`}>
-                      {meta.category}
+                      {t(meta.categoryKey)}
                     </Badge>
                   </div>
                 </div>
@@ -122,7 +124,7 @@ export default function ThreatSimulationPage() {
 
                 {scenario.mitre && scenario.mitre.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">MITRE ATT&CK Techniques</p>
+                    <p className="text-xs font-medium text-muted-foreground">{t("threatSimulation.mitreTechniques")}</p>
                     <div className="flex flex-wrap gap-1">
                       {scenario.mitre.map((technique) => (
                         <Badge
@@ -147,12 +149,12 @@ export default function ThreatSimulationPage() {
                   {isRunning ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Running...
+                      {t("threatSimulation.running")}
                     </>
                   ) : (
                     <>
                       <Play className="w-4 h-4" />
-                      Run Simulation
+                      {t("threatSimulation.runSimulation")}
                     </>
                   )}
                 </Button>

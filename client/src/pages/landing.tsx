@@ -93,39 +93,39 @@ const features = [
 ];
 
 const platformCapabilities = [
-  { icon: Monitor, title: "Agent-Based EDR", desc: "Deploy lightweight agents on endpoints for real-time process monitoring, registry persistence detection, and automated threat response." },
-  { icon: ShieldCheck, title: "Auto-Protect", desc: "One-click protection activation across all endpoints with automated defense mode, policy enforcement, and continuous monitoring." },
-  { icon: Bug, title: "Trojan Analysis", desc: "Deep behavioral analysis with IOC extraction, MITRE ATT&CK heatmap mapping, threat actor attribution, and YARA/Sigma rule generation." },
-  { icon: Crosshair, title: "Mobile Pentesting", desc: "OWASP Mobile Top 10 compliance checks, permission analysis, certificate pinning verification, and platform-specific security assessments." },
-  { icon: Lock, title: "SSL Inspector", desc: "Certificate chain validation, protocol version analysis, cipher suite auditing, and expiration monitoring for all your domains." },
-  { icon: Eye, title: "Dark Web Monitor", desc: "Continuous dark web surveillance for leaked credentials, exposed data, and threat actor mentions targeting your organization." },
-  { icon: Mail, title: "Email Analyzer", desc: "Header analysis, SPF/DKIM/DMARC validation, phishing detection, and malicious attachment scanning for suspicious emails." },
-  { icon: Search, title: "CVE Database", desc: "Searchable vulnerability database with CVSS scoring, affected product tracking, and automated patch priority recommendations." },
-  { icon: Key, title: "Password Auditor", desc: "Hash identification, dictionary attack simulation, entropy analysis, and organization-wide password policy compliance checking." },
-  { icon: Wifi, title: "Network Monitor", desc: "Real-time infrastructure monitoring with bandwidth analysis, ARP spoofing detection, traffic anomaly alerts, and packet capture." },
-  { icon: Database, title: "Threat Intelligence", desc: "Multi-source threat feeds from AbuseIPDB, OTX, MalwareBazaar, and URLScan with automated IOC correlation and enrichment." },
-  { icon: BarChart3, title: "Compliance Dashboard", desc: "Framework mapping for NIST, ISO 27001, PCI-DSS, HIPAA, and SOC 2 with automated evidence collection and gap analysis." },
-  { icon: Globe, title: "Honeypot System", desc: "Deploy decoy services to attract and analyze attacker behavior, capture TTPs, and generate actionable threat intelligence." },
-  { icon: Terminal, title: "Payload Generator", desc: "Create security testing payloads for XSS, SQLi, SSRF, and command injection to validate your application defenses." },
-  { icon: AlertTriangle, title: "Threat Simulation", desc: "Simulate ransomware, phishing, supply chain, and insider threat scenarios to test your detection and response capabilities." },
+  { icon: Monitor, titleKey: "landing.capAgentEdr", descKey: "landing.capAgentEdrDesc" },
+  { icon: ShieldCheck, titleKey: "landing.capAutoProtect", descKey: "landing.capAutoProtectDesc" },
+  { icon: Bug, titleKey: "landing.capTrojanAnalysis", descKey: "landing.capTrojanAnalysisDesc" },
+  { icon: Crosshair, titleKey: "landing.capMobilePentest", descKey: "landing.capMobilePentestDesc" },
+  { icon: Lock, titleKey: "landing.capSslInspector", descKey: "landing.capSslInspectorDesc" },
+  { icon: Eye, titleKey: "landing.capDarkWebMonitor", descKey: "landing.capDarkWebMonitorDesc" },
+  { icon: Mail, titleKey: "landing.capEmailAnalyzer", descKey: "landing.capEmailAnalyzerDesc" },
+  { icon: Search, titleKey: "landing.capCveDatabase", descKey: "landing.capCveDatabaseDesc" },
+  { icon: Key, titleKey: "landing.capPasswordAuditor", descKey: "landing.capPasswordAuditorDesc" },
+  { icon: Wifi, titleKey: "landing.capNetworkMonitor", descKey: "landing.capNetworkMonitorDesc" },
+  { icon: Database, titleKey: "landing.capThreatIntel", descKey: "landing.capThreatIntelDesc" },
+  { icon: BarChart3, titleKey: "landing.capComplianceDash", descKey: "landing.capComplianceDashDesc" },
+  { icon: Globe, titleKey: "landing.capHoneypotSystem", descKey: "landing.capHoneypotSystemDesc" },
+  { icon: Terminal, titleKey: "landing.capPayloadGen", descKey: "landing.capPayloadGenDesc" },
+  { icon: AlertTriangle, titleKey: "landing.capThreatSim", descKey: "landing.capThreatSimDesc" },
 ];
 
 const howItWorks = [
-  { step: "01", icon: Download, title: "Deploy Agent", desc: "Install the lightweight AegisAI360 agent on your endpoints. Supports Windows, Linux, and macOS." },
-  { step: "02", icon: Scan, title: "Auto-Monitor", desc: "The agent continuously monitors processes, registry, network connections, and file system changes in real-time." },
-  { step: "03", icon: AlertTriangle, title: "Detect Threats", desc: "AI-powered analysis identifies threats, maps to MITRE ATT&CK, and generates severity-scored alerts instantly." },
-  { step: "04", icon: Zap, title: "Respond & Remediate", desc: "Automated playbooks execute countermeasures in milliseconds — block IPs, quarantine files, isolate hosts." },
+  { step: "01", icon: Download, titleKey: "landing.howDeployTitle", descKey: "landing.howDeployDesc" },
+  { step: "02", icon: Scan, titleKey: "landing.howMonitorTitle", descKey: "landing.howMonitorDesc" },
+  { step: "03", icon: AlertTriangle, titleKey: "landing.howDetectTitle", descKey: "landing.howDetectDesc" },
+  { step: "04", icon: Zap, titleKey: "landing.howRespondTitle", descKey: "landing.howRespondDesc" },
 ];
 
-const trustIndicators = [
-  "MITRE ATT&CK Aligned",
-  "NIST CSF Compliant",
-  "ISO 27001 Ready",
-  "SOC 2 Compatible",
-  "PCI-DSS Mapped",
-  "HIPAA Supportive",
-  "OWASP Top 10 Coverage",
-  "CIS Benchmarks",
+const trustIndicatorKeys = [
+  "landing.trustMitre",
+  "landing.trustNist",
+  "landing.trustIso",
+  "landing.trustSoc",
+  "landing.trustPci",
+  "landing.trustHipaa",
+  "landing.trustOwasp",
+  "landing.trustCis",
 ];
 
 export default function LandingPage() {
@@ -247,24 +247,24 @@ export default function LandingPage() {
       <section className="relative py-24 px-4 border-t border-border/30">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">Complete Security Stack</span>
-            <h2 className="text-3xl md:text-4xl font-bold mt-3 mb-4">Platform Capabilities</h2>
+            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">{t("landing.capSectionLabel")}</span>
+            <h2 className="text-3xl md:text-4xl font-bold mt-3 mb-4">{t("landing.capSectionTitle")}</h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              15+ integrated security tools covering endpoint protection, offensive security, network defense, compliance, and threat intelligence — all in one unified platform.
+              {t("landing.capSectionDesc")}
             </p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {platformCapabilities.map((cap) => {
               const Icon = cap.icon;
               return (
-                <Card key={cap.title} className="p-5" data-testid={`card-capability-${cap.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                <Card key={cap.titleKey} className="p-5" data-testid={`card-capability-${cap.titleKey}`}>
                   <div className="flex items-start gap-3">
                     <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
                       <Icon className="w-4 h-4 text-primary" />
                     </div>
                     <div className="min-w-0">
-                      <h3 className="text-xs font-semibold tracking-wider uppercase mb-1">{cap.title}</h3>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">{cap.desc}</p>
+                      <h3 className="text-xs font-semibold tracking-wider uppercase mb-1">{t(cap.titleKey)}</h3>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">{t(cap.descKey)}</p>
                     </div>
                   </div>
                 </Card>
@@ -277,10 +277,10 @@ export default function LandingPage() {
       <section className="relative py-24 px-4 border-t border-border/30">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
-            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">Getting Started</span>
-            <h2 className="text-3xl md:text-4xl font-bold mt-3 mb-4">How It Works</h2>
+            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">{t("landing.howSectionLabel")}</span>
+            <h2 className="text-3xl md:text-4xl font-bold mt-3 mb-4">{t("landing.howSectionTitle")}</h2>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              From deployment to automated response in four simple steps.
+              {t("landing.howSectionDesc")}
             </p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -294,8 +294,8 @@ export default function LandingPage() {
                       {step.step}
                     </span>
                   </div>
-                  <h3 className="text-sm font-semibold tracking-wider uppercase mb-2">{step.title}</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{step.desc}</p>
+                  <h3 className="text-sm font-semibold tracking-wider uppercase mb-2">{t(step.titleKey)}</h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{t(step.descKey)}</p>
                 </div>
               );
             })}
@@ -306,21 +306,21 @@ export default function LandingPage() {
       <section className="relative py-24 px-4 border-t border-border/30">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">Compliance & Standards</span>
-            <h2 className="text-3xl md:text-4xl font-bold mt-3 mb-4">Trusted by Security Teams</h2>
+            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">{t("landing.trustSectionLabel")}</span>
+            <h2 className="text-3xl md:text-4xl font-bold mt-3 mb-4">{t("landing.trustSectionTitle")}</h2>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              Built to meet the strictest security frameworks and compliance standards used by government and enterprise organizations.
+              {t("landing.trustSectionDesc")}
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-3">
-            {trustIndicators.map((indicator) => (
+            {trustIndicatorKeys.map((key) => (
               <div
-                key={indicator}
+                key={key}
                 className="flex items-center gap-2 px-4 py-2 rounded-md border border-border/40 bg-card/30"
-                data-testid={`badge-trust-${indicator.toLowerCase().replace(/\s+/g, "-")}`}
+                data-testid={`badge-trust-${key}`}
               >
                 <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0" />
-                <span className="text-xs font-mono tracking-wider">{indicator}</span>
+                <span className="text-xs font-mono tracking-wider">{t(key)}</span>
               </div>
             ))}
           </div>
@@ -334,28 +334,28 @@ export default function LandingPage() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { icon: Lock, text: t("landing.capFirewall") },
-              { icon: Eye, text: t("landing.capHoneypot") },
-              { icon: Globe, text: t("landing.capGeoBlock") },
-              { icon: Server, text: t("landing.capForensics") },
-              { icon: Cpu, text: t("landing.capPlaybooks") },
-              { icon: Radio, text: t("landing.capWebsocket") },
-              { icon: BookOpen, text: t("landing.capPolicies") },
-              { icon: Shield, text: t("landing.capQuarantine") },
-              { icon: Scan, text: "Vulnerability Scanner" },
-              { icon: FileSearch, text: "Hash Analysis" },
-              { icon: Network, text: "Traffic Analysis" },
-              { icon: Fingerprint, text: "IOC Extraction" },
-              { icon: Layers, text: "Kill Chain Mapping" },
-              { icon: Crosshair, text: "Penetration Testing" },
-              { icon: Mail, text: "Phishing Detection" },
-              { icon: Key, text: "Credential Auditing" },
+              { icon: Lock, textKey: "landing.capFirewall" },
+              { icon: Eye, textKey: "landing.capHoneypot" },
+              { icon: Globe, textKey: "landing.capGeoBlock" },
+              { icon: Server, textKey: "landing.capForensics" },
+              { icon: Cpu, textKey: "landing.capPlaybooks" },
+              { icon: Radio, textKey: "landing.capWebsocket" },
+              { icon: BookOpen, textKey: "landing.capPolicies" },
+              { icon: Shield, textKey: "landing.capQuarantine" },
+              { icon: Scan, textKey: "landing.capVulnScanner" },
+              { icon: FileSearch, textKey: "landing.capHashAnalysis" },
+              { icon: Network, textKey: "landing.capTrafficAnalysis" },
+              { icon: Fingerprint, textKey: "landing.capIocExtraction" },
+              { icon: Layers, textKey: "landing.capKillChain" },
+              { icon: Crosshair, textKey: "landing.capPentest" },
+              { icon: Mail, textKey: "landing.capPhishing" },
+              { icon: Key, textKey: "landing.capCredAudit" },
             ].map((cap) => {
               const Icon = cap.icon;
               return (
-                <div key={cap.text} className="flex items-center gap-3 p-4 rounded-md border border-border/30 bg-card/30">
+                <div key={cap.textKey} className="flex items-center gap-3 p-4 rounded-md border border-border/30 bg-card/30">
                   <Icon className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span className="text-xs tracking-wider">{cap.text}</span>
+                  <span className="text-xs tracking-wider">{t(cap.textKey)}</span>
                 </div>
               );
             })}

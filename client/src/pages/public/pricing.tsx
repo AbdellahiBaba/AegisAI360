@@ -11,22 +11,22 @@ const plans = [
     priceKey: "pricingStarterPrice",
     descKey: "pricingStarterDesc",
     features: [
-      { text: "Up to 5 users", included: true },
-      { text: "Security event monitoring", included: true },
-      { text: "Basic alert rules", included: true },
-      { text: "Email notifications", included: true },
-      { text: "7-day event retention", included: true },
-      { text: "Vulnerability scanner", included: true },
-      { text: "Hash tools & password analyzer", included: true },
-      { text: "Community support", included: true },
-      { text: "AI threat analysis", included: false },
-      { text: "Automated defense playbooks", included: false },
-      { text: "MITRE ATT&CK heatmap", included: false },
-      { text: "Threat intelligence feeds", included: false },
-      { text: "Endpoint agent deployment", included: false },
-      { text: "Dark web monitoring", included: false },
-      { text: "Compliance dashboard", included: false },
-      { text: "Threat simulation", included: false },
+      { textKey: "pricing.s5users", included: true },
+      { textKey: "pricing.sEventMon", included: true },
+      { textKey: "pricing.sBasicAlerts", included: true },
+      { textKey: "pricing.sEmailNotif", included: true },
+      { textKey: "pricing.s7dayRet", included: true },
+      { textKey: "pricing.sVulnScan", included: true },
+      { textKey: "pricing.sHashTools", included: true },
+      { textKey: "pricing.sCommunity", included: true },
+      { textKey: "pricing.sAiThreat", included: false },
+      { textKey: "pricing.sAutoDefense", included: false },
+      { textKey: "pricing.sMitre", included: false },
+      { textKey: "pricing.sThreatIntel", included: false },
+      { textKey: "pricing.sEndpointAgent", included: false },
+      { textKey: "pricing.sDarkWeb", included: false },
+      { textKey: "pricing.sCompDash", included: false },
+      { textKey: "pricing.sThreatSim", included: false },
     ],
   },
   {
@@ -35,26 +35,26 @@ const plans = [
     descKey: "pricingProDesc",
     popular: true,
     features: [
-      { text: "Up to 25 users", included: true },
-      { text: "Security event monitoring", included: true },
-      { text: "Advanced alert rules", included: true },
-      { text: "Email & webhook notifications", included: true },
-      { text: "30-day event retention", included: true },
-      { text: "Vulnerability scanner + OWASP mapping", included: true },
-      { text: "Hash tools & password analyzer", included: true },
-      { text: "Priority support", included: true },
-      { text: "AI threat analysis", included: true },
-      { text: "Automated defense playbooks", included: true },
-      { text: "MITRE ATT&CK heatmap", included: true },
-      { text: "Threat intelligence feeds", included: true },
-      { text: "Endpoint agent deployment (10 agents)", included: true },
-      { text: "SSL/TLS inspector", included: true },
-      { text: "Email security analyzer", included: true },
-      { text: "Mobile penetration testing", included: true },
-      { text: "Dark web monitoring", included: false },
-      { text: "Compliance dashboard", included: false },
-      { text: "Threat simulation", included: false },
-      { text: "Trojan analyzer with IOC extraction", included: false },
+      { textKey: "pricing.p25users", included: true },
+      { textKey: "pricing.sEventMon", included: true },
+      { textKey: "pricing.pAdvAlerts", included: true },
+      { textKey: "pricing.pEmailWebhook", included: true },
+      { textKey: "pricing.p30dayRet", included: true },
+      { textKey: "pricing.pVulnOwasp", included: true },
+      { textKey: "pricing.sHashTools", included: true },
+      { textKey: "pricing.pPriority", included: true },
+      { textKey: "pricing.sAiThreat", included: true },
+      { textKey: "pricing.sAutoDefense", included: true },
+      { textKey: "pricing.sMitre", included: true },
+      { textKey: "pricing.sThreatIntel", included: true },
+      { textKey: "pricing.pEndpoint10", included: true },
+      { textKey: "pricing.pSslInsp", included: true },
+      { textKey: "pricing.pEmailAnalyzer", included: true },
+      { textKey: "pricing.pMobilePentest", included: true },
+      { textKey: "pricing.sDarkWeb", included: false },
+      { textKey: "pricing.sCompDash", included: false },
+      { textKey: "pricing.sThreatSim", included: false },
+      { textKey: "pricing.pTrojanIoc", included: false },
     ],
   },
   {
@@ -62,54 +62,54 @@ const plans = [
     priceKey: "pricingEnterprisePrice",
     descKey: "pricingEnterpriseDesc",
     features: [
-      { text: "Unlimited users", included: true },
-      { text: "Security event monitoring", included: true },
-      { text: "Custom alert rules & workflows", included: true },
-      { text: "All notification channels", included: true },
-      { text: "1-year event retention", included: true },
-      { text: "Full vulnerability scanner suite", included: true },
-      { text: "Hash tools & password analyzer", included: true },
-      { text: "Dedicated support + SLA", included: true },
-      { text: "Full AI threat analysis", included: true },
-      { text: "Custom automated playbooks", included: true },
-      { text: "MITRE ATT&CK heatmap", included: true },
-      { text: "Premium threat intelligence", included: true },
-      { text: "Unlimited endpoint agents", included: true },
-      { text: "SSL/TLS inspector", included: true },
-      { text: "Email security analyzer", included: true },
-      { text: "Mobile penetration testing", included: true },
-      { text: "Dark web monitoring", included: true },
-      { text: "Compliance dashboard (NIST, ISO, PCI, HIPAA, SOC 2)", included: true },
-      { text: "Threat simulation engine", included: true },
-      { text: "Trojan analyzer with IOC extraction & MITRE heatmap", included: true },
-      { text: "Payload generator", included: true },
-      { text: "Honeypot deployment", included: true },
-      { text: "Network traffic analysis", included: true },
-      { text: "CVE database access", included: true },
-      { text: "On-premise deployment option", included: true },
+      { textKey: "pricing.eUnlimitedUsers", included: true },
+      { textKey: "pricing.sEventMon", included: true },
+      { textKey: "pricing.eCustomAlerts", included: true },
+      { textKey: "pricing.eAllNotif", included: true },
+      { textKey: "pricing.e1yrRet", included: true },
+      { textKey: "pricing.eFullVuln", included: true },
+      { textKey: "pricing.sHashTools", included: true },
+      { textKey: "pricing.eDedicated", included: true },
+      { textKey: "pricing.eFullAi", included: true },
+      { textKey: "pricing.eCustomPlaybooks", included: true },
+      { textKey: "pricing.sMitre", included: true },
+      { textKey: "pricing.ePremiumIntel", included: true },
+      { textKey: "pricing.eUnlimitedAgents", included: true },
+      { textKey: "pricing.pSslInsp", included: true },
+      { textKey: "pricing.pEmailAnalyzer", included: true },
+      { textKey: "pricing.pMobilePentest", included: true },
+      { textKey: "pricing.sDarkWeb", included: true },
+      { textKey: "pricing.eCompDash5", included: true },
+      { textKey: "pricing.eThreatSimEngine", included: true },
+      { textKey: "pricing.eTrojanFull", included: true },
+      { textKey: "pricing.ePayloadGen", included: true },
+      { textKey: "pricing.eHoneypot", included: true },
+      { textKey: "pricing.eNetTraffic", included: true },
+      { textKey: "pricing.eCveAccess", included: true },
+      { textKey: "pricing.eOnPrem", included: true },
     ],
   },
 ];
 
 const featureComparison = [
-  { feature: "Users", starter: "5", pro: "25", enterprise: "Unlimited" },
-  { feature: "Event Retention", starter: "7 days", pro: "30 days", enterprise: "1 year" },
-  { feature: "Endpoint Agents", starter: "---", pro: "10", enterprise: "Unlimited" },
-  { feature: "AI Analysis", starter: "---", pro: "Included", enterprise: "Full" },
-  { feature: "Automated Defense", starter: "---", pro: "Included", enterprise: "Custom" },
-  { feature: "MITRE ATT&CK", starter: "---", pro: "Included", enterprise: "Included" },
-  { feature: "Threat Intel Feeds", starter: "---", pro: "Basic", enterprise: "Premium" },
-  { feature: "Vulnerability Scanner", starter: "Basic", pro: "OWASP Mapped", enterprise: "Full Suite" },
-  { feature: "SSL Inspector", starter: "---", pro: "Included", enterprise: "Included" },
-  { feature: "Email Analyzer", starter: "---", pro: "Included", enterprise: "Included" },
-  { feature: "Mobile Pentest", starter: "---", pro: "Included", enterprise: "Included" },
-  { feature: "Dark Web Monitor", starter: "---", pro: "---", enterprise: "Included" },
-  { feature: "Compliance Dashboard", starter: "---", pro: "---", enterprise: "5 Frameworks" },
-  { feature: "Threat Simulation", starter: "---", pro: "---", enterprise: "Included" },
-  { feature: "Trojan Analyzer", starter: "---", pro: "---", enterprise: "Full" },
-  { feature: "Honeypot System", starter: "---", pro: "---", enterprise: "Included" },
-  { feature: "Payload Generator", starter: "---", pro: "---", enterprise: "Included" },
-  { feature: "Support", starter: "Community", pro: "Priority", enterprise: "Dedicated + SLA" },
+  { featureKey: "pricing.compUsers", starterKey: "pricing.val5", proKey: "pricing.val25", enterpriseKey: "pricing.valUnlimited" },
+  { featureKey: "pricing.compRetention", starterKey: "pricing.val7days", proKey: "pricing.val30days", enterpriseKey: "pricing.val1year" },
+  { featureKey: "pricing.compAgents", starterKey: "pricing.valNa", proKey: "pricing.val10", enterpriseKey: "pricing.valUnlimited" },
+  { featureKey: "pricing.compAi", starterKey: "pricing.valNa", proKey: "pricing.valIncluded", enterpriseKey: "pricing.valFull" },
+  { featureKey: "pricing.compAutoDefense", starterKey: "pricing.valNa", proKey: "pricing.valIncluded", enterpriseKey: "pricing.valCustom" },
+  { featureKey: "pricing.compMitre", starterKey: "pricing.valNa", proKey: "pricing.valIncluded", enterpriseKey: "pricing.valIncluded" },
+  { featureKey: "pricing.compIntel", starterKey: "pricing.valNa", proKey: "pricing.valBasic", enterpriseKey: "pricing.valPremium" },
+  { featureKey: "pricing.compVuln", starterKey: "pricing.valBasic", proKey: "pricing.valOwaspMapped", enterpriseKey: "pricing.valFullSuite" },
+  { featureKey: "pricing.compSsl", starterKey: "pricing.valNa", proKey: "pricing.valIncluded", enterpriseKey: "pricing.valIncluded" },
+  { featureKey: "pricing.compEmail", starterKey: "pricing.valNa", proKey: "pricing.valIncluded", enterpriseKey: "pricing.valIncluded" },
+  { featureKey: "pricing.compMobile", starterKey: "pricing.valNa", proKey: "pricing.valIncluded", enterpriseKey: "pricing.valIncluded" },
+  { featureKey: "pricing.compDarkWeb", starterKey: "pricing.valNa", proKey: "pricing.valNa", enterpriseKey: "pricing.valIncluded" },
+  { featureKey: "pricing.compCompliance", starterKey: "pricing.valNa", proKey: "pricing.valNa", enterpriseKey: "pricing.val5Frameworks" },
+  { featureKey: "pricing.compThreatSim", starterKey: "pricing.valNa", proKey: "pricing.valNa", enterpriseKey: "pricing.valIncluded" },
+  { featureKey: "pricing.compTrojan", starterKey: "pricing.valNa", proKey: "pricing.valNa", enterpriseKey: "pricing.valFull" },
+  { featureKey: "pricing.compHoneypot", starterKey: "pricing.valNa", proKey: "pricing.valNa", enterpriseKey: "pricing.valIncluded" },
+  { featureKey: "pricing.compPayload", starterKey: "pricing.valNa", proKey: "pricing.valNa", enterpriseKey: "pricing.valIncluded" },
+  { featureKey: "pricing.compSupport", starterKey: "pricing.valCommunity", proKey: "pricing.valPriority", enterpriseKey: "pricing.valDedicatedSla" },
 ];
 
 export default function PricingPage() {
@@ -151,14 +151,14 @@ export default function PricingPage() {
                 <p className="text-xs text-muted-foreground leading-relaxed mb-6">{t(`public.${plan.descKey}`)}</p>
                 <ul className="flex flex-col gap-2 mb-8 flex-1">
                   {plan.features.map((f) => (
-                    <li key={f.text} className="flex items-start gap-2 text-xs">
+                    <li key={f.textKey} className="flex items-start gap-2 text-xs">
                       {f.included ? (
                         <Check className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
                       ) : (
                         <X className="w-3.5 h-3.5 text-muted-foreground/40 mt-0.5 shrink-0" />
                       )}
                       <span className={f.included ? "text-muted-foreground" : "text-muted-foreground/40"}>
-                        {f.text}
+                        {t(f.textKey)}
                       </span>
                     </li>
                   ))}
@@ -181,27 +181,27 @@ export default function PricingPage() {
       <section className="py-16 px-6 border-t border-border/30">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-10">
-            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">Detailed Breakdown</span>
-            <h2 className="text-2xl font-bold mt-3 mb-2">Feature Comparison</h2>
-            <p className="text-sm text-muted-foreground">See exactly what's included in each plan</p>
+            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">{t("pricing.detailedBreakdown")}</span>
+            <h2 className="text-2xl font-bold mt-3 mb-2">{t("pricing.featureComparison")}</h2>
+            <p className="text-sm text-muted-foreground">{t("pricing.comparisonDesc")}</p>
           </div>
           <Card className="overflow-auto">
             <table className="w-full text-xs" data-testid="table-feature-comparison">
               <thead>
                 <tr className="border-b border-border/50">
-                  <th className="text-left py-3 px-4 font-semibold tracking-wider uppercase text-muted-foreground">Feature</th>
-                  <th className="text-center py-3 px-4 font-semibold tracking-wider uppercase text-muted-foreground">Starter</th>
-                  <th className="text-center py-3 px-4 font-semibold tracking-wider uppercase text-primary">Professional</th>
-                  <th className="text-center py-3 px-4 font-semibold tracking-wider uppercase text-muted-foreground">Enterprise</th>
+                  <th className="text-start py-3 px-4 font-semibold tracking-wider uppercase text-muted-foreground">{t("pricing.colFeature")}</th>
+                  <th className="text-center py-3 px-4 font-semibold tracking-wider uppercase text-muted-foreground">{t("pricing.colStarter")}</th>
+                  <th className="text-center py-3 px-4 font-semibold tracking-wider uppercase text-primary">{t("pricing.colProfessional")}</th>
+                  <th className="text-center py-3 px-4 font-semibold tracking-wider uppercase text-muted-foreground">{t("pricing.colEnterprise")}</th>
                 </tr>
               </thead>
               <tbody>
                 {featureComparison.map((row, idx) => (
-                  <tr key={row.feature} className={idx % 2 === 0 ? "bg-muted/20" : ""}>
-                    <td className="py-2.5 px-4 font-medium">{row.feature}</td>
-                    <td className="py-2.5 px-4 text-center text-muted-foreground">{row.starter}</td>
-                    <td className="py-2.5 px-4 text-center">{row.pro}</td>
-                    <td className="py-2.5 px-4 text-center">{row.enterprise}</td>
+                  <tr key={row.featureKey} className={idx % 2 === 0 ? "bg-muted/20" : ""}>
+                    <td className="py-2.5 px-4 font-medium">{t(row.featureKey)}</td>
+                    <td className="py-2.5 px-4 text-center text-muted-foreground">{t(row.starterKey)}</td>
+                    <td className="py-2.5 px-4 text-center">{t(row.proKey)}</td>
+                    <td className="py-2.5 px-4 text-center">{t(row.enterpriseKey)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -1,6 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Download, Copy, Key, Monitor, Apple, Terminal as TerminalIcon, CheckCircle, AlertCircle, Settings, Shield } from "lucide-react";
 
 export default function DownloadAgent() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
 
@@ -24,16 +26,16 @@ export default function DownloadAgent() {
     onSuccess: (data) => {
       setGeneratedToken(data.token);
       queryClient.invalidateQueries({ queryKey: ["/api/agent/device-tokens"] });
-      toast({ title: "Device token generated" });
+      toast({ title: t("downloadAgent.tokenGenerated") });
     },
     onError: (error: any) => {
-      toast({ title: "Error", description: error.message || "Failed to generate token", variant: "destructive" });
+      toast({ title: t("downloadAgent.tokenGenerateFailed"), description: error.message, variant: "destructive" });
     },
   });
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast({ title: "Copied to clipboard" });
+    toast({ title: t("downloadAgent.copiedToClipboard") });
   };
 
   const availableTokens = tokens?.filter((t: any) => !t.used) || [];
@@ -41,30 +43,30 @@ export default function DownloadAgent() {
   return (
     <div className="p-6 space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-download-title">Deploy Endpoint Agent</h1>
-        <p className="text-muted-foreground text-sm">Download the agent, generate a token, and deploy it on your endpoints</p>
+        <h1 className="text-2xl font-bold" data-testid="text-download-title">{t("downloadAgent.title")}</h1>
+        <p className="text-muted-foreground text-sm">{t("downloadAgent.subtitle")}</p>
       </div>
 
       <Card data-testid="card-download-agent">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Download className="w-5 h-5" />
-            Step 1: Download the Agent
+            {t("downloadAgent.step1Title")}
           </CardTitle>
-          <CardDescription>Download the pre-compiled agent for your operating system</CardDescription>
+          <CardDescription>{t("downloadAgent.step1Desc")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card className="border-2 border-primary" data-testid="card-download-windows">
               <CardContent className="pt-6 text-center">
                 <Monitor className="w-10 h-10 mx-auto mb-3 text-blue-500" />
-                <h3 className="font-medium">Windows</h3>
-                <p className="text-xs text-muted-foreground mt-1">Windows 10/11, Server 2019+</p>
-                <Badge className="mt-2" variant="default">Ready to Download</Badge>
+                <h3 className="font-medium">{t("downloadAgent.windows")}</h3>
+                <p className="text-xs text-muted-foreground mt-1">{t("downloadAgent.windowsDesc")}</p>
+                <Badge className="mt-2" variant="default">{t("downloadAgent.readyToDownload")}</Badge>
                 <a href="/downloads/AegisAI360-Agent.exe" download className="block mt-3">
                   <Button className="w-full" data-testid="button-download-windows">
                     <Download className="w-4 h-4 me-2" />
-                    Download .exe (7 MB)
+                    {t("downloadAgent.downloadExe")}
                   </Button>
                 </a>
               </CardContent>
@@ -73,10 +75,10 @@ export default function DownloadAgent() {
             <Card className="border-dashed" data-testid="card-download-linux">
               <CardContent className="pt-6 text-center">
                 <TerminalIcon className="w-10 h-10 mx-auto mb-3 text-orange-500" />
-                <h3 className="font-medium">Linux</h3>
-                <p className="text-xs text-muted-foreground mt-1">Ubuntu, CentOS, Debian</p>
+                <h3 className="font-medium">{t("downloadAgent.linux")}</h3>
+                <p className="text-xs text-muted-foreground mt-1">{t("downloadAgent.linuxDesc")}</p>
                 <Button className="mt-3 w-full" variant="outline" disabled data-testid="button-download-linux">
-                  Coming Soon
+                  {t("downloadAgent.comingSoon")}
                 </Button>
               </CardContent>
             </Card>
@@ -84,10 +86,10 @@ export default function DownloadAgent() {
             <Card className="border-dashed" data-testid="card-download-macos">
               <CardContent className="pt-6 text-center">
                 <Apple className="w-10 h-10 mx-auto mb-3 text-gray-500" />
-                <h3 className="font-medium">macOS</h3>
-                <p className="text-xs text-muted-foreground mt-1">macOS 12 Monterey+</p>
+                <h3 className="font-medium">{t("downloadAgent.macos")}</h3>
+                <p className="text-xs text-muted-foreground mt-1">{t("downloadAgent.macosDesc")}</p>
                 <Button className="mt-3 w-full" variant="outline" disabled data-testid="button-download-macos">
-                  Coming Soon
+                  {t("downloadAgent.comingSoon")}
                 </Button>
               </CardContent>
             </Card>
@@ -99,9 +101,9 @@ export default function DownloadAgent() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Key className="w-5 h-5" />
-            Step 2: Generate Device Token
+            {t("downloadAgent.step2Title")}
           </CardTitle>
-          <CardDescription>Each agent needs a unique device token to register with the platform</CardDescription>
+          <CardDescription>{t("downloadAgent.step2Desc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Button
@@ -110,7 +112,7 @@ export default function DownloadAgent() {
             data-testid="button-generate-token"
           >
             {generateTokenMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin me-2" /> : <Key className="w-4 h-4 me-2" />}
-            Generate New Token
+            {t("downloadAgent.generateNewToken")}
           </Button>
 
           {generatedToken && (
@@ -124,22 +126,22 @@ export default function DownloadAgent() {
 
           {tokens && tokens.length > 0 && (
             <div className="mt-4">
-              <h4 className="text-sm font-medium mb-2">Your Tokens</h4>
+              <h4 className="text-sm font-medium mb-2">{t("downloadAgent.yourTokens")}</h4>
               <div className="space-y-1 max-h-48 overflow-y-auto">
-                {tokens.slice(0, 10).map((t: any) => (
-                  <div key={t.id} className="flex items-center justify-between text-xs p-2 bg-muted/50 rounded" data-testid={`row-token-${t.id}`}>
+                {tokens.slice(0, 10).map((tk: any) => (
+                  <div key={tk.id} className="flex items-center justify-between text-xs p-2 bg-muted/50 rounded" data-testid={`row-token-${tk.id}`}>
                     <div className="flex items-center gap-2">
-                      {t.used ? (
+                      {tk.used ? (
                         <CheckCircle className="w-3 h-3 text-green-500" />
                       ) : (
                         <AlertCircle className="w-3 h-3 text-yellow-500" />
                       )}
-                      <span className="font-mono">{t.token.slice(0, 24)}...</span>
+                      <span className="font-mono">{tk.token.slice(0, 24)}...</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant={t.used ? "default" : "secondary"}>{t.used ? "Used" : "Available"}</Badge>
-                      {!t.used && (
-                        <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => copyToClipboard(t.token)} data-testid={`button-copy-token-${t.id}`}>
+                      <Badge variant={tk.used ? "default" : "secondary"}>{tk.used ? t("downloadAgent.used") : t("downloadAgent.available")}</Badge>
+                      {!tk.used && (
+                        <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => copyToClipboard(tk.token)} data-testid={`button-copy-token-${tk.id}`}>
                           <Copy className="w-3 h-3" />
                         </Button>
                       )}
@@ -156,31 +158,26 @@ export default function DownloadAgent() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TerminalIcon className="w-5 h-5" />
-            Step 3: Run the Agent
+            {t("downloadAgent.step3Title")}
           </CardTitle>
-          <CardDescription>Choose your preferred method to start the agent</CardDescription>
+          <CardDescription>{t("downloadAgent.step3Desc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Shield className="w-4 h-4 text-primary" />
-              <h4 className="text-sm font-medium" data-testid="text-method-doubleclick">Option A: Double-Click (Easiest)</h4>
+              <h4 className="text-sm font-medium" data-testid="text-method-doubleclick">{t("downloadAgent.optionATitle")}</h4>
             </div>
-            <p className="text-sm text-muted-foreground mb-2">
-              Right-click the downloaded <code className="text-primary">AegisAI360-Agent.exe</code> file and select <strong>"Run as administrator"</strong>. 
-              The agent will launch an interactive setup wizard where you can enter your server URL and device token. 
-              Your configuration will be saved automatically for future runs.
-            </p>
+            <p className="text-sm text-muted-foreground mb-2" dangerouslySetInnerHTML={{ __html: t("downloadAgent.optionADesc") }} />
             <p className="text-xs text-amber-500 font-medium">
-              Administrator privileges are required for full functionality (WiFi control, firewall, services, process management).
-              The agent will auto-request elevation via UAC if not run as admin.
+              {t("downloadAgent.optionANote")}
             </p>
           </div>
 
           <div className="border-t pt-4">
             <div className="flex items-center gap-2 mb-2">
               <TerminalIcon className="w-4 h-4 text-primary" />
-              <h4 className="text-sm font-medium" data-testid="text-method-cli">Option B: Command Line</h4>
+              <h4 className="text-sm font-medium" data-testid="text-method-cli">{t("downloadAgent.optionBTitle")}</h4>
             </div>
             <div className="bg-zinc-950 text-zinc-100 rounded-lg p-4 font-mono text-sm space-y-2" data-testid="code-run-command">
               <p className="text-zinc-500">:: Open Command Prompt as Administrator, then:</p>
@@ -198,9 +195,9 @@ export default function DownloadAgent() {
                   data-testid="button-copy-run-command"
                 >
                   <Copy className="w-4 h-4 me-2" />
-                  Copy Full Command
+                  {t("downloadAgent.copyFullCommand")}
                 </Button>
-                <span className="text-xs text-muted-foreground">Using your first available token</span>
+                <span className="text-xs text-muted-foreground">{t("downloadAgent.usingFirstToken")}</span>
               </div>
             )}
           </div>
@@ -208,12 +205,10 @@ export default function DownloadAgent() {
           <div className="border-t pt-4">
             <div className="flex items-center gap-2 mb-2">
               <Settings className="w-4 h-4 text-primary" />
-              <h4 className="text-sm font-medium" data-testid="text-method-service">Option C: Install as Windows Service</h4>
+              <h4 className="text-sm font-medium" data-testid="text-method-service">{t("downloadAgent.optionCTitle")}</h4>
             </div>
             <p className="text-sm text-muted-foreground mb-2">
-              For production deployments, install the agent as a Windows service so it runs persistently in the background.
-              The service starts automatically on boot, and is configured with auto-restart recovery (5-second delay on failure).
-              Even if the terminal or PowerShell session is closed, the agent continues running and monitoring your system.
+              {t("downloadAgent.optionCDesc")}
             </p>
             <div className="bg-zinc-950 text-zinc-100 rounded-lg p-4 font-mono text-sm space-y-2" data-testid="code-service-commands">
               <p className="text-zinc-500">:: First, run setup to save your configuration</p>
@@ -229,37 +224,30 @@ export default function DownloadAgent() {
           </div>
 
           <div className="mt-4 space-y-2 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">What happens when the agent connects:</p>
+            <p className="font-medium text-foreground">{t("downloadAgent.whatHappens")}</p>
             <ul className="list-disc list-inside space-y-1 ms-2">
-              <li>The agent registers with AegisAI360 using the device token (one-time use)</li>
-              <li>It starts sending heartbeats with CPU/RAM metrics every 30 seconds</li>
-              <li>It sends full system telemetry (disk, processes, network, run mode) every 30 seconds</li>
-              <li>It polls for remote commands from the dashboard every 5 seconds</li>
-              <li>It checks for agent updates every 5 minutes with SHA256 verification</li>
-              <li>It runs continuous background monitoring (process watchlist, file integrity, network connections)</li>
-              <li>If disconnected, it automatically retries with exponential backoff</li>
-              <li>Your endpoint will appear in the dashboard within seconds</li>
+              <li>{t("downloadAgent.connectStep1")}</li>
+              <li>{t("downloadAgent.connectStep2")}</li>
+              <li>{t("downloadAgent.connectStep3")}</li>
+              <li>{t("downloadAgent.connectStep4")}</li>
+              <li>{t("downloadAgent.connectStep5")}</li>
+              <li>{t("downloadAgent.connectStep6")}</li>
+              <li>{t("downloadAgent.connectStep7")}</li>
+              <li>{t("downloadAgent.connectStep8")}</li>
             </ul>
           </div>
 
           <div className="mt-4 p-3 bg-muted/50 rounded text-sm" data-testid="text-service-persistence-note">
             <p className="font-medium mb-1 flex items-center gap-2">
               <Shield className="w-4 h-4 text-primary" />
-              Service Persistence
+              {t("downloadAgent.servicePersistence")}
             </p>
-            <p className="text-muted-foreground">
-              When installed as a Windows Service, the agent runs as a background process under LocalSystem and survives terminal/PowerShell closure.
-              The service is configured with <strong>delayed auto-start</strong> (starts on boot) and <strong>automatic recovery</strong> (restarts within 5 seconds on failure).
-              The dashboard shows each agent's run mode (Service, Tray, or Terminal) so you can verify deployment status.
-            </p>
+            <p className="text-muted-foreground" dangerouslySetInnerHTML={{ __html: t("downloadAgent.servicePersistenceDesc") }} />
           </div>
 
           <div className="mt-4 p-3 bg-muted/50 rounded text-sm" data-testid="text-config-note">
-            <p className="font-medium mb-1">Config File Reference</p>
-            <p className="text-muted-foreground">
-              The agent saves its configuration to <code className="text-primary">config.json</code> in the same folder as the .exe.
-              You can also create or edit this file manually:
-            </p>
+            <p className="font-medium mb-1">{t("downloadAgent.configFileReference")}</p>
+            <p className="text-muted-foreground" dangerouslySetInnerHTML={{ __html: t("downloadAgent.configFileDesc") }} />
             <pre className="bg-zinc-950 text-zinc-100 rounded p-3 mt-2 text-xs overflow-x-auto">{`{
   "serverUrl": "https://aegisai360.com",
   "apiKey": "${availableTokens.length > 0 ? availableTokens[0].token : "agt_YOUR_TOKEN_HERE"}",

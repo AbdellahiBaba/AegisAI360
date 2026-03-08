@@ -24,6 +24,15 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             <Link href="/about" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="link-about">
               {t("landing.navAbout")}
             </Link>
+            <Link href="/security" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="link-security">
+              {t("public.navSecurity")}
+            </Link>
+            <Link href="/faq" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="link-faq">
+              {t("public.navFaq")}
+            </Link>
+            <Link href="/contact" className="text-sm text-muted-foreground hover:text-primary transition-colors" data-testid="link-contact">
+              {t("public.navContact")}
+            </Link>
           </nav>
           <div className="flex items-center gap-2">
             <LanguageSwitcher />
@@ -58,6 +67,15 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
               </Link>
               <Link href="/refund" className="text-xs text-muted-foreground hover:text-primary transition-colors" data-testid="link-refund">
                 {t("landing.refundPolicy")}
+              </Link>
+              <Link href="/contact" className="text-xs text-muted-foreground hover:text-primary transition-colors" data-testid="link-footer-contact">
+                {t("public.navContact")}
+              </Link>
+              <Link href="/faq" className="text-xs text-muted-foreground hover:text-primary transition-colors" data-testid="link-footer-faq">
+                {t("public.navFaq")}
+              </Link>
+              <Link href="/security" className="text-xs text-muted-foreground hover:text-primary transition-colors" data-testid="link-footer-security">
+                {t("public.navSecurity")}
               </Link>
             </nav>
           </div>
