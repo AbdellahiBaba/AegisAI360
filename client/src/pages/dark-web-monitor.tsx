@@ -11,8 +11,9 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
   Eye, Search, AlertTriangle, ShieldAlert, ShieldCheck, Globe, Mail,
-  Calendar, Users, Lock, Loader2, ChevronDown, ChevronUp, ExternalLink,
+  Calendar, Users, Lock, Loader2, ChevronDown, ChevronUp, ExternalLink, Download,
 } from "lucide-react";
+import { generateDarkWebReportPDF } from "@/lib/reportGenerator";
 
 interface BreachResult {
   name: string;
@@ -302,6 +303,17 @@ export default function DarkWebMonitor() {
 
       {result && !checkMutation.isPending && (
         <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => generateDarkWebReportPDF(result)}
+              data-testid="button-export-darkweb-pdf"
+            >
+              <Download className="w-3.5 h-3.5 me-1.5" />
+              Export PDF
+            </Button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card className="md:col-span-1">
               <CardContent className="p-4 flex flex-col items-center justify-center">

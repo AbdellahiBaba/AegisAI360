@@ -441,6 +441,7 @@ export const agents = pgTable("agents", {
   status: text("status").notNull().default("online"),
   cpuUsage: integer("cpu_usage"),
   ramUsage: integer("ram_usage"),
+  telemetry: jsonb("telemetry"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -580,3 +581,16 @@ export const sessionsMetadata = pgTable("sessions_metadata", {
 export const insertSessionMetadataSchema = createInsertSchema(sessionsMetadata).omit({ id: true, createdAt: true, lastActive: true });
 export type InsertSessionMetadata = z.infer<typeof insertSessionMetadataSchema>;
 export type SessionMetadata = typeof sessionsMetadata.$inferSelect;
+
+export const threatIntelKeys = pgTable("threat_intel_keys", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull(),
+  service: text("service").notNull(),
+  apiKey: text("api_key").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertThreatIntelKeySchema = createInsertSchema(threatIntelKeys).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertThreatIntelKey = z.infer<typeof insertThreatIntelKeySchema>;
+export type ThreatIntelKey = typeof threatIntelKeys.$inferSelect;

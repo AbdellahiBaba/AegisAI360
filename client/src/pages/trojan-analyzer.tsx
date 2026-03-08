@@ -13,8 +13,9 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Bug, Loader2, Search, Shield, FileCode, Database, Copy, Check,
   AlertTriangle, Activity, Globe, Server, FolderOpen, Hash,
-  ChevronRight, Eye,
+  ChevronRight, Eye, Download,
 } from "lucide-react";
+import { generateTrojanAnalysisReportPDF } from "@/lib/reportGenerator";
 
 const severityColor: Record<string, string> = {
   critical: "bg-severity-critical text-white",
@@ -124,6 +125,17 @@ function HashLookupTab() {
 
       {result && !mutation.isPending && (
         <div className="space-y-3">
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => generateTrojanAnalysisReportPDF(result)}
+              data-testid="button-export-trojan-pdf"
+            >
+              <Download className="w-3.5 h-3.5 me-1.5" />
+              Export PDF
+            </Button>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Card><CardContent className="p-3 text-center">
               <p className="text-[10px] text-muted-foreground uppercase">Family</p>

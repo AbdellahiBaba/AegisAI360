@@ -1,5 +1,5 @@
-export async function safeBrowsingLookup(url: string): Promise<any> {
-  const apiKey = process.env.GOOGLE_SAFE_BROWSING_API_KEY;
+export async function safeBrowsingLookup(url: string, overrideKey?: string): Promise<any> {
+  const apiKey = overrideKey || process.env.GOOGLE_SAFE_BROWSING_API_KEY;
   if (!apiKey) {
     return {
       source: "Google Safe Browsing",

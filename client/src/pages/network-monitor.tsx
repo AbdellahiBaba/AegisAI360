@@ -21,6 +21,7 @@ import {
   Building2, User, StickyNote, Signal, Globe, Plus, Server, RefreshCw,
   Lock, Unlock, FileWarning, ExternalLink,
 } from "lucide-react";
+import { generateNetworkMonitorReportPDF } from "@/lib/reportGenerator";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -596,6 +597,17 @@ export default function NetworkMonitorPage() {
             />
           </div>
         </div>
+        {infrastructureAssets.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => generateNetworkMonitorReportPDF(infrastructureAssets)}
+            data-testid="button-export-network-pdf"
+          >
+            <Download className="w-3.5 h-3.5 me-1.5" />
+            Export PDF
+          </Button>
+        )}
       </div>
 
       <Card>

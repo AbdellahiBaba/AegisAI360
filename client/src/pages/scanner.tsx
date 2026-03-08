@@ -14,9 +14,10 @@ import { useTranslation } from "react-i18next";
 import {
   Radar, Globe, ShieldCheck, FileSearch, Bug, Loader2, Clock,
   CheckCircle2, XCircle, AlertTriangle, Search, ShieldBan, Bell, Info, Lock,
-  Network, FolderSearch, Cpu, Shield, Landmark, Database, Code,
+  Network, FolderSearch, Cpu, Shield, Landmark, Database, Code, Download,
 } from "lucide-react";
 import type { ScanResult } from "@shared/schema";
+import { generateScannerReportPDF } from "@/lib/reportGenerator";
 
 const severityColor: Record<string, string> = {
   critical: "bg-severity-critical text-white",
@@ -1374,9 +1375,22 @@ export default function ScannerPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
-            <Clock className="w-4 h-4 text-primary" />{t("scanner.scanHistory")}
-          </CardTitle>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary" />{t("scanner.scanHistory")}
+            </CardTitle>
+            {history && history.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => generateScannerReportPDF(history)}
+                data-testid="button-export-scanner-pdf"
+              >
+                <Download className="w-3.5 h-3.5 me-1.5" />
+                Export PDF
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (

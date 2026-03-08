@@ -5,7 +5,7 @@ import {
   scanResults, supportTickets, networkDevices, networkScans,
   plans, deviceTokens, agents, agentCommands, terminalAuditLogs, usageTracking,
   packetCaptures, arpAlerts, bandwidthLogs,
-  notificationChannels, scheduledScans, sessionsMetadata,
+  notificationChannels, scheduledScans, sessionsMetadata, threatIntelKeys,
   type User, type InsertUser,
   type Organization, type InsertOrganization,
   type SecurityEvent, type InsertSecurityEvent,
@@ -40,6 +40,7 @@ import {
   type NotificationChannel, type InsertNotificationChannel,
   type ScheduledScan, type InsertScheduledScan,
   type SessionMetadata, type InsertSessionMetadata,
+  type ThreatIntelKey, type InsertThreatIntelKey,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, gte, count, lt, ne } from "drizzle-orm";
@@ -68,6 +69,11 @@ export interface IStorage {
   getThreatIntel(orgId: number): Promise<ThreatIntel[]>;
   createThreatIntel(intel: InsertThreatIntel): Promise<ThreatIntel>;
   updateThreatIntel(id: number, orgId: number, data: Partial<{ active: boolean }>): Promise<ThreatIntel | undefined>;
+
+  getThreatIntelKeys(orgId: number): Promise<ThreatIntelKey[]>;
+  getThreatIntelKey(orgId: number, service: string): Promise<ThreatIntelKey | undefined>;
+  upsertThreatIntelKey(orgId: number, service: string, apiKey: string): Promise<ThreatIntelKey>;
+  deleteThreatIntelKey(orgId: number, service: string): Promise<boolean>;
 
   getSecurityPolicies(orgId: number): Promise<SecurityPolicy[]>;
   createSecurityPolicy(policy: InsertSecurityPolicy): Promise<SecurityPolicy>;
@@ -184,7 +190,7 @@ export interface IStorage {
   createAgent(agent: InsertAgent): Promise<Agent>;
   getAgentById(id: number): Promise<Agent | undefined>;
   getAgentsByOrg(orgId: number): Promise<Agent[]>;
-  updateAgentHeartbeat(id: number, data: { lastSeen: Date; cpuUsage?: number; ramUsage?: number; ip?: string }): Promise<Agent | undefined>;
+  updateAgentHeartbeat(id: number, data: { lastSeen: Date; cpuUsage?: number; ramUsage?: number; ip?: string; telemetry?: any }): Promise<Agent | undefined>;
   updateAgentStatus(id: number, status: string): Promise<void>;
 
   createCommand(cmd: InsertAgentCommand): Promise<AgentCommand>;
@@ -877,7 +883,7 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(agents).where(eq(agents.organizationId, orgId)).orderBy(desc(agents.lastSeen));
   }
 
-  async updateAgentHeartbeat(id: number, data: { lastSeen: Date; cpuUsage?: number; ramUsage?: number; ip?: string }): Promise<Agent | undefined> {
+  async updateAgentHeartbeat(id: number, data: { lastSeen: Date; cpuUsage?: number; ramUsage?: number; ip?: string; telemetry?: any }): Promise<Agent | undefined> {
     const [updated] = await db.update(agents).set({ ...data, status: "online" }).where(eq(agents.id, id)).returning();
     return updated;
   }
@@ -1060,6 +1066,30 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return sessionIds;
+  }
+
+  async getThreatIntelKeys(orgId: number): Promise<ThreatIntelKey[]> {
+    return db.select().from(threatIntelKeys).where(eq(threatIntelKeys.organizationId, orgId));
+  }
+
+  async getThreatIntelKey(orgId: number, service: string): Promise<ThreatIntelKey | undefined> {
+    const [key] = await db.select().from(threatIntelKeys).where(and(eq(threatIntelKeys.organizationId, orgId), eq(threatIntelKeys.service, service)));
+    return key;
+  }
+
+  async upsertThreatIntelKey(orgId: number, service: string, apiKey: string): Promise<ThreatIntelKey> {
+    const existing = await this.getThreatIntelKey(orgId, service);
+    if (existing) {
+      const [updated] = await db.update(threatIntelKeys).set({ apiKey, updatedAt: new Date() }).where(eq(threatIntelKeys.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(threatIntelKeys).values({ organizationId: orgId, service, apiKey }).returning();
+    return created;
+  }
+
+  async deleteThreatIntelKey(orgId: number, service: string): Promise<boolean> {
+    const result = await db.delete(threatIntelKeys).where(and(eq(threatIntelKeys.organizationId, orgId), eq(threatIntelKeys.service, service)));
+    return (result as any).rowCount > 0;
   }
 }
 

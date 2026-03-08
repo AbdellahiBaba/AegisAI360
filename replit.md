@@ -43,12 +43,15 @@ The frontend is built with React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Rec
 - **Account Lockout**: 5 failed login attempts triggers 15-minute lockout. Counter resets on success. Lockout events logged as security events.
 - **Session Management**: `sessions_metadata` table tracks IP, user-agent, last active. Users can view and revoke active sessions from Settings. "Revoke All Other Sessions" for emergency use.
 - **Email/Webhook Notifications**: `notification_channels` table. Webhook (with HMAC signing, SSRF protection) and Email (SMTP via nodemailer). Integrated into AlertEngine for auto-dispatch. Test button in Settings.
-- **PDF Report Generation**: Client-side via `jspdf` + `jspdf-autotable`. Executive Summary (dashboard), Compliance Assessment, and Incident Report. Professional formatting with branding.
+- **PDF Report Generation**: Client-side via `jspdf` + `jspdf-autotable`. Executive Summary (dashboard), Compliance Assessment, and Incident Report. Per-tool-page PDF export on Scanner, SSL Inspector, Dark Web Monitor, CVE Database, Network Monitor, Email Analyzer, Trojan Analyzer, Password Auditor, and Mobile Pentest pages. Professional formatting with branding.
 - **Scheduled Scans**: `scheduled_scans` table with daily/weekly/monthly frequency. Background scheduler checks every 60s. Supports network_scan, vulnerability_scan, dark_web_check, ssl_check. Dedicated page at `/scheduled-scans`.
 - **Data Retention**: Configurable per-org retention days for security events and audit logs. Daily cleanup job removes old data. Manual "Run Cleanup Now" in Settings.
 - **API Key Management**: Enhanced with description, expiration, soft-revocation, rotation (24h grace period), last-used tracking. Full CRUD UI in Settings.
 - **Global Search / Command Palette**: Ctrl+K/Cmd+K opens search across security events, incidents, network devices, CVEs, and navigation pages. Uses shadcn CommandDialog.
 - **Threat Map Visualization**: SVG world map on dashboard showing attack origins with Mercator projection. Uses ipwho.is (HTTPS) for geolocation with in-memory cache. Color-coded severity dots with animated pulses.
+- **Threat Intel API Key Management**: `threat_intel_keys` table stores per-org API keys for AbuseIPDB, OTX, URLScan.io, Google Safe Browsing. Admin UI on Threat Intel page to add/update/remove keys. DB keys take priority over env vars. CRUD via POST/DELETE `/api/threat-intel/api-keys`.
+- **Enhanced Agent System Info**: Agent telemetry stored in `agents.telemetry` JSONB column. Endpoints page shows tabbed detail view (System Info / Commands / Bandwidth) with CPU/RAM/disk progress bars, network info, top processes table, and system metadata.
+- **Dashboard Organization**: Sections with headings (Overview, Analytics, Activity, Response), collapsible Quick Actions, prominent full-width Threat Map, improved stat card grid layout.
 
 ### System Design Choices
 The architecture is modular, organized into `server/`, `client/`, and `shared/` directories. Authentication uses Passport-local with scrypt hashing and optional TOTP 2FA. All data access is scoped by `organizationId` for multi-tenancy. Agent authentication is token-based. The remote terminal ensures safety through command whitelisting and blacklisting.

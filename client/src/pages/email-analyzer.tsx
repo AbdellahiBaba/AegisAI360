@@ -11,8 +11,9 @@ import {
 } from "@/components/ui/table";
 import {
   Mail, Shield, ShieldAlert, ShieldCheck, ShieldX, AlertTriangle,
-  Clock, Link2, Globe, Hash, AtSign, Loader2, ArrowRight, Search,
+  Clock, Link2, Globe, Hash, AtSign, Loader2, ArrowRight, Search, Download,
 } from "lucide-react";
+import { generateEmailAnalysisReportPDF } from "@/lib/reportGenerator";
 
 interface AuthResult {
   protocol: string;
@@ -193,6 +194,17 @@ export default function EmailAnalyzerPage() {
 
       {result && (
         <>
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => generateEmailAnalysisReportPDF(result)}
+              data-testid="button-export-email-pdf"
+            >
+              <Download className="w-3.5 h-3.5 me-1.5" />
+              Export PDF
+            </Button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
               <CardContent className="pt-4 space-y-2">

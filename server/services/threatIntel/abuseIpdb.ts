@@ -1,5 +1,5 @@
-export async function abuseIpdbLookup(ip: string): Promise<any> {
-  const apiKey = process.env.ABUSEIPDB_API_KEY;
+export async function abuseIpdbLookup(ip: string, overrideKey?: string): Promise<any> {
+  const apiKey = overrideKey || process.env.ABUSEIPDB_API_KEY;
   if (!apiKey) {
     return {
       source: "AbuseIPDB",

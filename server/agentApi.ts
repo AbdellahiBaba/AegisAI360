@@ -360,11 +360,29 @@ export function createAgentRouter(): Router {
       const agent = await storage.getAgentById(agentId);
       if (!agent || agent.deviceToken !== token) return res.status(401).json({ error: "Invalid agent credentials" });
 
+      const telemetryData: any = {};
+      if (hostname !== undefined) telemetryData.hostname = hostname;
+      if (os !== undefined) telemetryData.os = os;
+      if (arch !== undefined) telemetryData.arch = arch;
+      if (cpuUsage !== undefined) telemetryData.cpuUsage = cpuUsage;
+      if (ramUsage !== undefined) telemetryData.ramUsage = ramUsage;
+      if (ramTotalMB !== undefined) telemetryData.ramTotalMB = ramTotalMB;
+      if (ramFreeMB !== undefined) telemetryData.ramFreeMB = ramFreeMB;
+      if (cpus !== undefined) telemetryData.cpus = cpus;
+      if (uptime !== undefined) telemetryData.uptime = uptime;
+      if (agentVersion !== undefined) telemetryData.agentVersion = agentVersion;
+      if (topProcesses !== undefined) telemetryData.topProcesses = topProcesses;
+      if (netConnections !== undefined) telemetryData.netConnections = netConnections;
+      if (diskUsage !== undefined) telemetryData.diskUsage = diskUsage;
+      if (localIP !== undefined) telemetryData.localIP = localIP;
+      telemetryData.lastUpdated = new Date().toISOString();
+
       await storage.updateAgentHeartbeat(agentId, {
         lastSeen: new Date(),
         cpuUsage: cpuUsage ?? undefined,
         ramUsage: ramUsage ?? undefined,
         ip: localIP ?? undefined,
+        telemetry: telemetryData,
       });
 
       res.json({ status: "ok" });

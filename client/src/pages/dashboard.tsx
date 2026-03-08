@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,13 +7,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Separator } from "@/components/ui/separator";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import {
   ShieldAlert, AlertTriangle, Bug, Activity, ArrowUpRight, ArrowDownRight,
   Clock, Monitor, Lock, Radio, ShieldOff, Flame, Crosshair, Zap, CreditCard,
-  Shield, ScanLine, Ban, Eye, Info, Server, FileDown,
+  Shield, ScanLine, Ban, Eye, Info, Server, FileDown, ChevronDown, ChevronUp,
+  BarChart3, Waves, LayoutDashboard,
 } from "lucide-react";
 import { generateExecutiveSummaryPDF } from "@/lib/reportGenerator";
 import {
@@ -61,6 +64,21 @@ function SeverityBadge({ severity }: { severity: string }) {
   );
 }
 
+function SectionHeading({ icon: Icon, title, subtitle }: { icon: React.ElementType; title: string; subtitle?: string }) {
+  return (
+    <div className="flex items-center gap-3 pt-2" data-testid={`section-${title.toLowerCase().replace(/\s+/g, '-')}`}>
+      <div className="p-1.5 rounded-md bg-muted">
+        <Icon className="w-4 h-4 text-muted-foreground" />
+      </div>
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <h2 className="text-sm font-semibold tracking-wider uppercase font-mono">{title}</h2>
+        {subtitle && <span className="text-[10px] text-muted-foreground font-mono">{subtitle}</span>}
+      </div>
+      <Separator className="flex-1" />
+    </div>
+  );
+}
+
 function getThreatLevel(stats: DashboardStats): number {
   if (stats.criticalAlerts >= 5 || stats.activeIncidents >= 3) return 1;
   if (stats.criticalAlerts >= 3) return 2;
@@ -80,7 +98,7 @@ function ThreatLevelIndicator({ stats }: { stats: DashboardStats }) {
     5: t("dashboard.defcon5"),
   };
   return (
-    <div className={`threat-level-${level} rounded-md p-4 flex items-center justify-between gap-4 flex-wrap`} data-testid="threat-level-indicator">
+    <div className={`threat-level-${level} rounded-md p-4 flex items-center justify-between gap-4 flex-wrap flex-1`} data-testid="threat-level-indicator">
       <div className="flex items-center gap-3">
         <Crosshair className="w-6 h-6" />
         <div>
@@ -143,12 +161,12 @@ function StatCard({ title, value, icon: Icon, trend, trendLabel, accent }: {
 function EventTrendChart({ data }: { data: { time: string; events: number }[] }) {
   const { t } = useTranslation();
   return (
-    <Card className="col-span-2">
+    <Card className="lg:col-span-3">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">{t("dashboard.eventTrend")}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[220px]">
+        <div className="h-[260px]">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
               <defs>
@@ -187,20 +205,20 @@ function EventTrendChart({ data }: { data: { time: string; events: number }[] })
 function SeverityBreakdown({ data }: { data: { name: string; value: number }[] }) {
   const { t } = useTranslation();
   return (
-    <Card>
+    <Card className="lg:col-span-2">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">{t("dashboard.severityBreakdown")}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[220px] flex items-center justify-center">
+        <div className="h-[260px] flex items-center justify-center">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={data}
                 cx="50%"
                 cy="50%"
-                innerRadius={50}
-                outerRadius={80}
+                innerRadius={55}
+                outerRadius={90}
                 paddingAngle={3}
                 dataKey="value"
               >
@@ -223,9 +241,9 @@ function SeverityBreakdown({ data }: { data: { name: string; value: number }[] }
         <div className="flex flex-wrap gap-3 mt-2 justify-center">
           {data.map((entry) => (
             <div key={entry.name} className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: severityColors[entry.name] }} />
-              <span className="text-[10px] text-muted-foreground capitalize font-mono">{entry.name}</span>
-              <span className="text-[10px] font-mono font-bold">{entry.value}</span>
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: severityColors[entry.name] }} />
+              <span className="text-[11px] text-muted-foreground capitalize font-mono">{entry.name}</span>
+              <span className="text-[11px] font-mono font-bold">{entry.value}</span>
             </div>
           ))}
         </div>
@@ -277,6 +295,7 @@ function QuickActions() {
   const { toast } = useToast();
   const { t } = useTranslation();
   const [, navigate] = useLocation();
+  const [isOpen, setIsOpen] = useState(true);
 
   const lockdownMutation = useMutation({
     mutationFn: async () => {
@@ -324,78 +343,89 @@ function QuickActions() {
   });
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">{t("dashboard.quickActions")}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-          <Button
-            className="h-auto py-3 flex flex-col items-center gap-1.5"
-            onClick={() => protectMutation.mutate()}
-            disabled={protectMutation.isPending}
-            data-testid="button-activate-protection"
-          >
-            <Shield className="w-5 h-5" />
-            <span className="text-[10px] font-mono uppercase tracking-wider">
-              {protectMutation.isPending ? t("common.activating") : t("dashboard.activateProtection")}
-            </span>
-          </Button>
-          <Button
-            variant="secondary"
-            className="h-auto py-3 flex flex-col items-center gap-1.5"
-            onClick={() => navigate("/network-monitor")}
-            data-testid="button-scan-systems"
-          >
-            <ScanLine className="w-5 h-5" />
-            <span className="text-[10px] font-mono uppercase tracking-wider">{t("dashboard.scanSystems")}</span>
-          </Button>
-          <Button
-            variant="secondary"
-            className="h-auto py-3 flex flex-col items-center gap-1.5"
-            onClick={() => { if (window.confirm(t("dashboard.blockAllConfirm"))) blockAllMutation.mutate(); }}
-            disabled={blockAllMutation.isPending}
-            data-testid="button-block-all-threats"
-          >
-            <Ban className="w-5 h-5" />
-            <span className="text-[10px] font-mono uppercase tracking-wider">
-              {blockAllMutation.isPending ? t("common.blocking") : t("dashboard.blockAllThreats")}
-            </span>
-          </Button>
-          <Button
-            variant="destructive"
-            className="h-auto py-3 flex flex-col items-center gap-1.5"
-            onClick={() => { if (window.confirm(t("dashboard.lockdownConfirm"))) lockdownMutation.mutate(); }}
-            disabled={lockdownMutation.isPending}
-            data-testid="button-emergency-lockdown"
-          >
-            <Flame className="w-5 h-5" />
-            <span className="text-[10px] font-mono uppercase tracking-wider">
-              {lockdownMutation.isPending ? t("common.initiating") : t("dashboard.emergencyLockdown")}
-            </span>
-          </Button>
-        </div>
-        <div className="mt-2 flex justify-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-[10px] text-muted-foreground"
-            onClick={() => navigate("/protection-center")}
-            data-testid="button-view-protection"
-          >
-            <Eye className="w-3 h-3 me-1" />
-            {t("dashboard.viewProtectionStatus")}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">{t("dashboard.quickActions")}</CardTitle>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="icon" data-testid="button-toggle-quick-actions">
+                {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </Button>
+            </CollapsibleTrigger>
+          </div>
+        </CardHeader>
+        <CollapsibleContent>
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+              <Button
+                className="h-auto py-3 flex flex-col items-center gap-1.5"
+                onClick={() => protectMutation.mutate()}
+                disabled={protectMutation.isPending}
+                data-testid="button-activate-protection"
+              >
+                <Shield className="w-5 h-5" />
+                <span className="text-[10px] font-mono uppercase tracking-wider">
+                  {protectMutation.isPending ? t("common.activating") : t("dashboard.activateProtection")}
+                </span>
+              </Button>
+              <Button
+                variant="secondary"
+                className="h-auto py-3 flex flex-col items-center gap-1.5"
+                onClick={() => navigate("/network-monitor")}
+                data-testid="button-scan-systems"
+              >
+                <ScanLine className="w-5 h-5" />
+                <span className="text-[10px] font-mono uppercase tracking-wider">{t("dashboard.scanSystems")}</span>
+              </Button>
+              <Button
+                variant="secondary"
+                className="h-auto py-3 flex flex-col items-center gap-1.5"
+                onClick={() => { if (window.confirm(t("dashboard.blockAllConfirm"))) blockAllMutation.mutate(); }}
+                disabled={blockAllMutation.isPending}
+                data-testid="button-block-all-threats"
+              >
+                <Ban className="w-5 h-5" />
+                <span className="text-[10px] font-mono uppercase tracking-wider">
+                  {blockAllMutation.isPending ? t("common.blocking") : t("dashboard.blockAllThreats")}
+                </span>
+              </Button>
+              <Button
+                variant="destructive"
+                className="h-auto py-3 flex flex-col items-center gap-1.5"
+                onClick={() => { if (window.confirm(t("dashboard.lockdownConfirm"))) lockdownMutation.mutate(); }}
+                disabled={lockdownMutation.isPending}
+                data-testid="button-emergency-lockdown"
+              >
+                <Flame className="w-5 h-5" />
+                <span className="text-[10px] font-mono uppercase tracking-wider">
+                  {lockdownMutation.isPending ? t("common.initiating") : t("dashboard.emergencyLockdown")}
+                </span>
+              </Button>
+            </div>
+            <div className="mt-2 flex justify-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-[10px] text-muted-foreground"
+                onClick={() => navigate("/protection-center")}
+                data-testid="button-view-protection"
+              >
+                <Eye className="w-3 h-3 me-1" />
+                {t("dashboard.viewProtectionStatus")}
+              </Button>
+            </div>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }
 
 function RecentAlerts({ events }: { events: SecurityEvent[] }) {
   const { t } = useTranslation();
   return (
-    <Card className="col-span-2">
+    <Card className="lg:col-span-3">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">{t("dashboard.recentAlerts")}</CardTitle>
@@ -403,7 +433,7 @@ function RecentAlerts({ events }: { events: SecurityEvent[] }) {
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <ScrollArea className="h-[260px]">
+        <ScrollArea className="h-[300px]">
           <div className="px-4 pb-4">
             {events.length === 0 ? (
               <div className="text-center text-sm text-muted-foreground py-8 font-mono">{t("dashboard.noRecentAlerts")}</div>
@@ -442,7 +472,7 @@ function RecentAlerts({ events }: { events: SecurityEvent[] }) {
 function ActivityFeed({ events }: { events: SecurityEvent[] }) {
   const { t } = useTranslation();
   return (
-    <Card>
+    <Card className="lg:col-span-2">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-sm font-medium tracking-wider uppercase font-mono">{t("dashboard.liveFeed")}</CardTitle>
@@ -453,7 +483,7 @@ function ActivityFeed({ events }: { events: SecurityEvent[] }) {
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <ScrollArea className="h-[260px]">
+        <ScrollArea className="h-[300px]">
           <div className="px-4 pb-4 space-y-2">
             {events.map((event) => (
               <div key={event.id} className="flex gap-2 animate-slide-in" data-testid={`feed-item-${event.id}`}>
@@ -494,7 +524,7 @@ function ResponseActionsFeed({ actions }: { actions: ResponseAction[] }) {
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <ScrollArea className="h-[260px]">
+        <ScrollArea className="h-[300px]">
           <div className="px-4 pb-4">
             {actions.length === 0 ? (
               <div className="text-center text-sm text-muted-foreground py-8 font-mono">{t("dashboard.noRecentActions")}</div>
@@ -597,26 +627,21 @@ export default function Dashboard() {
       ].filter((d) => d.value > 0)
     : [];
 
-  const getThreatScoreColor = (score: number) => {
-    if (score >= 75) return "text-severity-critical";
-    if (score >= 50) return "text-severity-high";
-    if (score >= 25) return "text-severity-medium";
-    return "text-status-online";
-  };
-
   if (statsLoading || eventsLoading) {
     return (
-      <div className="p-6 space-y-4">
+      <div className="p-4 md:p-6 space-y-6">
         <Skeleton className="h-16 w-full rounded-md" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i}><CardContent className="p-4"><Skeleton className="h-20 w-full" /></CardContent></Card>
           ))}
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="col-span-2"><CardContent className="p-4"><Skeleton className="h-[260px] w-full" /></CardContent></Card>
-          <Card><CardContent className="p-4"><Skeleton className="h-[260px] w-full" /></CardContent></Card>
+        <Skeleton className="h-8 w-48 rounded-md" />
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <Card className="lg:col-span-3"><CardContent className="p-4"><Skeleton className="h-[260px] w-full" /></CardContent></Card>
+          <Card className="lg:col-span-2"><CardContent className="p-4"><Skeleton className="h-[260px] w-full" /></CardContent></Card>
         </div>
+        <Skeleton className="h-[280px] w-full rounded-md" />
       </div>
     );
   }
@@ -624,7 +649,7 @@ export default function Dashboard() {
   const showUpgradeBanner = user?.role === "admin" && !user?.isSuperAdmin && billingStatus && !billingStatus.stripeSubscriptionId;
 
   return (
-    <div className="p-4 md:p-6 space-y-4 grid-pattern">
+    <div className="p-4 md:p-6 space-y-5 grid-pattern">
       {showUpgradeBanner && (
         <Card className="border-primary/30 bg-primary/5" data-testid="upgrade-banner">
           <CardContent className="p-4 flex items-center justify-between gap-4 flex-wrap">
@@ -649,7 +674,9 @@ export default function Dashboard() {
         </Card>
       )}
 
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+      <SectionHeading icon={LayoutDashboard} title={t("dashboard.overview", "Overview")} subtitle={t("dashboard.overviewSubtitle", "System status at a glance")} />
+
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <ThreatLevelIndicator stats={stats!} />
         <Button
           variant="outline"
@@ -662,7 +689,7 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard
           title={t("dashboard.events24h")}
           value={stats?.totalEvents ?? 0}
@@ -689,6 +716,9 @@ export default function Dashboard() {
           icon={ShieldOff}
           accent={(stats?.blockedIps ?? 0) > 0 ? "text-severity-high" : undefined}
         />
+      </div>
+
+      <div className="grid grid-cols-3 md:grid-cols-3 gap-3">
         <StatCard
           title={t("dashboard.assets")}
           value={stats?.assetCount ?? 0}
@@ -709,15 +739,23 @@ export default function Dashboard() {
 
       <QuickActions />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <SectionHeading icon={BarChart3} title={t("dashboard.analytics", "Analytics")} subtitle={t("dashboard.analyticsSubtitle", "Trends & severity distribution")} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
         <EventTrendChart data={trendData || []} />
         <SeverityBreakdown data={severityData} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <ThreatMap />
+
+      <SectionHeading icon={Waves} title={t("dashboard.activity", "Activity")} subtitle={t("dashboard.activitySubtitle", "Recent alerts & live event feed")} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
         <RecentAlerts events={recentEvents} />
         <ActivityFeed events={feedEvents} />
       </div>
+
+      <SectionHeading icon={Zap} title={t("dashboard.response", "Response")} subtitle={t("dashboard.responseSubtitle", "Automated response actions")} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <ResponseActionsFeed actions={recentActions} />

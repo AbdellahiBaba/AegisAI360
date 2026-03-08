@@ -14,8 +14,9 @@ import { Separator } from "@/components/ui/separator";
 import {
   KeyRound, Shield, AlertTriangle, CheckCircle2, XCircle,
   Clock, Copy, RefreshCw, Eye, EyeOff, Search, Loader2,
-  FileText, Lock, Zap,
+  FileText, Lock, Zap, Download,
 } from "lucide-react";
+import { generatePasswordAuditReportPDF } from "@/lib/reportGenerator";
 import { useToast } from "@/hooks/use-toast";
 
 interface AnalysisResult {
@@ -189,10 +190,23 @@ export default function PasswordAuditorPage() {
 
   return (
     <div className="p-4 space-y-4 max-w-7xl mx-auto">
-      <div className="flex items-center gap-3 flex-wrap">
-        <KeyRound className="w-6 h-6 text-primary" />
-        <h1 className="text-xl font-bold" data-testid="text-page-title">Password Security Auditor</h1>
-        <Badge variant="outline" data-testid="badge-tool-type">Security Tool</Badge>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
+          <KeyRound className="w-6 h-6 text-primary" />
+          <h1 className="text-xl font-bold" data-testid="text-page-title">Password Security Auditor</h1>
+          <Badge variant="outline" data-testid="badge-tool-type">Security Tool</Badge>
+        </div>
+        {(analysis || policyResult) && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => generatePasswordAuditReportPDF(analysis, breachResult, policyResult)}
+            data-testid="button-export-password-pdf"
+          >
+            <Download className="w-3.5 h-3.5 me-1.5" />
+            Export PDF
+          </Button>
+        )}
       </div>
 
       <Tabs defaultValue="analyze" className="space-y-4">

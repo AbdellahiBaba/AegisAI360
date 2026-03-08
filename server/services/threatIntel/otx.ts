@@ -1,5 +1,5 @@
-export async function otxLookup(indicator: string, type: "ip" | "domain" | "url" | "hash" = "ip"): Promise<any> {
-  const apiKey = process.env.OTX_API_KEY;
+export async function otxLookup(indicator: string, type: "ip" | "domain" | "url" | "hash" = "ip", overrideKey?: string): Promise<any> {
+  const apiKey = overrideKey || process.env.OTX_API_KEY;
   if (!apiKey) {
     return {
       source: "AlienVault OTX",

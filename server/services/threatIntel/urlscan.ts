@@ -1,5 +1,5 @@
-export async function urlscanLookup(url: string): Promise<any> {
-  const apiKey = process.env.URLSCAN_API_KEY;
+export async function urlscanLookup(url: string, overrideKey?: string): Promise<any> {
+  const apiKey = overrideKey || process.env.URLSCAN_API_KEY;
   if (!apiKey) {
     return {
       source: "URLScan.io",

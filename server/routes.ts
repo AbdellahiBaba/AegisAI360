@@ -1693,6 +1693,17 @@ export async function registerRoutes(
       const stripe = await getUncachableStripeClient();
 
       let customerId = org.stripeCustomerId;
+      if (customerId) {
+        try {
+          await stripe.customers.retrieve(customerId);
+        } catch (e: any) {
+          if (e?.statusCode === 404 || e?.code === "resource_missing") {
+            customerId = null;
+          } else {
+            throw e;
+          }
+        }
+      }
       if (!customerId) {
         const customer = await stripe.customers.create({
           metadata: { organizationId: String(orgId) },
@@ -1814,10 +1825,20 @@ export async function registerRoutes(
       const orgId = getOrgId(req);
       const org = await storage.getOrganization(orgId);
       if (!org?.stripeCustomerId) {
-        return res.status(400).json({ error: "No billing account found" });
+        return res.status(400).json({ error: "No billing account found. Please subscribe to a plan first." });
       }
 
       const stripe = await getUncachableStripeClient();
+      try {
+        await stripe.customers.retrieve(org.stripeCustomerId);
+      } catch (e: any) {
+        if (e?.statusCode === 404 || e?.code === "resource_missing") {
+          await storage.updateOrganization(orgId, { stripeCustomerId: null } as any);
+          return res.status(400).json({ error: "Billing account expired. Please subscribe to a new plan." });
+        }
+        throw e;
+      }
+
       const session = await stripe.billingPortal.sessions.create({
         customer: org.stripeCustomerId,
         return_url: `https://${req.get('host')}/billing`,
@@ -1869,46 +1890,60 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/threat-intel/api-status", requireAuth, async (_req, res) => {
+  app.get("/api/threat-intel/api-status", requireAuth, async (req, res) => {
     try {
+      const orgId = getOrgId(req);
+      const dbKeys = await storage.getThreatIntelKeys(orgId);
+      const dbKeyMap = new Map(dbKeys.map(k => [k.service, true]));
+
       res.json({
         apis: [
           {
             name: "AbuseIPDB",
+            service: "abuseipdb",
             envVar: "ABUSEIPDB_API_KEY",
-            configured: !!process.env.ABUSEIPDB_API_KEY,
+            configured: dbKeyMap.has("abuseipdb") || !!process.env.ABUSEIPDB_API_KEY,
+            hasDbKey: dbKeyMap.has("abuseipdb"),
             description: "IP address reputation and abuse reporting",
             setupUrl: "https://www.abuseipdb.com/account/api",
             freeTier: "1,000 lookups/day",
           },
           {
             name: "AlienVault OTX",
+            service: "otx",
             envVar: "OTX_API_KEY",
-            configured: !!process.env.OTX_API_KEY,
+            configured: dbKeyMap.has("otx") || !!process.env.OTX_API_KEY,
+            hasDbKey: dbKeyMap.has("otx"),
             description: "Open threat intelligence for IPs, domains, URLs, and hashes",
             setupUrl: "https://otx.alienvault.com/api",
             freeTier: "Unlimited",
           },
           {
             name: "URLScan.io",
+            service: "urlscan",
             envVar: "URLSCAN_API_KEY",
-            configured: !!process.env.URLSCAN_API_KEY,
+            configured: dbKeyMap.has("urlscan") || !!process.env.URLSCAN_API_KEY,
+            hasDbKey: dbKeyMap.has("urlscan"),
             description: "URL scanning and website analysis",
             setupUrl: "https://urlscan.io/user/signup",
             freeTier: "50 scans/day",
           },
           {
             name: "Google Safe Browsing",
+            service: "google_safe_browsing",
             envVar: "GOOGLE_SAFE_BROWSING_API_KEY",
-            configured: !!process.env.GOOGLE_SAFE_BROWSING_API_KEY,
+            configured: dbKeyMap.has("google_safe_browsing") || !!process.env.GOOGLE_SAFE_BROWSING_API_KEY,
+            hasDbKey: dbKeyMap.has("google_safe_browsing"),
             description: "URL threat detection for malware, phishing, and unwanted software",
             setupUrl: "https://console.cloud.google.com/apis/library/safebrowsing.googleapis.com",
             freeTier: "10,000 lookups/day",
           },
           {
             name: "MalwareBazaar",
+            service: "malwarebazaar",
             envVar: null,
             configured: true,
+            hasDbKey: false,
             description: "Malware hash lookup (free, no API key required)",
             setupUrl: "https://bazaar.abuse.ch/",
             freeTier: "Unlimited, no key needed",
@@ -1920,11 +1955,39 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/threat-intel/api-keys", requireRole("admin"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { service, apiKey } = z.object({ service: z.string().min(1), apiKey: z.string().min(1) }).parse(req.body);
+      const validServices = ["abuseipdb", "otx", "urlscan", "google_safe_browsing"];
+      if (!validServices.includes(service)) return res.status(400).json({ error: "Invalid service name" });
+      const key = await storage.upsertThreatIntelKey(orgId, service, apiKey);
+      await storage.createAuditLog({ organizationId: orgId, userId: (req.user as any).id, action: "threat_intel_key_updated", targetType: "settings", details: { service } });
+      res.json({ service: key.service, configured: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save API key" });
+    }
+  });
+
+  app.delete("/api/threat-intel/api-keys/:service", requireRole("admin"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const service = req.params.service;
+      await storage.deleteThreatIntelKey(orgId, service);
+      await storage.createAuditLog({ organizationId: orgId, userId: (req.user as any).id, action: "threat_intel_key_removed", targetType: "settings", details: { service } });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete API key" });
+    }
+  });
+
   app.post("/api/threat-intel/ip", requireAuth, requirePlanFeature("allowThreatIntel"), async (req, res) => {
     try {
+      const orgId = getOrgId(req);
       const { ip } = z.object({ ip: z.string().min(1) }).parse(req.body);
-      await storage.incrementUsage(getOrgId(req), "threatIntelQueries");
-      const result = await abuseIpdbLookup(ip);
+      await storage.incrementUsage(orgId, "threatIntelQueries");
+      const dbKey = await storage.getThreatIntelKey(orgId, "abuseipdb");
+      const result = await abuseIpdbLookup(ip, dbKey?.apiKey);
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "IP lookup failed" });
@@ -1933,9 +1996,11 @@ export async function registerRoutes(
 
   app.post("/api/threat-intel/otx-lookup", requireAuth, requirePlanFeature("allowThreatIntel"), async (req, res) => {
     try {
+      const orgId = getOrgId(req);
       const { indicator, type } = z.object({ indicator: z.string().min(1), type: z.enum(["ip", "domain", "url", "hash"]).default("ip") }).parse(req.body);
-      await storage.incrementUsage(getOrgId(req), "threatIntelQueries");
-      const result = await otxLookup(indicator, type);
+      await storage.incrementUsage(orgId, "threatIntelQueries");
+      const dbKey = await storage.getThreatIntelKey(orgId, "otx");
+      const result = await otxLookup(indicator, type, dbKey?.apiKey);
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "OTX lookup failed" });
@@ -1944,9 +2009,11 @@ export async function registerRoutes(
 
   app.post("/api/threat-intel/urlscan", requireAuth, requirePlanFeature("allowThreatIntel"), async (req, res) => {
     try {
+      const orgId = getOrgId(req);
       const { url } = z.object({ url: z.string().min(1) }).parse(req.body);
-      await storage.incrementUsage(getOrgId(req), "threatIntelQueries");
-      const result = await urlscanLookup(url);
+      await storage.incrementUsage(orgId, "threatIntelQueries");
+      const dbKey = await storage.getThreatIntelKey(orgId, "urlscan");
+      const result = await urlscanLookup(url, dbKey?.apiKey);
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "URL scan failed" });
@@ -1955,9 +2022,11 @@ export async function registerRoutes(
 
   app.post("/api/threat-intel/safebrowsing", requireAuth, requirePlanFeature("allowThreatIntel"), async (req, res) => {
     try {
+      const orgId = getOrgId(req);
       const { url } = z.object({ url: z.string().min(1) }).parse(req.body);
-      await storage.incrementUsage(getOrgId(req), "threatIntelQueries");
-      const result = await safeBrowsingLookup(url);
+      await storage.incrementUsage(orgId, "threatIntelQueries");
+      const dbKey = await storage.getThreatIntelKey(orgId, "google_safe_browsing");
+      const result = await safeBrowsingLookup(url, dbKey?.apiKey);
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Safe Browsing lookup failed" });

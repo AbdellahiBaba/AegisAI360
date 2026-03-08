@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Shield, ShieldCheck, ShieldX, Clock, Link2, AlertTriangle, CheckCircle, Info, Lock } from "lucide-react";
+import { Loader2, Search, Shield, ShieldCheck, ShieldX, Clock, Link2, AlertTriangle, CheckCircle, Info, Lock, Download } from "lucide-react";
+import { generateSSLInspectorReportPDF } from "@/lib/reportGenerator";
 import { useToast } from "@/hooks/use-toast";
 
 interface Finding {
@@ -132,6 +133,17 @@ export default function SSLInspectorPage() {
 
       {result && (
         <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => generateSSLInspectorReportPDF(result)}
+              data-testid="button-export-ssl-pdf"
+            >
+              <Download className="w-3.5 h-3.5 me-1.5" />
+              Export PDF
+            </Button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
               <CardContent className="pt-4 flex flex-col items-center gap-2">

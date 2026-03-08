@@ -36,8 +36,10 @@ function formatDate(dateStr: string) {
 
 interface ApiStatus {
   name: string;
+  service: string;
   envVar: string | null;
   configured: boolean;
+  hasDbKey: boolean;
   description: string;
   setupUrl: string;
   freeTier: string;
@@ -46,6 +48,35 @@ interface ApiStatus {
 function ApiStatusSection() {
   const { data } = useQuery<{ apis: ApiStatus[] }>({
     queryKey: ["/api/threat-intel/api-status"],
+  });
+  const { toast } = useToast();
+  const [editingService, setEditingService] = useState<string | null>(null);
+  const [keyInputs, setKeyInputs] = useState<Record<string, string>>({});
+
+  const saveKeyMutation = useMutation({
+    mutationFn: async ({ service, apiKey }: { service: string; apiKey: string }) => {
+      const res = await apiRequest("POST", "/api/threat-intel/api-keys", { service, apiKey });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/threat-intel/api-status"] });
+      setEditingService(null);
+      setKeyInputs({});
+      toast({ title: "API Key Saved" });
+    },
+    onError: (e: Error) => toast({ title: "Failed to save key", description: e.message, variant: "destructive" }),
+  });
+
+  const removeKeyMutation = useMutation({
+    mutationFn: async (service: string) => {
+      const res = await apiRequest("DELETE", `/api/threat-intel/api-keys/${service}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/threat-intel/api-status"] });
+      toast({ title: "API Key Removed" });
+    },
+    onError: (e: Error) => toast({ title: "Failed to remove key", description: e.message, variant: "destructive" }),
   });
 
   if (!data) return null;
@@ -59,7 +90,7 @@ function ApiStatusSection() {
         <CardTitle className="text-sm flex items-center justify-between gap-2 flex-wrap">
           <span className="flex items-center gap-2">
             <KeyRound className="w-4 h-4" />
-            API Configuration Status
+            API Configuration
           </span>
           <Badge variant={configuredCount === totalCount ? "default" : "secondary"} data-testid="badge-api-count">
             {configuredCount}/{totalCount} Active
@@ -67,40 +98,85 @@ function ApiStatusSection() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        <div className="space-y-2">
           {data.apis.map((api) => (
             <div
               key={api.name}
-              className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted/30"
+              className="p-3 rounded-md bg-muted/30 space-y-2"
               data-testid={`api-status-${api.name.replace(/\s+/g, "-").toLowerCase()}`}
             >
-              <div className="flex items-center gap-2 min-w-0">
-                {api.configured ? (
-                  <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-                ) : (
-                  <XCircle className="w-4 h-4 text-muted-foreground shrink-0" />
-                )}
-                <div className="min-w-0">
-                  <p className="text-xs font-medium truncate">{api.name}</p>
-                  <p className="text-[10px] text-muted-foreground truncate">{api.freeTier}</p>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  {api.configured ? (
+                    <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-muted-foreground shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium truncate">{api.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{api.description}</p>
+                    <p className="text-[10px] text-muted-foreground">Free tier: {api.freeTier}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {api.configured && (
+                    <Badge variant="outline" className="text-[10px]">Active</Badge>
+                  )}
+                  {api.envVar && !api.hasDbKey && !api.configured && (
+                    <a href={api.setupUrl} target="_blank" rel="noopener noreferrer">
+                      <Button size="sm" variant="outline" className="text-[10px] gap-1 h-7" data-testid={`link-setup-${api.service}`}>
+                        <ExternalLink className="w-3 h-3" /> Get Key
+                      </Button>
+                    </a>
+                  )}
+                  {api.envVar && (
+                    <Button
+                      size="sm"
+                      variant={editingService === api.service ? "secondary" : "ghost"}
+                      className="text-[10px] h-7"
+                      onClick={() => {
+                        setEditingService(editingService === api.service ? null : api.service);
+                        setKeyInputs({});
+                      }}
+                      data-testid={`button-configure-${api.service}`}
+                    >
+                      {api.hasDbKey ? "Update Key" : "Add Key"}
+                    </Button>
+                  )}
+                  {api.hasDbKey && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-[10px] h-7 text-destructive"
+                      onClick={() => removeKeyMutation.mutate(api.service)}
+                      disabled={removeKeyMutation.isPending}
+                      data-testid={`button-remove-${api.service}`}
+                    >
+                      Remove
+                    </Button>
+                  )}
                 </div>
               </div>
-              {!api.configured && api.envVar && (
-                <a
-                  href={api.setupUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0"
-                  data-testid={`link-setup-${api.name.replace(/\s+/g, "-").toLowerCase()}`}
-                >
-                  <Button size="sm" variant="outline" className="text-[10px] gap-1">
-                    <ExternalLink className="w-3 h-3" />
-                    Get Key
+              {editingService === api.service && (
+                <div className="flex gap-2 pt-1">
+                  <Input
+                    placeholder={`Enter ${api.name} API key`}
+                    value={keyInputs[api.service] || ""}
+                    onChange={(e) => setKeyInputs({ ...keyInputs, [api.service]: e.target.value })}
+                    className="text-xs font-mono h-8"
+                    type="password"
+                    data-testid={`input-apikey-${api.service}`}
+                  />
+                  <Button
+                    size="sm"
+                    className="text-[10px] h-8"
+                    disabled={!keyInputs[api.service] || saveKeyMutation.isPending}
+                    onClick={() => saveKeyMutation.mutate({ service: api.service, apiKey: keyInputs[api.service] })}
+                    data-testid={`button-save-${api.service}`}
+                  >
+                    {saveKeyMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
                   </Button>
-                </a>
-              )}
-              {api.configured && (
-                <Badge variant="outline" className="text-[10px] shrink-0">Active</Badge>
+                </div>
               )}
             </div>
           ))}
