@@ -214,6 +214,31 @@ func main() {
 
         applyConfigToLogger(cfg)
 
+        if mode == "service" {
+                logMessage("INFO", "Entering Windows Service mode via SCM...")
+                if err := runWindowsService(); err != nil {
+                        logMessage("FATAL", "Windows Service error: %v", err)
+                        logMessage("INFO", "Falling back to direct agent mode...")
+                        ctx, cancel := context.WithCancel(context.Background())
+                        defer cancel()
+
+                        sigCh := make(chan os.Signal, 1)
+                        signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+                        go func() {
+                                sig := <-sigCh
+                                logMessage("INFO", "Received signal: %v, shutting down...", sig)
+                                cancel()
+                        }()
+
+                        if err := runAgent(ctx, cfg); err != nil {
+                                logMessage("FATAL", "Agent error: %v", err)
+                                os.Exit(1)
+                        }
+                }
+                logMessage("INFO", "Agent stopped")
+                return
+        }
+
         ctx, cancel := context.WithCancel(context.Background())
         defer cancel()
 
