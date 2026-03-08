@@ -89,7 +89,7 @@ export default function FeaturesPage() {
                 {category.features.map((feature) => {
                   const Icon = feature.icon;
                   return (
-                    <Card key={feature.titleKey} className="p-6" data-testid={`card-feature-${feature.titleKey}`}>
+                    <Card key={feature.titleKey} className="p-6" data-testid={`card-feature-${feature.titleKey.replace("feat.", "")}`}>
                       <div className="flex items-start gap-4">
                         <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
                           <Icon className="w-5 h-5 text-primary" />
