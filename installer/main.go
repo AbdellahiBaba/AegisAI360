@@ -142,6 +142,20 @@ func main() {
         mode := detectMode()
         logMessage("INFO", "Running in %s mode (silent=%v, privilege=%s)", mode, silentMode, getPrivilegeLevel())
 
+        if mode != "service" && isInteractiveTerminal() && isServiceRunning() {
+                fmt.Println()
+                fmt.Println("  AegisAI360 Agent is already running as a Windows Service.")
+                fmt.Println("  The service runs persistently in the background.")
+                fmt.Println()
+                fmt.Printf("  Service name:   %s\n", serviceName)
+                fmt.Printf("  Check status:   sc query %s\n", serviceName)
+                fmt.Printf("  Stop service:   sc stop %s\n", serviceName)
+                fmt.Printf("  Uninstall:      %s --uninstall\n", filepath.Base(os.Args[0]))
+                fmt.Println()
+                waitForExit()
+                return
+        }
+
         cfg, err := loadConfig()
         if err != nil {
                 logMessage("WARN", "Configuration incomplete: %v", err)
@@ -164,7 +178,19 @@ func main() {
                         }
                         logMessage("INFO", "Configuration saved successfully")
                         fmt.Println()
-                        fmt.Println("  Configuration saved! Starting agent...")
+                        fmt.Println("  Configuration saved!")
+                        fmt.Println()
+
+                        if autoInstallAndStartService() {
+                                fmt.Println("  You can safely close this window.")
+                                fmt.Println("  The agent will continue running in the background.")
+                                waitForExit()
+                                return
+                        }
+
+                        fmt.Println("  Starting agent in terminal mode...")
+                        fmt.Println("  (Note: The agent will stop when you close this window.)")
+                        fmt.Println("  (Run with --install to set up as a persistent service.)")
                         fmt.Println()
                 } else if silentMode {
                         logMessage("FATAL", "No configuration found, cannot run in silent mode")
@@ -176,6 +202,13 @@ func main() {
                         fmt.Fprintln(os.Stderr, "    3. Set AEGIS_SERVER_URL and AEGIS_DEVICE_TOKEN env vars")
                         fmt.Fprintln(os.Stderr, "    4. Pass as arguments: agent.exe <SERVER_URL> <DEVICE_TOKEN>")
                         os.Exit(1)
+                }
+        } else if mode != "service" && isInteractiveTerminal() && !isServiceInstalled() {
+                if autoInstallAndStartService() {
+                        fmt.Println("  You can safely close this window.")
+                        fmt.Println("  The agent will continue running in the background.")
+                        waitForExit()
+                        return
                 }
         }
 
@@ -299,6 +332,137 @@ func printHelp() {
         fmt.Println()
 }
 
+func isServiceInstalled() bool {
+        if runtime.GOOS != "windows" {
+                return false
+        }
+        cmd := exec.Command("sc", "query", serviceName)
+        output, err := cmd.CombinedOutput()
+        if err != nil {
+                return false
+        }
+        return strings.Contains(string(output), serviceName)
+}
+
+func isServiceRunning() bool {
+        if runtime.GOOS != "windows" {
+                return false
+        }
+        cmd := exec.Command("sc", "query", serviceName)
+        output, err := cmd.CombinedOutput()
+        if err != nil {
+                return false
+        }
+        return strings.Contains(string(output), "RUNNING")
+}
+
+func startService() bool {
+        if runtime.GOOS != "windows" {
+                return false
+        }
+        cmd := exec.Command("sc", "start", serviceName)
+        output, err := cmd.CombinedOutput()
+        if err != nil {
+                logMessage("WARN", "Failed to start service: %v (%s)", err, string(output))
+                return false
+        }
+        logMessage("INFO", "Service started successfully")
+        return true
+}
+
+func autoInstallAndStartService() bool {
+        if runtime.GOOS != "windows" {
+                return false
+        }
+
+        if isServiceInstalled() {
+                logMessage("INFO", "Service already installed, skipping auto-install")
+                if !isServiceRunning() {
+                        logMessage("INFO", "Service installed but not running, starting it...")
+                        startService()
+                        time.Sleep(2 * time.Second)
+                        if !isServiceRunning() {
+                                logMessage("WARN", "Service installed but failed to start")
+                                return false
+                        }
+                }
+                return true
+        }
+
+        exePath, err := os.Executable()
+        if err != nil {
+                logMessage("WARN", "Cannot determine executable path for auto-install: %v", err)
+                return false
+        }
+        absPath, _ := filepath.Abs(exePath)
+
+        logMessage("INFO", "Auto-installing as Windows Service for persistence...")
+        if !silentMode {
+                fmt.Println()
+                fmt.Println("  Installing as persistent Windows Service...")
+        }
+
+        cmd := exec.Command("sc", "create", serviceName,
+                "binPath=", fmt.Sprintf("\"%s\" --service", absPath),
+                "DisplayName=", serviceDisplayName,
+                "start=", "auto",
+                "obj=", "LocalSystem",
+        )
+        output, scErr := cmd.CombinedOutput()
+        if scErr != nil {
+                logMessage("WARN", "Auto-install failed: %v (%s)", scErr, string(output))
+                if !silentMode {
+                        fmt.Println("  Could not auto-install as service (run --install manually).")
+                }
+                return false
+        }
+
+        descCmd := exec.Command("sc", "description", serviceName, serviceDescription)
+        descCmd.Run()
+
+        failCmd := exec.Command("sc", "failure", serviceName,
+                "reset=", "86400",
+                "actions=", "restart/5000/restart/5000/restart/5000",
+        )
+        failCmd.Run()
+
+        delayedAutoCmd := exec.Command("sc", "config", serviceName, "start=", "delayed-auto")
+        delayedAutoCmd.Run()
+
+        addStartupRegistryEntry(absPath)
+
+        startService()
+        time.Sleep(2 * time.Second)
+
+        if !isServiceRunning() {
+                logMessage("WARN", "Service installed but failed to start after auto-install")
+                if !silentMode {
+                        fmt.Println("  Service installed but could not start.")
+                        fmt.Println("  Falling back to terminal mode...")
+                }
+                return false
+        }
+
+        if !silentMode {
+                fmt.Println("  Service installed and started successfully!")
+                fmt.Println()
+                fmt.Println("  The agent is now running as a persistent Windows Service.")
+                fmt.Println("  It will automatically:")
+                fmt.Println("    - Restart on failure (5-second delay)")
+                fmt.Println("    - Start on system boot (delayed auto-start)")
+                fmt.Println("    - Run in background (closing this window has no effect)")
+                fmt.Println()
+                fmt.Printf("  Service name:   %s\n", serviceName)
+                fmt.Printf("  Check status:   sc query %s\n", serviceName)
+                fmt.Printf("  Stop service:   sc stop %s\n", serviceName)
+                fmt.Printf("  Uninstall:      %s --uninstall\n", filepath.Base(absPath))
+                fmt.Println()
+        }
+
+        logMessage("INFO", "Auto-install complete: service installed, started, and set to auto-restart")
+        return true
+}
+
 func installService() {
         if runtime.GOOS != "windows" {
                 fmt.Println("  Service installation is only supported on Windows.")
@@ -314,6 +478,23 @@ func installService() {
         }
 
         absPath, _ := filepath.Abs(exePath)
+
+        if isServiceInstalled() {
+                fmt.Printf("  Service '%s' is already installed.\n", serviceName)
+                if !isServiceRunning() {
+                        fmt.Println("  Starting the service...")
+                        if startService() {
+                                fmt.Println("  Service started successfully!")
+                        } else {
+                                fmt.Println("  Failed to start the service.")
+                        }
+                } else {
+                        fmt.Println("  Service is already running.")
+                }
+                fmt.Println()
+                waitForExit()
+                return
+        }
 
         configPath := filepath.Join(filepath.Dir(absPath), "config.json")
         if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -358,7 +539,14 @@ func installService() {
         fmt.Println("  Auto-start on boot: enabled (delayed auto-start + registry fallback)")
         fmt.Println("  Recovery policy: auto-restart on failure with 5-second delay")
         fmt.Println()
-        fmt.Printf("  To start the service:  sc start %s\n", serviceName)
+
+        fmt.Println("  Starting service...")
+        if startService() {
+                fmt.Println("  Service started! The agent is now running in the background.")
+        } else {
+                fmt.Printf("  To start manually:  sc start %s\n", serviceName)
+        }
+        fmt.Println()
         fmt.Printf("  To stop the service:   sc stop %s\n", serviceName)
         fmt.Printf("  To check status:       sc query %s\n", serviceName)
         fmt.Println()

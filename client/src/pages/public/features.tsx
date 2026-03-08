@@ -2,6 +2,8 @@ import { useTranslation } from "react-i18next";
 import { PublicLayout } from "@/components/public-layout";
 import { Card } from "@/components/ui/card";
 import { CyberRadar } from "@/components/cyber-network";
+import { CyberStats } from "@/components/cyber-stats";
+import { CyberAttackFlow } from "@/components/cyber-attack-flow";
 import {
   Brain, Activity, ShieldCheck, Target, Siren, Globe,
   Monitor, Scan, Mail, Search, Key, Wifi,
@@ -120,14 +122,38 @@ export default function FeaturesPage() {
             </div>
           </div>
           {catIndex === 0 && (
-            <div className="py-12 px-6 border-t border-border/30">
-              <div className="max-w-md mx-auto">
-                <div className="text-center mb-6">
-                  <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">{t("feat.radarLabel")}</span>
-                  <h3 className="text-lg font-bold mt-2">{t("feat.radarTitle")}</h3>
-                  <p className="text-xs text-muted-foreground mt-1">{t("feat.radarDesc")}</p>
+            <>
+              <div className="py-12 px-6 border-t border-border/30">
+                <div className="max-w-md mx-auto">
+                  <div className="text-center mb-6">
+                    <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">{t("feat.radarLabel")}</span>
+                    <h3 className="text-lg font-bold mt-2">{t("feat.radarTitle")}</h3>
+                    <p className="text-xs text-muted-foreground mt-1">{t("feat.radarDesc")}</p>
+                  </div>
+                  <CyberRadar />
                 </div>
-                <CyberRadar />
+              </div>
+              <div className="py-12 px-6 border-t border-border/30">
+                <div className="max-w-6xl mx-auto">
+                  <div className="text-center mb-6">
+                    <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">{t("feat.statsLabel")}</span>
+                    <h3 className="text-lg font-bold mt-2">{t("feat.statsTitle")}</h3>
+                    <p className="text-xs text-muted-foreground mt-1">{t("feat.statsDesc")}</p>
+                  </div>
+                  <CyberStats />
+                </div>
+              </div>
+            </>
+          )}
+          {catIndex === 1 && (
+            <div className="py-12 px-6 border-t border-border/30">
+              <div className="max-w-5xl mx-auto">
+                <div className="text-center mb-6">
+                  <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">{t("feat.killChainLabel")}</span>
+                  <h3 className="text-lg font-bold mt-2">{t("feat.killChainTitle")}</h3>
+                  <p className="text-xs text-muted-foreground mt-1">{t("feat.killChainDesc")}</p>
+                </div>
+                <CyberAttackFlow />
               </div>
             </div>
           )}

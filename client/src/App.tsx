@@ -43,6 +43,7 @@ import RefundPage from "@/pages/public/refund";
 import ContactPage from "@/pages/public/contact";
 import FaqPage from "@/pages/public/faq";
 import SecurityPage from "@/pages/public/security";
+import GuidePage from "@/pages/public/guide";
 import LandingPage from "@/pages/landing";
 import HashToolsPage from "@/pages/hash-tools";
 import ChoosePlan from "@/pages/choose-plan";
@@ -206,7 +207,7 @@ function AuthenticatedApp() {
   return <AppLayout />;
 }
 
-const PUBLIC_ROUTES = ["/about", "/features", "/pricing", "/privacy", "/terms", "/refund", "/contact", "/faq", "/security"];
+const PUBLIC_ROUTES = ["/about", "/features", "/pricing", "/privacy", "/terms", "/refund", "/contact", "/faq", "/security", "/guide"];
 
 function PublicRouter() {
   return (
@@ -220,6 +221,7 @@ function PublicRouter() {
       <Route path="/contact" component={ContactPage} />
       <Route path="/faq" component={FaqPage} />
       <Route path="/security" component={SecurityPage} />
+      <Route path="/guide" component={GuidePage} />
     </Switch>
   );
 }

@@ -6,6 +6,8 @@ import { AegisLogo } from "@/components/logo";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CyberStats } from "@/components/cyber-stats";
+import { CyberAttackFlow } from "@/components/cyber-attack-flow";
 import {
   Shield, Brain, Activity, Target, Bug, Database,
   Lock, Zap, Eye, ChevronRight, ArrowRight,
@@ -48,6 +50,93 @@ function TypewriterText({ texts, className }: { texts: string[]; className?: str
       {displayText}
       <span className="animate-pulse text-primary">|</span>
     </span>
+  );
+}
+
+function CyberShieldPulse() {
+  return (
+    <div className="relative w-40 h-40 md:w-52 md:h-52 mx-auto mb-8" data-testid="cyber-shield-pulse">
+      <svg viewBox="0 0 200 200" className="w-full h-full">
+        <defs>
+          <linearGradient id="shieldBodyGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.6" />
+            <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0.1" />
+          </linearGradient>
+          <filter id="shieldGlowFilter">
+            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        <circle cx="100" cy="100" r="85" fill="none" stroke="hsl(var(--primary))" strokeWidth="0.5" opacity="0.1">
+          <animate attributeName="r" values="75;90;75" dur="4s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.15;0.05;0.15" dur="4s" repeatCount="indefinite" />
+        </circle>
+        <circle cx="100" cy="100" r="70" fill="none" stroke="hsl(var(--primary))" strokeWidth="0.5" opacity="0.15">
+          <animate attributeName="r" values="60;75;60" dur="3.5s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.2;0.05;0.2" dur="3.5s" repeatCount="indefinite" />
+        </circle>
+        <circle cx="100" cy="100" r="55" fill="none" stroke="hsl(var(--primary))" strokeWidth="0.8" opacity="0.2">
+          <animate attributeName="r" values="50;60;50" dur="3s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.25;0.08;0.25" dur="3s" repeatCount="indefinite" />
+        </circle>
+
+        <g filter="url(#shieldGlowFilter)">
+          <path
+            d="M100 45 L135 65 L135 110 Q135 140 100 160 Q65 140 65 110 L65 65 Z"
+            fill="url(#shieldBodyGrad)"
+            stroke="hsl(var(--primary))"
+            strokeWidth="1.5"
+          />
+        </g>
+
+        <path
+          d="M100 45 L135 65 L135 110 Q135 140 100 160 Q65 140 65 110 L65 65 Z"
+          fill="none"
+          stroke="hsl(var(--primary))"
+          strokeWidth="2"
+          strokeDasharray="8 4"
+          opacity="0.6"
+        >
+          <animate attributeName="stroke-dashoffset" values="0;-24" dur="3s" repeatCount="indefinite" />
+        </path>
+
+        <path d="M92 100 L98 108 L112 90" fill="none" stroke="hsl(var(--primary))" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
+
+        {[0, 60, 120, 180, 240, 300].map((angle) => {
+          const rad = (angle * Math.PI) / 180;
+          const startR = 88;
+          const x = 100 + startR * Math.cos(rad);
+          const y = 100 + startR * Math.sin(rad);
+          return (
+            <circle key={angle} cx={x} cy={y} r="1.5" fill="hsl(var(--primary))" opacity="0.4">
+              <animate
+                attributeName="r"
+                values="1;2.5;1"
+                dur={`${2 + (angle % 3) * 0.5}s`}
+                repeatCount="indefinite"
+                begin={`${angle * 0.01}s`}
+              />
+              <animate
+                attributeName="opacity"
+                values="0.6;0.1;0.6"
+                dur={`${2 + (angle % 3) * 0.5}s`}
+                repeatCount="indefinite"
+                begin={`${angle * 0.01}s`}
+              />
+              <animateMotion
+                dur={`${3 + (angle % 2)}s`}
+                repeatCount="indefinite"
+                path={`M0,0 L${(100 - x) * 0.6},${(100 - y) * 0.6}`}
+              />
+            </circle>
+          );
+        })}
+      </svg>
+    </div>
   );
 }
 
@@ -150,6 +239,9 @@ export default function LandingPage() {
             <Link href="/about" className="text-xs tracking-wider uppercase text-muted-foreground hover:text-primary transition-colors" data-testid="link-about">
               {t("landing.navAbout")}
             </Link>
+            <Link href="/guide" className="text-xs tracking-wider uppercase text-muted-foreground hover:text-primary transition-colors" data-testid="link-guide">
+              {t("public.navGuide")}
+            </Link>
           </div>
           <div className="flex items-center gap-2">
             <LanguageSwitcher />
@@ -166,6 +258,8 @@ export default function LandingPage() {
         <MatrixRain opacity={0.4} color="#d4af37" />
         <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-background/60 to-background z-[1]" />
         <div className="relative z-[2] text-center px-4 max-w-5xl mx-auto">
+          <CyberShieldPulse />
+
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/30 bg-primary/5 mb-6">
             <div className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" />
             <span className="text-[10px] font-mono tracking-wider text-primary uppercase">{t("landing.badge")}</span>
@@ -241,6 +335,28 @@ export default function LandingPage() {
               );
             })}
           </div>
+        </div>
+      </section>
+
+      <section className="relative py-24 px-4 border-t border-border/30">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">{t("landing.liveMetricsLabel")}</span>
+            <h2 className="text-3xl md:text-4xl font-bold mt-3 mb-4">{t("landing.liveMetricsTitle")}</h2>
+            <p className="text-muted-foreground max-w-xl mx-auto">{t("landing.liveMetricsDesc")}</p>
+          </div>
+          <CyberStats />
+        </div>
+      </section>
+
+      <section className="relative py-24 px-4 border-t border-border/30">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-12">
+            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">{t("landing.killChainLabel")}</span>
+            <h2 className="text-3xl md:text-4xl font-bold mt-3 mb-4">{t("landing.killChainTitle")}</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">{t("landing.killChainDesc")}</p>
+          </div>
+          <CyberAttackFlow />
         </div>
       </section>
 
