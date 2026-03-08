@@ -131,7 +131,7 @@ export default function Alerts() {
           />
         </div>
         <Select value={severityFilter} onValueChange={setSeverityFilter}>
-          <SelectTrigger className="w-[140px]" data-testid="select-severity-filter">
+          <SelectTrigger className="w-full sm:w-[140px]" data-testid="select-severity-filter">
             <Filter className="w-3 h-3 me-1" />
             <SelectValue placeholder={t("common.severity")} />
           </SelectTrigger>
@@ -145,7 +145,7 @@ export default function Alerts() {
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[140px]" data-testid="select-status-filter">
+          <SelectTrigger className="w-full sm:w-[140px]" data-testid="select-status-filter">
             <SelectValue placeholder={t("common.status")} />
           </SelectTrigger>
           <SelectContent>

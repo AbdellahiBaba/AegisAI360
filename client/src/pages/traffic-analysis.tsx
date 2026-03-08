@@ -178,10 +178,10 @@ export default function TrafficAnalysis() {
   const captureData = latestCapture ? normalizeCaptureData(latestCapture.captureData) : null;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-traffic-title">
+          <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2" data-testid="text-traffic-title">
             <Activity className="w-6 h-6" />
             Traffic Analysis
           </h1>
@@ -197,9 +197,9 @@ export default function TrafficAnalysis() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-3 flex-col sm:flex-row w-full sm:w-auto">
             <Select value={selectedAgent} onValueChange={setSelectedAgent}>
-              <SelectTrigger className="w-[220px]" data-testid="select-agent">
+              <SelectTrigger className="w-full sm:w-[220px]" data-testid="select-agent">
                 <SelectValue placeholder="Select agent" />
               </SelectTrigger>
               <SelectContent>
@@ -218,7 +218,7 @@ export default function TrafficAnalysis() {
             </Select>
 
             <Select value={duration} onValueChange={setDuration}>
-              <SelectTrigger className="w-[160px]" data-testid="select-duration">
+              <SelectTrigger className="w-full sm:w-[160px]" data-testid="select-duration">
                 <SelectValue placeholder="Duration" />
               </SelectTrigger>
               <SelectContent>

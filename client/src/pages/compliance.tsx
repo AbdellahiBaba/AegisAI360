@@ -225,6 +225,7 @@ function FrameworkDetail({ frameworkId, onBack }: { frameworkId: string; onBack:
         <TabsContent value="controls">
           <Card>
             <ScrollArea className="max-h-[500px]">
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -254,6 +255,7 @@ function FrameworkDetail({ frameworkId, onBack }: { frameworkId: string; onBack:
                   ))}
                 </TableBody>
               </Table>
+              </div>
             </ScrollArea>
           </Card>
         </TabsContent>

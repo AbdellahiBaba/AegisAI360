@@ -718,7 +718,7 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="grid grid-cols-3 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <StatCard
           title={t("dashboard.assets")}
           value={stats?.assetCount ?? 0}

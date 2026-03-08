@@ -59,8 +59,8 @@ export function CyberAttackFlow() {
         <span className="text-[10px] font-mono tracking-[0.2em] uppercase text-red-400">Kill Chain Defense</span>
         <span className="text-[10px] font-mono text-muted-foreground ms-auto">MITRE ATT&CK</span>
       </div>
-      <div className="px-3 pt-4 pb-10 md:px-6 md:pt-6 md:pb-12">
-        <div className="relative w-full">
+      <div className="px-3 pt-4 pb-10 md:px-6 md:pt-6 md:pb-12 overflow-x-auto">
+        <div className="relative min-w-[480px]">
           <div className="absolute top-5 md:top-7 inset-x-0 mx-[7%] h-px bg-white/[0.08]" />
 
           <div className="relative grid grid-cols-7 w-full">

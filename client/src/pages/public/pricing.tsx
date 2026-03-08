@@ -185,8 +185,8 @@ export default function PricingPage() {
             <h2 className="text-2xl font-bold mt-3 mb-2">{t("pricing.featureComparison")}</h2>
             <p className="text-sm text-muted-foreground">{t("pricing.comparisonDesc")}</p>
           </div>
-          <Card className="overflow-auto">
-            <table className="w-full text-xs" data-testid="table-feature-comparison">
+          <Card className="overflow-x-auto">
+            <table className="w-full min-w-[600px] text-xs" data-testid="table-feature-comparison">
               <thead>
                 <tr className="border-b border-border/50">
                   <th className="text-start py-3 px-4 font-semibold tracking-wider uppercase text-muted-foreground">{t("pricing.colFeature")}</th>

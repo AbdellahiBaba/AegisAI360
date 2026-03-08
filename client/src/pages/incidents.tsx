@@ -235,7 +235,7 @@ export default function Incidents() {
                           executePlaybook.mutate({ playbookId: parseInt(pbId), context: {} });
                         }
                       }}>
-                        <SelectTrigger className="h-8 w-[160px] text-xs" data-testid={`select-playbook-${incident.id}`}>
+                        <SelectTrigger className="h-8 w-full sm:w-[160px] text-xs" data-testid={`select-playbook-${incident.id}`}>
                           <Play className="w-3 h-3 me-1" />
                           <SelectValue placeholder={t("incidents.runPlaybook")} />
                         </SelectTrigger>

@@ -549,10 +549,10 @@ export default function Endpoints() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-6 space-y-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-endpoints-title">{t("endpoints.title")}</h1>
+          <h1 className="text-xl md:text-2xl font-bold" data-testid="text-endpoints-title">{t("endpoints.title")}</h1>
           <p className="text-muted-foreground text-sm">{t("endpoints.agentsRegistered", { count: agents?.length || 0 })}</p>
         </div>
         <Button onClick={() => navigate("/download-agent")} data-testid="button-download-agent">
@@ -665,9 +665,9 @@ export default function Endpoints() {
                       <CardTitle className="text-lg">{t("endpoints.sendCommand")}</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-col sm:flex-row">
                         <Select value={command} onValueChange={setCommand}>
-                          <SelectTrigger className="w-[200px]" data-testid="select-command">
+                          <SelectTrigger className="w-full sm:w-[200px]" data-testid="select-command">
                             <SelectValue placeholder={t("endpoints.selectCommand")} />
                           </SelectTrigger>
                           <SelectContent>

@@ -171,7 +171,7 @@ export default function Firewall() {
           />
         </div>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[160px]" data-testid="select-type-filter">
+          <SelectTrigger className="w-full sm:w-[160px]" data-testid="select-type-filter">
             <SelectValue placeholder={t("firewall.ruleType")} />
           </SelectTrigger>
           <SelectContent>

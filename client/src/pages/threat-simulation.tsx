@@ -83,7 +83,7 @@ export default function ThreatSimulationPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 overflow-auto h-full">
+    <div className="p-4 md:p-6 space-y-6 overflow-auto h-full">
       <div className="flex items-center gap-3 flex-wrap">
         <Zap className="w-6 h-6 text-primary" />
         <div>

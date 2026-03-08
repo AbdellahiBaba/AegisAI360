@@ -119,7 +119,7 @@ export function CyberStats() {
         {stats.map((stat, i) => (
           <div
             key={stat.label}
-            className={`p-4 ${i < stats.length - 1 ? "border-r border-border/20" : ""} ${i < 2 ? "border-b lg:border-b-0 border-border/20" : ""}`}
+            className={`p-4 ${i % 2 === 0 ? "border-r border-border/20" : "lg:border-r lg:border-border/20"} ${i === stats.length - 1 ? "lg:border-r-0" : ""} ${i < 2 ? "border-b lg:border-b-0 border-border/20" : ""}`}
             data-testid={`stat-${stat.label.toLowerCase().replace(/\s+/g, "-")}`}
           >
             <div className="flex items-center gap-1.5 mb-2">

@@ -218,9 +218,9 @@ function ThreatLookupSection() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-col sm:flex-row">
           <Select value={lookupType} onValueChange={setLookupType}>
-            <SelectTrigger className="w-[150px]" data-testid="select-lookup-type">
+            <SelectTrigger className="w-full sm:w-[150px]" data-testid="select-lookup-type">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -505,7 +505,7 @@ export default function ThreatIntelPage() {
           <Input placeholder={t("threatIntel.searchIndicators")} value={search} onChange={(e) => setSearch(e.target.value)} className="ps-9" data-testid="input-search-intel" />
         </div>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[140px]" data-testid="select-type-filter">
+          <SelectTrigger className="w-full sm:w-[140px]" data-testid="select-type-filter">
             <SelectValue placeholder={t("common.type")} />
           </SelectTrigger>
           <SelectContent>

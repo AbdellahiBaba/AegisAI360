@@ -600,7 +600,7 @@ export default function SettingsPage() {
           {sessionsLoading ? (
             <div className="p-4"><Skeleton className="h-20 w-full" /></div>
           ) : sessions && sessions.length > 0 ? (
-            <Table>
+            <div className="overflow-x-auto"><Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-[10px] uppercase tracking-wider">Device / Browser</TableHead>
@@ -661,7 +661,7 @@ export default function SettingsPage() {
                   );
                 })}
               </TableBody>
-            </Table>
+            </Table></div>
           ) : (
             <div className="p-4 text-center text-xs text-muted-foreground">No active sessions found</div>
           )}
@@ -675,7 +675,7 @@ export default function SettingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
+          <div className="overflow-x-auto"><Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="text-[10px] uppercase tracking-wider">{t("settings.username")}</TableHead>
@@ -716,7 +716,7 @@ export default function SettingsPage() {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </Table></div>
         </CardContent>
       </Card>
 
@@ -728,7 +728,7 @@ export default function SettingsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
+            <div className="overflow-x-auto"><Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-[10px] uppercase tracking-wider">{t("settings.code")}</TableHead>
@@ -774,7 +774,7 @@ export default function SettingsPage() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </Table></div>
           </CardContent>
         </Card>
       )}
@@ -957,7 +957,7 @@ export default function SettingsPage() {
             )}
 
             {channels && channels.length > 0 ? (
-              <Table>
+              <div className="overflow-x-auto"><Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-[10px] uppercase tracking-wider">Name</TableHead>
@@ -1015,7 +1015,7 @@ export default function SettingsPage() {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </Table></div>
             ) : (
               <div className="text-center py-6 text-xs text-muted-foreground">
                 No notification channels configured. Add a webhook or email channel to receive alerts.

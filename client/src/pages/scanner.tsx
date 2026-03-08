@@ -254,7 +254,7 @@ function PortScanResults({ data, target }: { data: any; target: string }) {
       {data.openPorts?.length > 0 && (
         <Card>
           <CardContent className="p-0">
-            <Table>
+            <div className="overflow-x-auto"><Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-[10px] uppercase">{t("scanner.port")}</TableHead>
@@ -289,7 +289,7 @@ function PortScanResults({ data, target }: { data: any; target: string }) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </Table></div>
           </CardContent>
         </Card>
       )}
@@ -502,7 +502,7 @@ function HeaderResults({ data, target }: { data: any; target: string }) {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <div className="overflow-x-auto"><Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="text-[10px] uppercase">{t("scanner.header")}</TableHead>
@@ -526,7 +526,7 @@ function HeaderResults({ data, target }: { data: any; target: string }) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </Table></div>
         </CardContent>
       </Card>
     </div>
@@ -613,7 +613,7 @@ function VulnResults({ data, target }: { data: any; target: string }) {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <div className="overflow-x-auto"><Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="text-[10px] uppercase">{t("scanner.path")}</TableHead>
@@ -655,7 +655,7 @@ function VulnResults({ data, target }: { data: any; target: string }) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </Table></div>
         </CardContent>
       </Card>
     </div>
@@ -704,7 +704,7 @@ function SubdomainResults({ data }: { data: any }) {
       {data.subdomains?.length > 0 ? (
         <Card>
           <CardContent className="p-0">
-            <Table>
+            <div className="overflow-x-auto"><Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-[10px] uppercase">{t("scanner.subdomain")}</TableHead>
@@ -728,7 +728,7 @@ function SubdomainResults({ data }: { data: any }) {
                   );
                 })}
               </TableBody>
-            </Table>
+            </Table></div>
           </CardContent>
         </Card>
       ) : (
@@ -781,7 +781,7 @@ function DirBruteResults({ data, target }: { data: any; target: string }) {
       {foundPaths.length > 0 ? (
         <Card>
           <CardContent className="p-0">
-            <Table>
+            <div className="overflow-x-auto"><Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-[10px] uppercase">{t("scanner.path")}</TableHead>
@@ -815,7 +815,7 @@ function DirBruteResults({ data, target }: { data: any; target: string }) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </Table></div>
           </CardContent>
         </Card>
       ) : (
@@ -872,7 +872,7 @@ function TechFPResults({ data }: { data: any }) {
       {technologies.length > 0 ? (
         <Card>
           <CardContent className="p-0">
-            <Table>
+            <div className="overflow-x-auto"><Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-[10px] uppercase">{t("scanner.category")}</TableHead>
@@ -895,7 +895,7 @@ function TechFPResults({ data }: { data: any }) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </Table></div>
           </CardContent>
         </Card>
       ) : (
@@ -961,7 +961,7 @@ function WAFResults({ data }: { data: any }) {
       {data.signatures?.length > 0 && (
         <Card>
           <CardContent className="p-0">
-            <Table>
+            <div className="overflow-x-auto"><Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-[10px] uppercase">{t("scanner.whatThisMeans")}</TableHead>
@@ -976,7 +976,7 @@ function WAFResults({ data }: { data: any }) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </Table></div>
           </CardContent>
         </Card>
       )}
@@ -1425,7 +1425,7 @@ export default function ScannerPage() {
           {isLoading ? (
             <div className="p-4"><Skeleton className="h-20 w-full" /></div>
           ) : (
-            <Table>
+            <div className="overflow-x-auto"><Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-[10px] uppercase">{t("common.type")}</TableHead>
@@ -1457,7 +1457,7 @@ export default function ScannerPage() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </Table></div>
           )}
         </CardContent>
       </Card>

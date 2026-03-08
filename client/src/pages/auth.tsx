@@ -63,8 +63,8 @@ export default function AuthPage() {
   if (twoFactorChallenge) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background grid-pattern p-4">
-        <div className="absolute top-0 start-0 end-0 h-8 bg-primary/10 border-b border-primary/20 flex items-center justify-center">
-          <span className="text-[10px] font-mono text-primary/60 tracking-[0.4em] uppercase">
+        <div className="absolute top-0 start-0 end-0 h-8 bg-primary/10 border-b border-primary/20 flex items-center justify-center px-2">
+          <span className="text-[10px] font-mono text-primary/60 tracking-[0.2em] sm:tracking-[0.4em] uppercase truncate">
             {t("auth.authorizedOnly")}
           </span>
         </div>
@@ -116,7 +116,7 @@ export default function AuthPage() {
                 <Button
                   type="button"
                   variant="ghost"
-                  className="w-full text-xs text-muted-foreground"
+                  className="w-full text-xs text-muted-foreground min-h-[44px]"
                   onClick={handleCancelTwoFactor}
                   data-testid="button-cancel-totp"
                 >
@@ -132,13 +132,13 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background grid-pattern p-4">
-      <div className="absolute top-0 start-0 end-0 h-8 bg-primary/10 border-b border-primary/20 flex items-center justify-center">
-        <span className="text-[10px] font-mono text-primary/60 tracking-[0.4em] uppercase">
+      <div className="absolute top-0 start-0 end-0 h-8 bg-primary/10 border-b border-primary/20 flex items-center justify-center px-2">
+        <span className="text-[10px] font-mono text-primary/60 tracking-[0.2em] sm:tracking-[0.4em] uppercase truncate">
           {t("auth.authorizedOnly")}
         </span>
       </div>
 
-      <div className="absolute top-10 end-4">
+      <div className="absolute top-10 end-2 sm:end-4">
         <LanguageSwitcher />
       </div>
 
@@ -195,7 +195,7 @@ export default function AuthPage() {
               <button
                 type="button"
                 onClick={() => setIsLogin(!isLogin)}
-                className="text-[10px] text-primary hover:underline tracking-wider uppercase"
+                className="text-[10px] text-primary hover:underline tracking-wider uppercase min-h-[44px] px-4 py-2 inline-flex items-center justify-center"
                 data-testid="button-toggle-auth-mode"
               >
                 {isLogin

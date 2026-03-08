@@ -5,7 +5,7 @@ import { BookOpen, Terminal, Shield, Key, Monitor, Code, AlertTriangle, Package,
 
 export default function DocsAgent() {
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
+    <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-docs-title">
           <BookOpen className="w-6 h-6" />

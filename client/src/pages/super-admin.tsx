@@ -276,7 +276,7 @@ function OrganizationsTable() {
         <CardTitle className="text-sm tracking-wider uppercase">{t("superAdmin.organizations")}</CardTitle>
         <Badge variant="secondary" className="font-mono text-xs">{orgs?.length ?? 0}</Badge>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent className="p-0 overflow-x-auto">
         <ScrollArea className="h-[calc(100vh-300px)]">
           <Table>
             <TableHeader>
@@ -324,7 +324,7 @@ function OrganizationsTable() {
                         value={org.plan}
                         onValueChange={(plan) => changePlanMutation.mutate({ id: org.id, plan })}
                       >
-                        <SelectTrigger className="w-[130px]" data-testid={`select-plan-${org.id}`}>
+                        <SelectTrigger className="w-full sm:w-[130px]" data-testid={`select-plan-${org.id}`}>
                           <SelectValue placeholder={t("superAdmin.changePlan")} />
                         </SelectTrigger>
                         <SelectContent>
@@ -368,7 +368,7 @@ function UsersTable() {
         <CardTitle className="text-sm tracking-wider uppercase">{t("superAdmin.users")}</CardTitle>
         <Badge variant="secondary" className="font-mono text-xs">{users?.length ?? 0}</Badge>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent className="p-0 overflow-x-auto">
         <ScrollArea className="h-[calc(100vh-300px)]">
           <Table>
             <TableHeader>
@@ -923,7 +923,7 @@ function SupportPanel() {
           </CardTitle>
           <div className="flex items-center gap-2">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[130px] text-xs" data-testid="select-status-filter">
+              <SelectTrigger className="w-full sm:w-[130px] text-xs" data-testid="select-status-filter">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -937,7 +937,7 @@ function SupportPanel() {
             <Badge variant="secondary" className="font-mono text-xs">{filtered.length}</Badge>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <ScrollArea className="h-[calc(100vh-400px)]">
             <Table>
               <TableHeader>

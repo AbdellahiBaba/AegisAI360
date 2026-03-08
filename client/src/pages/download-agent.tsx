@@ -41,7 +41,7 @@ export default function DownloadAgent() {
   const availableTokens = tokens?.filter((t: any) => !t.used) || [];
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
+    <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-download-title">{t("downloadAgent.title")}</h1>
         <p className="text-muted-foreground text-sm">{t("downloadAgent.subtitle")}</p>
