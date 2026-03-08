@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Clock, User, ShieldBan, Loader2, Play } from "lucide-react";
+import { Plus, Clock, User, ShieldBan, Loader2, Play, FileDown } from "lucide-react";
+import { generateIncidentReportPDF } from "@/lib/reportGenerator";
 import { useToast } from "@/hooks/use-toast";
 import type { Incident, ResponsePlaybook } from "@shared/schema";
 
@@ -115,13 +116,25 @@ export default function Incidents() {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-lg font-semibold tracking-wide">{t("incidents.title")}</h1>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" data-testid="button-create-incident">
-              <Plus className="w-4 h-4 me-1" />
-              {t("incidents.newIncident")}
+        <div className="flex gap-2 flex-wrap">
+          {incidents && incidents.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => generateIncidentReportPDF(incidents as any)}
+              data-testid="button-generate-pdf-report"
+            >
+              <FileDown className="w-4 h-4 me-1" />
+              {t("incidents.generateReport", "Generate PDF Report")}
             </Button>
-          </DialogTrigger>
+          )}
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" data-testid="button-create-incident">
+                <Plus className="w-4 h-4 me-1" />
+                {t("incidents.newIncident")}
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{t("incidents.createIncident")}</DialogTitle>
@@ -161,7 +174,8 @@ export default function Incidents() {
               </Button>
             </div>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        </div>
       </div>
 
       {(incidents?.length ?? 0) === 0 ? (

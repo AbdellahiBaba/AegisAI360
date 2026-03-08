@@ -10,8 +10,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ShieldCheck, ChevronRight, AlertTriangle, CheckCircle2, XCircle,
-  Download, ArrowLeft, BarChart3, ListChecks, Search,
+  Download, ArrowLeft, BarChart3, ListChecks, Search, FileDown,
 } from "lucide-react";
+import { generateCompliancePDF } from "@/lib/reportGenerator";
 
 function GradeIndicator({ grade, percentage, size = "lg" }: { grade: string; percentage: number; size?: "sm" | "lg" }) {
   const dim = size === "lg" ? 96 : 56;
@@ -324,38 +325,49 @@ function FrameworkDetail({ frameworkId, onBack }: { frameworkId: string; onBack:
               <p className="text-xs font-medium">Compliance Report Summary</p>
               <p className="text-[10px] text-muted-foreground">Last assessed: {new Date(assessment.lastAssessed).toLocaleString()}</p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const report = {
-                  framework: assessment.frameworkFullName,
-                  version: assessment.version,
-                  grade: assessment.grade,
-                  score: `${assessment.overallScore}/${assessment.maxScore} (${assessment.percentage}%)`,
-                  assessedAt: assessment.lastAssessed,
-                  categories: assessment.categories,
-                  gaps: assessment.gaps?.map((g: any) => ({
-                    id: g.control.id,
-                    name: g.control.name,
-                    priority: g.priority,
-                    score: `${g.control.score}/${g.control.maxScore}`,
-                    remediation: g.control.remediation,
-                  })),
-                };
-                const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `compliance-${assessment.framework}-${new Date().toISOString().split("T")[0]}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-              }}
-              data-testid="button-export-report"
-            >
-              <Download className="w-3.5 h-3.5 mr-1" />
-              Export Report
-            </Button>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => generateCompliancePDF(assessment)}
+                data-testid="button-generate-pdf-report"
+              >
+                <FileDown className="w-3.5 h-3.5 mr-1" />
+                Generate PDF Report
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const report = {
+                    framework: assessment.frameworkFullName,
+                    version: assessment.version,
+                    grade: assessment.grade,
+                    score: `${assessment.overallScore}/${assessment.maxScore} (${assessment.percentage}%)`,
+                    assessedAt: assessment.lastAssessed,
+                    categories: assessment.categories,
+                    gaps: assessment.gaps?.map((g: any) => ({
+                      id: g.control.id,
+                      name: g.control.name,
+                      priority: g.priority,
+                      score: `${g.control.score}/${g.control.maxScore}`,
+                      remediation: g.control.remediation,
+                    })),
+                  };
+                  const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `compliance-${assessment.framework}-${new Date().toISOString().split("T")[0]}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                data-testid="button-export-report"
+              >
+                <Download className="w-3.5 h-3.5 mr-1" />
+                Export JSON
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

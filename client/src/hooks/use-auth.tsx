@@ -1,9 +1,13 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, getQueryFn } from "@/lib/queryClient";
 import type { User } from "@shared/schema";
 
 type AuthUser = Omit<User, "password">;
+
+interface TwoFactorChallenge {
+  twoFactorToken: string;
+}
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -11,16 +15,23 @@ interface AuthContextType {
   loginMutation: ReturnType<typeof useLoginMutation>;
   registerMutation: ReturnType<typeof useRegisterMutation>;
   logoutMutation: ReturnType<typeof useLogoutMutation>;
+  twoFactorChallenge: TwoFactorChallenge | null;
+  verifyTwoFactor: (code: string) => Promise<void>;
+  clearTwoFactorChallenge: () => void;
 }
 
-function useLoginMutation() {
+function useLoginMutation(setTwoFactor: (challenge: TwoFactorChallenge | null) => void) {
   return useMutation({
     mutationFn: async (data: { username: string; password: string }) => {
       const res = await apiRequest("POST", "/api/login", data);
       return res.json();
     },
-    onSuccess: (user: AuthUser) => {
-      queryClient.setQueryData(["/api/user"], user);
+    onSuccess: (result: any) => {
+      if (result.requiresTwoFactor) {
+        setTwoFactor({ twoFactorToken: result.twoFactorToken });
+      } else {
+        queryClient.setQueryData(["/api/user"], result);
+      }
     },
   });
 }
@@ -52,14 +63,27 @@ function useLogoutMutation() {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [twoFactorChallenge, setTwoFactorChallenge] = useState<TwoFactorChallenge | null>(null);
+
   const { data: user, isLoading } = useQuery<AuthUser | null>({
     queryKey: ["/api/user"],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
-  const loginMutation = useLoginMutation();
+  const loginMutation = useLoginMutation(setTwoFactorChallenge);
   const registerMutation = useRegisterMutation();
   const logoutMutation = useLogoutMutation();
+
+  const verifyTwoFactor = async (code: string) => {
+    if (!twoFactorChallenge) throw new Error("No two-factor challenge active");
+    const res = await apiRequest("POST", "/api/auth/2fa/verify-login", {
+      twoFactorToken: twoFactorChallenge.twoFactorToken,
+      code,
+    });
+    const user = await res.json();
+    setTwoFactorChallenge(null);
+    queryClient.setQueryData(["/api/user"], user);
+  };
 
   return (
     <AuthContext.Provider
@@ -69,6 +93,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loginMutation,
         registerMutation,
         logoutMutation,
+        twoFactorChallenge,
+        verifyTwoFactor,
+        clearTwoFactorChallenge: () => setTwoFactorChallenge(null),
       }}
     >
       {children}

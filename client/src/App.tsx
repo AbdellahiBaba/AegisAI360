@@ -60,6 +60,8 @@ import SslInspectorPage from "@/pages/ssl-inspector";
 import EmailAnalyzerPage from "@/pages/email-analyzer";
 import CveDatabasePage from "@/pages/cve-database";
 import PasswordAuditorPage from "@/pages/password-auditor";
+import { CommandPalette } from "@/components/command-palette";
+import ScheduledScansPage from "@/pages/scheduled-scans";
 
 function AppRouter() {
   return (
@@ -103,6 +105,7 @@ function AppRouter() {
       <Route path="/email-analyzer" component={EmailAnalyzerPage} />
       <Route path="/cve-database" component={CveDatabasePage} />
       <Route path="/password-auditor" component={PasswordAuditorPage} />
+      <Route path="/scheduled-scans" component={ScheduledScansPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -140,6 +143,7 @@ function AppLayout() {
           </main>
         </div>
       </div>
+      <CommandPalette />
     </SidebarProvider>
   );
 }

@@ -38,8 +38,20 @@ The frontend is built with React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Rec
 - **Network Monitor**: Uses real agent rogue_scan data when agents are online. Falls back to demo data (clearly marked) when no agents available. Agent scan results auto-populate network_devices via MAC-based upsert.
 - **Advanced Analytics**: Provides anomaly detection and endpoint risk scoring.
 
+### Enterprise Security Enhancements
+- **Two-Factor Authentication (TOTP)**: RFC 6238 TOTP via `otplib` + `qrcode`. Setup/enable/disable in Settings. Login flow returns `requiresTwoFactor` challenge when enabled. Uses `otplib` `generateSecret`/`verifySync`/`generateURI` API.
+- **Account Lockout**: 5 failed login attempts triggers 15-minute lockout. Counter resets on success. Lockout events logged as security events.
+- **Session Management**: `sessions_metadata` table tracks IP, user-agent, last active. Users can view and revoke active sessions from Settings. "Revoke All Other Sessions" for emergency use.
+- **Email/Webhook Notifications**: `notification_channels` table. Webhook (with HMAC signing, SSRF protection) and Email (SMTP via nodemailer). Integrated into AlertEngine for auto-dispatch. Test button in Settings.
+- **PDF Report Generation**: Client-side via `jspdf` + `jspdf-autotable`. Executive Summary (dashboard), Compliance Assessment, and Incident Report. Professional formatting with branding.
+- **Scheduled Scans**: `scheduled_scans` table with daily/weekly/monthly frequency. Background scheduler checks every 60s. Supports network_scan, vulnerability_scan, dark_web_check, ssl_check. Dedicated page at `/scheduled-scans`.
+- **Data Retention**: Configurable per-org retention days for security events and audit logs. Daily cleanup job removes old data. Manual "Run Cleanup Now" in Settings.
+- **API Key Management**: Enhanced with description, expiration, soft-revocation, rotation (24h grace period), last-used tracking. Full CRUD UI in Settings.
+- **Global Search / Command Palette**: Ctrl+K/Cmd+K opens search across security events, incidents, network devices, CVEs, and navigation pages. Uses shadcn CommandDialog.
+- **Threat Map Visualization**: SVG world map on dashboard showing attack origins with Mercator projection. Uses ipwho.is (HTTPS) for geolocation with in-memory cache. Color-coded severity dots with animated pulses.
+
 ### System Design Choices
-The architecture is modular, organized into `server/`, `client/`, and `shared/` directories. Authentication uses Passport-local with scrypt hashing. All data access is scoped by `organizationId` for multi-tenancy. Agent authentication is token-based. The remote terminal ensures safety through command whitelisting and blacklisting.
+The architecture is modular, organized into `server/`, `client/`, and `shared/` directories. Authentication uses Passport-local with scrypt hashing and optional TOTP 2FA. All data access is scoped by `organizationId` for multi-tenancy. Agent authentication is token-based. The remote terminal ensures safety through command whitelisting and blacklisting.
 
 ## External Dependencies
 - **OpenAI**: Integrated for AI-powered threat analysis.

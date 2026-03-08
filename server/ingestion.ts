@@ -90,6 +90,16 @@ export function createIngestionRouter(broadcast: (data: unknown) => void, evalua
       return null;
     }
 
+    if (key.revokedAt) {
+      res.status(401).json({ error: "API key has been revoked" });
+      return null;
+    }
+
+    if (key.expiresAt && new Date(key.expiresAt) < new Date()) {
+      res.status(401).json({ error: "API key has expired" });
+      return null;
+    }
+
     storage.touchApiKey(key.id).catch(() => {});
     return key.organizationId;
   }

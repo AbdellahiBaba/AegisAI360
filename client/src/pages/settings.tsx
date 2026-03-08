@@ -12,12 +12,15 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslation } from "react-i18next";
+import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Building2, Users, UserPlus, Copy, Shield, Zap, Play, Loader2,
-  ShieldCheck, ShieldAlert, ShieldOff,
+  ShieldCheck, ShieldAlert, ShieldOff, Trash2, Clock, KeyRound,
+  Bell, Webhook, Mail, Plus, Send, Power, X, Key, RotateCcw, Ban, Check, Monitor, AlertTriangle,
 } from "lucide-react";
-import type { Organization, Invite } from "@shared/schema";
-import { useState } from "react";
+import type { Organization, Invite, NotificationChannel, ApiKey, SessionMetadata } from "@shared/schema";
+import { useState, useEffect } from "react";
 
 const roleColors: Record<string, string> = {
   admin: "bg-severity-critical text-white",
@@ -40,6 +43,281 @@ export default function SettingsPage() {
   const [runningScenario, setRunningScenario] = useState<string | null>(null);
 
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [twoFASetup, setTwoFASetup] = useState<{ secret: string; qrCode: string } | null>(null);
+  const [totpVerifyCode, setTotpVerifyCode] = useState("");
+
+  const { data: apiKeysData } = useQuery<ApiKey[]>({ queryKey: ["/api/api-keys"], enabled: isAdmin });
+  const [showCreateKeyDialog, setShowCreateKeyDialog] = useState(false);
+  const [newKeyRevealed, setNewKeyRevealed] = useState<string | null>(null);
+  const [rotatedKeyRevealed, setRotatedKeyRevealed] = useState<{ rawKey: string; oldKeyId: number; gracePeriodEnds: string } | null>(null);
+
+  const createApiKeyForm = useForm({
+    defaultValues: { name: "", description: "", expiresAt: "", permissions: "ingest" },
+  });
+
+  const createApiKeyMutation = useMutation({
+    mutationFn: async (data: { name: string; description?: string; expiresAt?: string; permissions?: string }) => {
+      const payload: any = { name: data.name, permissions: data.permissions || "ingest" };
+      if (data.description) payload.description = data.description;
+      if (data.expiresAt) payload.expiresAt = new Date(data.expiresAt).toISOString();
+      const res = await apiRequest("POST", "/api/api-keys", payload);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/api-keys"] });
+      setNewKeyRevealed(data.rawKey);
+      createApiKeyForm.reset();
+      toast({ title: "API Key Created" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create API key", variant: "destructive" });
+    },
+  });
+
+  const revokeApiKeyMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/api-keys/${id}/revoke`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/api-keys"] });
+      toast({ title: "API Key Revoked" });
+    },
+  });
+
+  const rotateApiKeyMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/api-keys/${id}/rotate`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/api-keys"] });
+      setRotatedKeyRevealed({ rawKey: data.rawKey, oldKeyId: data.oldKeyId, gracePeriodEnds: data.gracePeriodEnds });
+      toast({ title: "API Key Rotated", description: "Old key will remain valid for 24 hours" });
+    },
+    onError: () => {
+      toast({ title: "Failed to rotate API key", variant: "destructive" });
+    },
+  });
+
+  const deleteApiKeyMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/api-keys/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/api-keys"] });
+      toast({ title: "API Key Deleted" });
+    },
+  });
+
+  const getKeyStatus = (key: ApiKey): { label: string; variant: "default" | "secondary" | "destructive" | "outline" } => {
+    if (key.revokedAt) return { label: "Revoked", variant: "destructive" };
+    if (key.expiresAt && new Date(key.expiresAt) < new Date()) return { label: "Expired", variant: "destructive" };
+    return { label: "Active", variant: "default" };
+  };
+
+  const setup2FAMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/auth/2fa/setup", {});
+      return res.json();
+    },
+    onSuccess: (data: { secret: string; qrCode: string }) => {
+      setTwoFASetup(data);
+    },
+    onError: (error: Error) => {
+      toast({ title: "2FA Setup Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const enable2FAMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const res = await apiRequest("POST", "/api/auth/2fa/enable", { code });
+      return res.json();
+    },
+    onSuccess: () => {
+      setTwoFASetup(null);
+      setTotpVerifyCode("");
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      toast({ title: "Two-Factor Authentication Enabled", description: "Your account is now secured with 2FA" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Verification Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const disable2FAMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/auth/2fa/disable", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      toast({ title: "Two-Factor Authentication Disabled" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to Disable 2FA", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const { data: channels } = useQuery<NotificationChannel[]>({
+    queryKey: ["/api/settings/notification-channels"],
+    enabled: isAdmin,
+  });
+
+  const [showAddChannel, setShowAddChannel] = useState(false);
+  const [newChannelType, setNewChannelType] = useState<"webhook" | "email">("webhook");
+  const [newChannelName, setNewChannelName] = useState("");
+  const [newChannelUrl, setNewChannelUrl] = useState("");
+  const [newChannelSecret, setNewChannelSecret] = useState("");
+  const [newChannelRecipients, setNewChannelRecipients] = useState("");
+  const [testingChannelId, setTestingChannelId] = useState<number | null>(null);
+
+  const createChannelMutation = useMutation({
+    mutationFn: async () => {
+      const config = newChannelType === "webhook"
+        ? { url: newChannelUrl, secret: newChannelSecret || undefined }
+        : { recipients: newChannelRecipients };
+      const res = await apiRequest("POST", "/api/settings/notification-channels", {
+        name: newChannelName,
+        type: newChannelType,
+        config,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/notification-channels"] });
+      setShowAddChannel(false);
+      setNewChannelName("");
+      setNewChannelUrl("");
+      setNewChannelSecret("");
+      setNewChannelRecipients("");
+      toast({ title: "Notification channel created" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create channel", variant: "destructive" });
+    },
+  });
+
+  const toggleChannelMutation = useMutation({
+    mutationFn: async ({ id, enabled }: { id: number; enabled: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/settings/notification-channels/${id}`, { enabled });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/notification-channels"] });
+    },
+  });
+
+  const deleteChannelMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/settings/notification-channels/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/notification-channels"] });
+      toast({ title: "Channel deleted" });
+    },
+  });
+
+  const testChannelMutation = useMutation({
+    mutationFn: async (id: number) => {
+      setTestingChannelId(id);
+      const res = await apiRequest("POST", `/api/settings/notification-channels/${id}/test`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setTestingChannelId(null);
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ["/api/settings/notification-channels"] });
+        toast({ title: "Test notification sent successfully" });
+      } else {
+        toast({ title: "Test failed", description: data.error, variant: "destructive" });
+      }
+    },
+    onError: () => {
+      setTestingChannelId(null);
+      toast({ title: "Test failed", variant: "destructive" });
+    },
+  });
+
+  const { data: retentionData } = useQuery<{ logRetentionDays: number; auditRetentionDays: number }>({
+    queryKey: ["/api/settings/retention"],
+  });
+
+  const [logDays, setLogDays] = useState<number | "">(90);
+  const [auditDays, setAuditDays] = useState<number | "">(365);
+  const [retentionInitialized, setRetentionInitialized] = useState(false);
+
+  useEffect(() => {
+    if (retentionData && !retentionInitialized) {
+      setLogDays(retentionData.logRetentionDays);
+      setAuditDays(retentionData.auditRetentionDays);
+      setRetentionInitialized(true);
+    }
+  }, [retentionData, retentionInitialized]);
+
+  const updateRetentionMutation = useMutation({
+    mutationFn: async (data: { logRetentionDays: number; auditRetentionDays: number }) => {
+      const res = await apiRequest("PATCH", "/api/settings/retention", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/retention"] });
+      toast({ title: t("settings.retentionUpdated") });
+    },
+    onError: () => {
+      toast({ title: t("settings.retentionUpdateFailed"), variant: "destructive" });
+    },
+  });
+
+  const runCleanupMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/settings/retention/run-now", {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      const stats = data.stats;
+      const total = (stats?.deletedEvents || 0) + (stats?.deletedAuditLogs || 0) + (stats?.deletedHoneypot || 0) + (stats?.deletedCaptures || 0) + (stats?.deletedCommands || 0);
+      toast({ title: t("settings.cleanupComplete"), description: `${total} records removed` });
+    },
+    onError: () => {
+      toast({ title: t("settings.cleanupFailed"), variant: "destructive" });
+    },
+  });
+
+  type SessionWithCurrent = SessionMetadata & { isCurrent: boolean };
+  const { data: sessions, isLoading: sessionsLoading } = useQuery<SessionWithCurrent[]>({
+    queryKey: ["/api/auth/sessions"],
+  });
+
+  const revokeSessionMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      const res = await apiRequest("DELETE", `/api/auth/sessions/${sessionId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/sessions"] });
+      toast({ title: "Session revoked" });
+    },
+    onError: () => {
+      toast({ title: "Failed to revoke session", variant: "destructive" });
+    },
+  });
+
+  const revokeAllSessionsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/auth/sessions/revoke-all", {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/sessions"] });
+      toast({ title: "All other sessions revoked", description: `${data.revokedCount} session(s) revoked` });
+    },
+    onError: () => {
+      toast({ title: "Failed to revoke sessions", variant: "destructive" });
+    },
+  });
 
   const orgForm = useForm({ defaultValues: { name: org?.name || "" } });
 
@@ -208,6 +486,187 @@ export default function SettingsPage() {
           </Card>
         )}
       </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-primary" />Two-Factor Authentication
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {user?.totpEnabled ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-green-500" />
+                <div>
+                  <p className="text-sm font-medium" data-testid="text-2fa-enabled">2FA is enabled</p>
+                  <p className="text-xs text-muted-foreground">Your account is protected with an authenticator app</p>
+                </div>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => disable2FAMutation.mutate()}
+                disabled={disable2FAMutation.isPending}
+                data-testid="button-disable-2fa"
+              >
+                {disable2FAMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : null}
+                Disable 2FA
+              </Button>
+            </div>
+          ) : twoFASetup ? (
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)</p>
+              <div className="flex justify-center">
+                <img src={twoFASetup.qrCode} alt="2FA QR Code" className="w-48 h-48 rounded border" data-testid="img-2fa-qrcode" />
+              </div>
+              <div className="bg-muted p-2 rounded">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Manual Entry Key</p>
+                <code className="text-xs font-mono break-all select-all" data-testid="text-2fa-secret">{twoFASetup.secret}</code>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Verification Code</label>
+                <Input
+                  value={totpVerifyCode}
+                  onChange={(e) => setTotpVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                  maxLength={6}
+                  className="font-mono text-center text-lg tracking-[0.3em]"
+                  data-testid="input-2fa-verify"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => enable2FAMutation.mutate(totpVerifyCode)}
+                  disabled={totpVerifyCode.length !== 6 || enable2FAMutation.isPending}
+                  className="flex-1"
+                  data-testid="button-enable-2fa"
+                >
+                  {enable2FAMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : null}
+                  Enable 2FA
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => { setTwoFASetup(null); setTotpVerifyCode(""); }}
+                  data-testid="button-cancel-2fa-setup"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <ShieldOff className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium" data-testid="text-2fa-disabled">2FA is not enabled</p>
+                  <p className="text-xs text-muted-foreground">Add an extra layer of security to your account</p>
+                </div>
+              </div>
+              <Button
+                onClick={() => setup2FAMutation.mutate()}
+                disabled={setup2FAMutation.isPending}
+                data-testid="button-setup-2fa"
+              >
+                {setup2FAMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : null}
+                Set Up 2FA
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center justify-between gap-2 flex-wrap">
+            <span className="flex items-center gap-2">
+              <Monitor className="w-4 h-4 text-primary" />Active Sessions
+            </span>
+            {sessions && sessions.length > 1 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => revokeAllSessionsMutation.mutate()}
+                disabled={revokeAllSessionsMutation.isPending}
+                data-testid="button-revoke-all-sessions"
+              >
+                {revokeAllSessionsMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <AlertTriangle className="w-3 h-3 me-1" />}
+                Revoke All Other Sessions
+              </Button>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {sessionsLoading ? (
+            <div className="p-4"><Skeleton className="h-20 w-full" /></div>
+          ) : sessions && sessions.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-[10px] uppercase tracking-wider">Device / Browser</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">IP Address</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">Last Active</TableHead>
+                  <TableHead className="text-[10px] uppercase tracking-wider">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sessions.map((session) => {
+                  const ua = session.userAgent || "Unknown";
+                  const browser = ua.includes("Firefox") ? "Firefox"
+                    : ua.includes("Edg") ? "Edge"
+                    : ua.includes("Chrome") ? "Chrome"
+                    : ua.includes("Safari") ? "Safari"
+                    : "Unknown Browser";
+                  const os = ua.includes("Windows") ? "Windows"
+                    : ua.includes("Mac") ? "macOS"
+                    : ua.includes("Linux") ? "Linux"
+                    : ua.includes("Android") ? "Android"
+                    : ua.includes("iPhone") ? "iOS"
+                    : "Unknown OS";
+                  return (
+                    <TableRow key={session.sessionId} data-testid={`session-row-${session.id}`}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Monitor className="w-4 h-4 text-muted-foreground" />
+                          <div>
+                            <span className="text-xs font-medium" data-testid={`text-session-browser-${session.id}`}>{browser} on {os}</span>
+                            {session.isCurrent && (
+                              <Badge variant="default" className="ms-2 text-[9px]">Current</Badge>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs font-mono text-muted-foreground" data-testid={`text-session-ip-${session.id}`}>{session.ipAddress || "Unknown"}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-muted-foreground" data-testid={`text-session-active-${session.id}`}>
+                          {new Date(session.lastActive).toLocaleString()}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {!session.isCurrent && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => revokeSessionMutation.mutate(session.sessionId)}
+                            disabled={revokeSessionMutation.isPending}
+                            data-testid={`button-revoke-session-${session.id}`}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="p-4 text-center text-xs text-muted-foreground">No active sessions found</div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-2">
@@ -397,6 +856,483 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      {isAdmin && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center flex-wrap gap-2">
+              <Bell className="w-4 h-4 text-primary" />Notification Channels
+              <Button
+                size="sm"
+                variant="outline"
+                className="ms-auto text-xs"
+                onClick={() => setShowAddChannel(!showAddChannel)}
+                data-testid="button-add-channel"
+              >
+                {showAddChannel ? <X className="w-3 h-3 me-1" /> : <Plus className="w-3 h-3 me-1" />}
+                {showAddChannel ? "Cancel" : "Add Channel"}
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground mb-4">
+              Configure webhook or email channels to receive alert notifications outside the dashboard.
+            </p>
+
+            {showAddChannel && (
+              <Card className="mb-4">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant={newChannelType === "webhook" ? "default" : "outline"}
+                      onClick={() => setNewChannelType("webhook")}
+                      data-testid="button-type-webhook"
+                    >
+                      <Webhook className="w-3 h-3 me-1" />Webhook
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={newChannelType === "email" ? "default" : "outline"}
+                      onClick={() => setNewChannelType("email")}
+                      data-testid="button-type-email"
+                    >
+                      <Mail className="w-3 h-3 me-1" />Email
+                    </Button>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium">Channel Name</label>
+                    <Input
+                      value={newChannelName}
+                      onChange={(e) => setNewChannelName(e.target.value)}
+                      placeholder="e.g. Slack Alerts, Security Team Email"
+                      data-testid="input-channel-name"
+                    />
+                  </div>
+                  {newChannelType === "webhook" ? (
+                    <>
+                      <div>
+                        <label className="text-xs font-medium">Webhook URL</label>
+                        <Input
+                          value={newChannelUrl}
+                          onChange={(e) => setNewChannelUrl(e.target.value)}
+                          placeholder="https://hooks.slack.com/services/..."
+                          data-testid="input-channel-url"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium">Secret (optional, for HMAC signature)</label>
+                        <Input
+                          value={newChannelSecret}
+                          onChange={(e) => setNewChannelSecret(e.target.value)}
+                          placeholder="Optional signing secret"
+                          data-testid="input-channel-secret"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <label className="text-xs font-medium">Recipients (comma-separated)</label>
+                      <Input
+                        value={newChannelRecipients}
+                        onChange={(e) => setNewChannelRecipients(e.target.value)}
+                        placeholder="admin@company.com, soc@company.com"
+                        data-testid="input-channel-recipients"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Requires SMTP configuration (SMTP_HOST, SMTP_USER, SMTP_PASS env vars)
+                      </p>
+                    </div>
+                  )}
+                  <Button
+                    onClick={() => createChannelMutation.mutate()}
+                    disabled={createChannelMutation.isPending || !newChannelName || (newChannelType === "webhook" ? !newChannelUrl : !newChannelRecipients)}
+                    data-testid="button-save-channel"
+                  >
+                    {createChannelMutation.isPending && <Loader2 className="w-3 h-3 me-1.5 animate-spin" />}
+                    Create Channel
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {channels && channels.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Name</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Type</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Status</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Last Used</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {channels.map((ch) => (
+                    <TableRow key={ch.id} data-testid={`channel-row-${ch.id}`}>
+                      <TableCell>
+                        <span className="text-xs font-medium" data-testid={`text-channel-name-${ch.id}`}>{ch.name}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-[10px]">
+                          {ch.type === "webhook" ? <Webhook className="w-3 h-3 me-1" /> : <Mail className="w-3 h-3 me-1" />}
+                          {ch.type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={ch.enabled}
+                          onCheckedChange={(enabled) => toggleChannelMutation.mutate({ id: ch.id, enabled })}
+                          data-testid={`switch-channel-${ch.id}`}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {ch.lastUsed ? new Date(ch.lastUsed).toLocaleString() : "Never"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => testChannelMutation.mutate(ch.id)}
+                            disabled={testingChannelId === ch.id}
+                            data-testid={`button-test-channel-${ch.id}`}
+                          >
+                            {testingChannelId === ch.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => deleteChannelMutation.mutate(ch.id)}
+                            data-testid={`button-delete-channel-${ch.id}`}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="text-center py-6 text-xs text-muted-foreground">
+                No notification channels configured. Add a webhook or email channel to receive alerts.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
+              <Trash2 className="w-4 h-4 text-primary" />{t("settings.dataRetention")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground mb-4">{t("settings.dataRetentionDescription")}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <div className="space-y-2">
+                <label className="text-xs font-medium" htmlFor="logRetentionDays">{t("settings.logRetentionDays")}</label>
+                <Input
+                  id="logRetentionDays"
+                  type="number"
+                  min={7}
+                  max={3650}
+                  value={logDays}
+                  onChange={(e) => setLogDays(e.target.value ? parseInt(e.target.value) : "")}
+                  data-testid="input-log-retention-days"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-medium" htmlFor="auditRetentionDays">{t("settings.auditRetentionDays")}</label>
+                <Input
+                  id="auditRetentionDays"
+                  type="number"
+                  min={30}
+                  max={3650}
+                  value={auditDays}
+                  onChange={(e) => setAuditDays(e.target.value ? parseInt(e.target.value) : "")}
+                  data-testid="input-audit-retention-days"
+                />
+              </div>
+            </div>
+            <div className="space-y-1 mb-4">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Clock className="w-3 h-3" />
+                <span>{t("settings.honeypotRetention")}</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Clock className="w-3 h-3" />
+                <span>{t("settings.packetCaptureRetention")}</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Clock className="w-3 h-3" />
+                <span>{t("settings.commandRetention")}</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => {
+                  if (typeof logDays === "number" && typeof auditDays === "number") {
+                    updateRetentionMutation.mutate({ logRetentionDays: logDays, auditRetentionDays: auditDays });
+                  }
+                }}
+                disabled={updateRetentionMutation.isPending || logDays === "" || auditDays === ""}
+                data-testid="button-save-retention"
+              >
+                {updateRetentionMutation.isPending ? <Loader2 className="w-3 h-3 me-1.5 animate-spin" /> : null}
+                {t("common.save")}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => runCleanupMutation.mutate()}
+                disabled={runCleanupMutation.isPending}
+                data-testid="button-run-cleanup"
+              >
+                {runCleanupMutation.isPending ? <Loader2 className="w-3 h-3 me-1.5 animate-spin" /> : <Trash2 className="w-3 h-3 me-1.5" />}
+                {t("settings.runCleanupNow")}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Key className="w-4 h-4 text-primary" />
+                API Keys
+              </div>
+              <Button
+                size="sm"
+                onClick={() => { setShowCreateKeyDialog(true); setNewKeyRevealed(null); }}
+                data-testid="button-create-api-key"
+              >
+                <Plus className="w-3 h-3 me-1.5" />
+                Create Key
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground mb-4">
+              Manage API keys for the ingestion pipeline. Keys can be rotated with a 24-hour grace period.
+            </p>
+
+            {newKeyRevealed && (
+              <Card className="mb-4 border-green-500/50">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-green-600 dark:text-green-400 mb-1">New API Key Created</p>
+                      <p className="text-[10px] text-muted-foreground mb-2">Copy this key now. It will not be shown again.</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <code className="text-[10px] font-mono bg-muted px-2 py-1 rounded break-all" data-testid="text-new-api-key">{newKeyRevealed}</code>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => { navigator.clipboard.writeText(newKeyRevealed); toast({ title: "Key copied to clipboard" }); }}
+                          data-testid="button-copy-new-key"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={() => setNewKeyRevealed(null)} data-testid="button-dismiss-new-key">
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {rotatedKeyRevealed && (
+              <Card className="mb-4 border-blue-500/50">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-2">
+                    <RotateCcw className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">Key Rotated Successfully</p>
+                      <p className="text-[10px] text-muted-foreground mb-2">
+                        Old key (#{rotatedKeyRevealed.oldKeyId}) will remain valid until {new Date(rotatedKeyRevealed.gracePeriodEnds).toLocaleString()}.
+                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <code className="text-[10px] font-mono bg-muted px-2 py-1 rounded break-all" data-testid="text-rotated-api-key">{rotatedKeyRevealed.rawKey}</code>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => { navigator.clipboard.writeText(rotatedKeyRevealed.rawKey); toast({ title: "Key copied to clipboard" }); }}
+                          data-testid="button-copy-rotated-key"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={() => setRotatedKeyRevealed(null)} data-testid="button-dismiss-rotated-key">
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {apiKeysData && apiKeysData.length > 0 ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-[10px] uppercase tracking-wider">Name</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider">Prefix</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider">Status</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider">Last Used</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider">Expires</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {apiKeysData.map((key) => {
+                      const status = getKeyStatus(key);
+                      return (
+                        <TableRow key={key.id} data-testid={`api-key-row-${key.id}`}>
+                          <TableCell>
+                            <div>
+                              <span className="text-xs font-medium" data-testid={`text-key-name-${key.id}`}>{key.name}</span>
+                              {key.description && (
+                                <p className="text-[10px] text-muted-foreground">{key.description}</p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <code className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded" data-testid={`text-key-prefix-${key.id}`}>{key.keyPrefix}...</code>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={status.variant} className="text-[10px]" data-testid={`badge-key-status-${key.id}`}>
+                              {status.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-[10px] text-muted-foreground font-mono" data-testid={`text-key-lastused-${key.id}`}>
+                              {key.lastUsed ? new Date(key.lastUsed).toLocaleDateString() : "Never"}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-[10px] text-muted-foreground font-mono" data-testid={`text-key-expires-${key.id}`}>
+                              {key.expiresAt ? new Date(key.expiresAt).toLocaleDateString() : "Never"}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              {!key.revokedAt && !(key.expiresAt && new Date(key.expiresAt) < new Date()) && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => rotateApiKeyMutation.mutate(key.id)}
+                                    disabled={rotateApiKeyMutation.isPending}
+                                    data-testid={`button-rotate-key-${key.id}`}
+                                  >
+                                    <RotateCcw className="w-3 h-3" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => revokeApiKeyMutation.mutate(key.id)}
+                                    disabled={revokeApiKeyMutation.isPending}
+                                    data-testid={`button-revoke-key-${key.id}`}
+                                  >
+                                    <Ban className="w-3 h-3" />
+                                  </Button>
+                                </>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => deleteApiKeyMutation.mutate(key.id)}
+                                disabled={deleteApiKeyMutation.isPending}
+                                data-testid={`button-delete-key-${key.id}`}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground text-center py-6" data-testid="text-no-api-keys">
+                No API keys yet. Create one to start ingesting security events.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={showCreateKeyDialog} onOpenChange={(open) => { setShowCreateKeyDialog(open); if (!open) setNewKeyRevealed(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="w-4 h-4" />
+              Create API Key
+            </DialogTitle>
+          </DialogHeader>
+          <Form {...createApiKeyForm}>
+            <form onSubmit={createApiKeyForm.handleSubmit((d) => createApiKeyMutation.mutate(d))} className="space-y-4">
+              <FormField control={createApiKeyForm.control} name="name" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="e.g. Production SIEM" data-testid="input-key-name" />
+                  </FormControl>
+                </FormItem>
+              )} />
+              <FormField control={createApiKeyForm.control} name="description" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description (optional)</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="e.g. Used by Splunk forwarder" data-testid="input-key-description" />
+                  </FormControl>
+                </FormItem>
+              )} />
+              <FormField control={createApiKeyForm.control} name="expiresAt" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Expiration Date (optional)</FormLabel>
+                  <FormControl>
+                    <Input {...field} type="date" data-testid="input-key-expires" />
+                  </FormControl>
+                </FormItem>
+              )} />
+              <FormField control={createApiKeyForm.control} name="permissions" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Permissions</FormLabel>
+                  <FormControl>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <SelectTrigger data-testid="select-key-permissions"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ingest">Ingest Only</SelectItem>
+                        <SelectItem value="read">Read Only</SelectItem>
+                        <SelectItem value="full">Full Access</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                </FormItem>
+              )} />
+              <Button type="submit" className="w-full" disabled={createApiKeyMutation.isPending} data-testid="button-submit-create-key">
+                {createApiKeyMutation.isPending ? <Loader2 className="w-3 h-3 me-1.5 animate-spin" /> : <Key className="w-3 h-3 me-1.5" />}
+                Create API Key
+              </Button>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

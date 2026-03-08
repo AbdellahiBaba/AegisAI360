@@ -13,13 +13,15 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   ShieldAlert, AlertTriangle, Bug, Activity, ArrowUpRight, ArrowDownRight,
   Clock, Monitor, Lock, Radio, ShieldOff, Flame, Crosshair, Zap, CreditCard,
-  Shield, ScanLine, Ban, Eye, Info, Server,
+  Shield, ScanLine, Ban, Eye, Info, Server, FileDown,
 } from "lucide-react";
+import { generateExecutiveSummaryPDF } from "@/lib/reportGenerator";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell
 } from "recharts";
 import type { SecurityEvent, ResponseAction } from "@shared/schema";
+import { ThreatMap } from "@/components/threat-map";
 
 interface DashboardStats {
   totalEvents: number;
@@ -572,6 +574,7 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/trend"] });
       queryClient.invalidateQueries({ queryKey: ["/api/response/actions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/threat-map"] });
     };
     return () => {
       if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
@@ -646,7 +649,18 @@ export default function Dashboard() {
         </Card>
       )}
 
-      <ThreatLevelIndicator stats={stats!} />
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <ThreatLevelIndicator stats={stats!} />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => generateExecutiveSummaryPDF(stats!, events || [], severityData)}
+          data-testid="button-generate-pdf-report"
+        >
+          <FileDown className="w-4 h-4 me-1" />
+          {t("dashboard.generateReport", "Generate PDF Report")}
+        </Button>
+      </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
         <StatCard

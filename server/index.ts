@@ -291,7 +291,21 @@ app.use((req, res, next) => {
     console.log("Rule seeding skipped (non-fatal)");
   }
 
+  try {
+    const { startDataRetentionScheduler } = await import("./dataRetention");
+    startDataRetentionScheduler();
+  } catch (err) {
+    console.log("Data retention scheduler failed to start (non-fatal)");
+  }
+
   await registerRoutes(httpServer, app);
+
+  try {
+    const { startScanScheduler } = await import("./scanScheduler");
+    startScanScheduler();
+  } catch (err) {
+    console.log("Scan scheduler start skipped (non-fatal)");
+  }
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

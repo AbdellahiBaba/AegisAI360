@@ -17,6 +17,8 @@ export const organizations = pgTable("organizations", {
   maxUsers: integer("max_users").notNull().default(5),
   suspended: boolean("suspended").notNull().default(false),
   defenseMode: text("defense_mode").notNull().default("auto"),
+  logRetentionDays: integer("log_retention_days").notNull().default(90),
+  auditRetentionDays: integer("audit_retention_days").notNull().default(365),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -27,6 +29,10 @@ export const users = pgTable("users", {
   organizationId: integer("organization_id").references(() => organizations.id),
   role: text("role").notNull().default("analyst"),
   isSuperAdmin: boolean("is_super_admin").notNull().default(false),
+  totpSecret: text("totp_secret"),
+  totpEnabled: boolean("totp_enabled").notNull().default(false),
+  failedLoginAttempts: integer("failed_login_attempts").notNull().default(0),
+  lockedUntil: timestamp("locked_until"),
 });
 
 export const securityEvents = pgTable("security_events", {
@@ -162,10 +168,13 @@ export const apiKeys = pgTable("api_keys", {
   id: serial("id").primaryKey(),
   organizationId: integer("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
+  description: text("description"),
   keyHash: text("key_hash").notNull(),
   keyPrefix: text("key_prefix").notNull(),
   permissions: text("permissions").notNull().default("ingest"),
+  expiresAt: timestamp("expires_at"),
   lastUsed: timestamp("last_used"),
+  revokedAt: timestamp("revoked_at"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -525,3 +534,49 @@ export const bandwidthLogs = pgTable("bandwidth_logs", {
 export const insertBandwidthLogSchema = createInsertSchema(bandwidthLogs).omit({ id: true, timestamp: true });
 export type InsertBandwidthLog = z.infer<typeof insertBandwidthLogSchema>;
 export type BandwidthLog = typeof bandwidthLogs.$inferSelect;
+
+export const notificationChannels = pgTable("notification_channels", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  name: text("name").notNull(),
+  type: text("type").notNull(),
+  config: jsonb("config").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  lastUsed: timestamp("last_used"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertNotificationChannelSchema = createInsertSchema(notificationChannels).omit({ id: true, createdAt: true, lastUsed: true });
+export type InsertNotificationChannel = z.infer<typeof insertNotificationChannelSchema>;
+export type NotificationChannel = typeof notificationChannels.$inferSelect;
+
+export const scheduledScans = pgTable("scheduled_scans", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  scanType: text("scan_type").notNull(),
+  target: text("target").notNull(),
+  frequency: text("frequency").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  nextRun: timestamp("next_run").notNull(),
+  lastRun: timestamp("last_run"),
+  lastResult: text("last_result"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertScheduledScanSchema = createInsertSchema(scheduledScans).omit({ id: true, createdAt: true, lastRun: true, lastResult: true });
+export type InsertScheduledScan = z.infer<typeof insertScheduledScanSchema>;
+export type ScheduledScan = typeof scheduledScans.$inferSelect;
+
+export const sessionsMetadata = pgTable("sessions_metadata", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull().unique(),
+  userId: varchar("user_id").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  lastActive: timestamp("last_active").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertSessionMetadataSchema = createInsertSchema(sessionsMetadata).omit({ id: true, createdAt: true, lastActive: true });
+export type InsertSessionMetadata = z.infer<typeof insertSessionMetadataSchema>;
+export type SessionMetadata = typeof sessionsMetadata.$inferSelect;

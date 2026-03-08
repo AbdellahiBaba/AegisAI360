@@ -428,7 +428,19 @@
     "simulating": "جار المحاكاة...",
     "simulationStarted": "بدأت المحاكاة",
     "simulationComplete": "اكتملت المحاكاة - تحقق من لوحة القيادة",
-    "simulationFailed": "فشلت المحاكاة"
+    "simulationFailed": "فشلت المحاكاة",
+    "dataRetention": "سياسة الاحتفاظ بالبيانات",
+    "dataRetentionDescription": "تكوين مدة الاحتفاظ بأنواع مختلفة من البيانات قبل التنظيف التلقائي. يتم التنظيف يومياً عند منتصف الليل.",
+    "logRetentionDays": "الاحتفاظ بأحداث الأمان (أيام)",
+    "auditRetentionDays": "الاحتفاظ بسجل التدقيق (أيام)",
+    "retentionUpdated": "تم تحديث سياسة الاحتفاظ",
+    "retentionUpdateFailed": "فشل تحديث سياسة الاحتفاظ",
+    "runCleanupNow": "تشغيل التنظيف الآن",
+    "cleanupComplete": "اكتمل تنظيف البيانات",
+    "cleanupFailed": "فشل التنظيف",
+    "honeypotRetention": "أحداث المصيدة: 30 يوماً",
+    "packetCaptureRetention": "التقاط الحزم: 30 يوماً",
+    "commandRetention": "أوامر الوكيل القديمة: 30 يوماً"
   },
   "billing": {
     "title": "الفوترة والاشتراك",

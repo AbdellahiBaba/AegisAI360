@@ -5,6 +5,7 @@ import {
   scanResults, supportTickets, networkDevices, networkScans,
   plans, deviceTokens, agents, agentCommands, terminalAuditLogs, usageTracking,
   packetCaptures, arpAlerts, bandwidthLogs,
+  notificationChannels, scheduledScans, sessionsMetadata,
   type User, type InsertUser,
   type Organization, type InsertOrganization,
   type SecurityEvent, type InsertSecurityEvent,
@@ -36,6 +37,9 @@ import {
   type PacketCapture, type InsertPacketCapture,
   type ArpAlert, type InsertArpAlert,
   type BandwidthLog, type InsertBandwidthLog,
+  type NotificationChannel, type InsertNotificationChannel,
+  type ScheduledScan, type InsertScheduledScan,
+  type SessionMetadata, type InsertSessionMetadata,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, gte, count, lt, ne } from "drizzle-orm";
@@ -100,7 +104,10 @@ export interface IStorage {
   createApiKey(key: InsertApiKey): Promise<ApiKey>;
   deleteApiKey(id: number, orgId: number): Promise<boolean>;
   getApiKeyByHash(keyHash: string): Promise<ApiKey | undefined>;
+  getApiKeyById(id: number): Promise<ApiKey | undefined>;
   touchApiKey(id: number): Promise<void>;
+  revokeApiKey(id: number, orgId: number): Promise<ApiKey | undefined>;
+  updateApiKey(id: number, orgId: number, data: Partial<{ name: string; description: string | null; expiresAt: Date | null }>): Promise<ApiKey | undefined>;
 
   getFirewallRules(orgId: number): Promise<FirewallRule[]>;
   createFirewallRule(rule: InsertFirewallRule): Promise<FirewallRule>;
@@ -202,6 +209,29 @@ export interface IStorage {
 
   createBandwidthLog(log: InsertBandwidthLog): Promise<BandwidthLog>;
   getBandwidthLogs(agentId: number, orgId: number): Promise<BandwidthLog[]>;
+
+  updateUserLockout(userId: string, attempts: number, lockedUntil: Date | null): Promise<void>;
+  updateUserTotpSecret(userId: string, secret: string): Promise<void>;
+  enableUserTotp(userId: string): Promise<void>;
+  disableUserTotp(userId: string): Promise<void>;
+
+  getNotificationChannels(orgId: number): Promise<NotificationChannel[]>;
+  createNotificationChannel(channel: InsertNotificationChannel): Promise<NotificationChannel>;
+  updateNotificationChannel(id: number, orgId: number, data: Partial<{ enabled: boolean; config: any; lastUsed: Date }>): Promise<NotificationChannel | undefined>;
+  deleteNotificationChannel(id: number, orgId: number): Promise<boolean>;
+
+  getScheduledScans(orgId: number): Promise<ScheduledScan[]>;
+  createScheduledScan(scan: InsertScheduledScan): Promise<ScheduledScan>;
+  updateScheduledScan(id: number, orgId: number, data: Partial<{ enabled: boolean; nextRun: Date; lastRun: Date; lastResult: string }>): Promise<ScheduledScan | undefined>;
+  deleteScheduledScan(id: number, orgId: number): Promise<boolean>;
+  getDueScheduledScans(): Promise<ScheduledScan[]>;
+
+  createSessionMetadata(session: InsertSessionMetadata): Promise<SessionMetadata>;
+  getSessionsByUser(userId: string): Promise<SessionMetadata[]>;
+  getSessionMetadata(sessionId: string): Promise<SessionMetadata | undefined>;
+  updateSessionLastActive(sessionId: string): Promise<void>;
+  deleteSessionMetadata(sessionId: string): Promise<void>;
+  deleteAllSessionsExcept(userId: string, currentSessionId: string): Promise<string[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -224,6 +254,8 @@ export class DatabaseStorage implements IStorage {
     return db.select({
       id: users.id, username: users.username, organizationId: users.organizationId,
       role: users.role, isSuperAdmin: users.isSuperAdmin,
+      totpSecret: users.totpSecret, totpEnabled: users.totpEnabled,
+      failedLoginAttempts: users.failedLoginAttempts, lockedUntil: users.lockedUntil,
     }).from(users).orderBy(desc(users.username));
   }
 
@@ -477,8 +509,29 @@ export class DatabaseStorage implements IStorage {
     return key || undefined;
   }
 
+  async getApiKeyById(id: number): Promise<ApiKey | undefined> {
+    const [key] = await db.select().from(apiKeys).where(eq(apiKeys.id, id));
+    return key || undefined;
+  }
+
   async touchApiKey(id: number): Promise<void> {
     await db.update(apiKeys).set({ lastUsed: new Date() }).where(eq(apiKeys.id, id));
+  }
+
+  async revokeApiKey(id: number, orgId: number): Promise<ApiKey | undefined> {
+    const [updated] = await db.update(apiKeys)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(apiKeys.id, id), eq(apiKeys.organizationId, orgId)))
+      .returning();
+    return updated;
+  }
+
+  async updateApiKey(id: number, orgId: number, data: Partial<{ name: string; description: string | null; expiresAt: Date | null }>): Promise<ApiKey | undefined> {
+    const [updated] = await db.update(apiKeys)
+      .set(data)
+      .where(and(eq(apiKeys.id, id), eq(apiKeys.organizationId, orgId)))
+      .returning();
+    return updated;
   }
 
   async getFirewallRules(orgId: number): Promise<FirewallRule[]> {
@@ -916,6 +969,97 @@ export class DatabaseStorage implements IStorage {
 
   async getBandwidthLogs(agentId: number, orgId: number): Promise<BandwidthLog[]> {
     return db.select().from(bandwidthLogs).where(and(eq(bandwidthLogs.agentId, agentId), eq(bandwidthLogs.organizationId, orgId))).orderBy(desc(bandwidthLogs.timestamp)).limit(200);
+  }
+
+  async updateUserLockout(userId: string, attempts: number, lockedUntil: Date | null): Promise<void> {
+    await db.update(users).set({ failedLoginAttempts: attempts, lockedUntil }).where(eq(users.id, userId));
+  }
+
+  async updateUserTotpSecret(userId: string, secret: string): Promise<void> {
+    await db.update(users).set({ totpSecret: secret }).where(eq(users.id, userId));
+  }
+
+  async enableUserTotp(userId: string): Promise<void> {
+    await db.update(users).set({ totpEnabled: true }).where(eq(users.id, userId));
+  }
+
+  async disableUserTotp(userId: string): Promise<void> {
+    await db.update(users).set({ totpEnabled: false, totpSecret: null }).where(eq(users.id, userId));
+  }
+
+  async getNotificationChannels(orgId: number): Promise<NotificationChannel[]> {
+    return db.select().from(notificationChannels).where(eq(notificationChannels.organizationId, orgId)).orderBy(desc(notificationChannels.createdAt));
+  }
+
+  async createNotificationChannel(channel: InsertNotificationChannel): Promise<NotificationChannel> {
+    const [created] = await db.insert(notificationChannels).values(channel).returning();
+    return created;
+  }
+
+  async updateNotificationChannel(id: number, orgId: number, data: Partial<{ enabled: boolean; config: any; lastUsed: Date }>): Promise<NotificationChannel | undefined> {
+    const [updated] = await db.update(notificationChannels).set(data).where(and(eq(notificationChannels.id, id), eq(notificationChannels.organizationId, orgId))).returning();
+    return updated;
+  }
+
+  async deleteNotificationChannel(id: number, orgId: number): Promise<boolean> {
+    const result = await db.delete(notificationChannels).where(and(eq(notificationChannels.id, id), eq(notificationChannels.organizationId, orgId)));
+    return (result as any).rowCount > 0;
+  }
+
+  async getScheduledScans(orgId: number): Promise<ScheduledScan[]> {
+    return db.select().from(scheduledScans).where(eq(scheduledScans.organizationId, orgId)).orderBy(desc(scheduledScans.createdAt));
+  }
+
+  async createScheduledScan(scan: InsertScheduledScan): Promise<ScheduledScan> {
+    const [created] = await db.insert(scheduledScans).values(scan).returning();
+    return created;
+  }
+
+  async updateScheduledScan(id: number, orgId: number, data: Partial<{ enabled: boolean; nextRun: Date; lastRun: Date; lastResult: string }>): Promise<ScheduledScan | undefined> {
+    const [updated] = await db.update(scheduledScans).set(data).where(and(eq(scheduledScans.id, id), eq(scheduledScans.organizationId, orgId))).returning();
+    return updated;
+  }
+
+  async deleteScheduledScan(id: number, orgId: number): Promise<boolean> {
+    const result = await db.delete(scheduledScans).where(and(eq(scheduledScans.id, id), eq(scheduledScans.organizationId, orgId)));
+    return (result as any).rowCount > 0;
+  }
+
+  async getDueScheduledScans(): Promise<ScheduledScan[]> {
+    return db.select().from(scheduledScans).where(and(eq(scheduledScans.enabled, true), lt(scheduledScans.nextRun, new Date())));
+  }
+
+  async createSessionMetadata(session: InsertSessionMetadata): Promise<SessionMetadata> {
+    const [created] = await db.insert(sessionsMetadata).values(session).returning();
+    return created;
+  }
+
+  async getSessionsByUser(userId: string): Promise<SessionMetadata[]> {
+    return db.select().from(sessionsMetadata).where(eq(sessionsMetadata.userId, userId)).orderBy(desc(sessionsMetadata.lastActive));
+  }
+
+  async getSessionMetadata(sessionId: string): Promise<SessionMetadata | undefined> {
+    const [session] = await db.select().from(sessionsMetadata).where(eq(sessionsMetadata.sessionId, sessionId));
+    return session || undefined;
+  }
+
+  async updateSessionLastActive(sessionId: string): Promise<void> {
+    await db.update(sessionsMetadata).set({ lastActive: new Date() }).where(eq(sessionsMetadata.sessionId, sessionId));
+  }
+
+  async deleteSessionMetadata(sessionId: string): Promise<void> {
+    await db.delete(sessionsMetadata).where(eq(sessionsMetadata.sessionId, sessionId));
+  }
+
+  async deleteAllSessionsExcept(userId: string, currentSessionId: string): Promise<string[]> {
+    const toDelete = await db.select().from(sessionsMetadata).where(and(eq(sessionsMetadata.userId, userId), ne(sessionsMetadata.sessionId, currentSessionId)));
+    const sessionIds = toDelete.map(s => s.sessionId);
+    if (sessionIds.length > 0) {
+      for (const sid of sessionIds) {
+        await db.delete(sessionsMetadata).where(eq(sessionsMetadata.sessionId, sid));
+      }
+    }
+    return sessionIds;
   }
 }
 

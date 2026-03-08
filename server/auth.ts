@@ -5,11 +5,17 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { pool } from "./db";
+import { generateSecret as totpGenerateSecret, generateURI as totpGenerateURI, verifySync as totpVerifySync } from "otplib";
+import * as QRCode from "qrcode";
+import { pool, db } from "./db";
 import { storage } from "./storage";
 import type { User } from "@shared/schema";
+import { sql } from "drizzle-orm";
 
 const scryptAsync = promisify(scrypt);
+
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
 
 async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");
@@ -53,8 +59,36 @@ export function setupAuth(app: Express) {
       try {
         const user = await storage.getUserByUsername(username);
         if (!user) return done(null, false, { message: "Invalid username or password" });
+
+        if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
+          const remaining = Math.ceil((new Date(user.lockedUntil).getTime() - Date.now()) / 60000);
+          return done(null, false, { message: `Account temporarily locked. Try again in ${remaining} minute(s).` });
+        }
+
         const valid = await comparePasswords(password, user.password);
-        if (!valid) return done(null, false, { message: "Invalid username or password" });
+        if (!valid) {
+          const attempts = (user.failedLoginAttempts || 0) + 1;
+          if (attempts >= MAX_FAILED_ATTEMPTS) {
+            await storage.updateUserLockout(user.id, attempts, new Date(Date.now() + LOCKOUT_DURATION_MS));
+            await storage.createSecurityEvent({
+              organizationId: user.organizationId,
+              eventType: "account_lockout",
+              severity: "high",
+              source: "auth",
+              description: `Account "${user.username}" locked after ${MAX_FAILED_ATTEMPTS} failed login attempts`,
+              status: "new",
+            });
+            return done(null, false, { message: "Account temporarily locked due to too many failed attempts. Try again in 15 minutes." });
+          } else {
+            await storage.updateUserLockout(user.id, attempts, null);
+            return done(null, false, { message: "Invalid username or password" });
+          }
+        }
+
+        if (user.failedLoginAttempts && user.failedLoginAttempts > 0) {
+          await storage.updateUserLockout(user.id, 0, null);
+        }
+
         return done(null, user);
       } catch (err) {
         return done(err);
@@ -132,9 +166,10 @@ export function setupAuth(app: Express) {
         role,
       });
 
-      req.login(user, (err) => {
+      req.login(user, async (err) => {
         if (err) return next(err);
-        const { password: _, ...safeUser } = user;
+        await trackSessionMetadata(req, user);
+        const { password: _, totpSecret: _ts, ...safeUser } = user;
         res.status(201).json(safeUser);
       });
     } catch (error) {
@@ -143,21 +178,175 @@ export function setupAuth(app: Express) {
     }
   });
 
+  async function trackSessionMetadata(req: any, user: User) {
+    try {
+      const sessionId = req.sessionID;
+      if (sessionId) {
+        const ipAddress = req.ip || req.headers["x-forwarded-for"] || req.connection?.remoteAddress || "unknown";
+        const userAgent = req.headers["user-agent"] || "unknown";
+        const existing = await storage.getSessionMetadata(sessionId);
+        if (!existing) {
+          await storage.createSessionMetadata({
+            sessionId,
+            userId: user.id,
+            ipAddress: typeof ipAddress === "string" ? ipAddress : String(ipAddress),
+            userAgent,
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Failed to track session metadata:", e);
+    }
+  }
+
+  app.use(async (req, _res, next) => {
+    if (req.isAuthenticated() && req.sessionID) {
+      try {
+        await storage.updateSessionLastActive(req.sessionID);
+      } catch (_e) {}
+    }
+    next();
+  });
+
   app.post("/api/login", (req, res, next) => {
     passport.authenticate("local", (err: any, user: User | false, info: any) => {
       if (err) return next(err);
       if (!user) return res.status(401).json({ error: info?.message || "Login failed" });
-      req.login(user, (err) => {
+
+      if (user.totpEnabled) {
+        const token = randomBytes(32).toString("hex");
+        pendingTwoFactor.set(token, { userId: user.id, expiresAt: Date.now() + 5 * 60 * 1000 });
+        setTimeout(() => pendingTwoFactor.delete(token), 5 * 60 * 1000);
+        return res.json({ requiresTwoFactor: true, twoFactorToken: token });
+      }
+
+      req.login(user, async (err) => {
         if (err) return next(err);
-        const { password: _, ...safeUser } = user;
+        await trackSessionMetadata(req, user);
+        const { password: _, totpSecret: _ts, ...safeUser } = user;
         res.json(safeUser);
       });
     })(req, res, next);
   });
 
-  app.post("/api/logout", (req, res, next) => {
-    req.logout((err) => {
+  const pendingTwoFactor = new Map<string, { userId: string; expiresAt: number }>();
+
+  app.post("/api/auth/2fa/verify-login", async (req, res, next) => {
+    try {
+      const { twoFactorToken, code } = req.body;
+      if (!twoFactorToken || !code) {
+        return res.status(400).json({ error: "Two-factor token and code are required" });
+      }
+
+      const pending = pendingTwoFactor.get(twoFactorToken);
+      if (!pending || pending.expiresAt < Date.now()) {
+        pendingTwoFactor.delete(twoFactorToken);
+        return res.status(401).json({ error: "Two-factor session expired. Please login again." });
+      }
+
+      const user = await storage.getUser(pending.userId);
+      if (!user || !user.totpSecret) {
+        return res.status(401).json({ error: "Invalid two-factor session" });
+      }
+
+      const result = totpVerifySync({ token: code, secret: user.totpSecret });
+      if (!result.valid) {
+        return res.status(401).json({ error: "Invalid two-factor code" });
+      }
+
+      pendingTwoFactor.delete(twoFactorToken);
+
+      req.login(user, async (err) => {
+        if (err) return next(err);
+        await trackSessionMetadata(req, user);
+        const { password: _, totpSecret: _ts, ...safeUser } = user;
+        res.json(safeUser);
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Two-factor verification failed" });
+    }
+  });
+
+  app.post("/api/auth/2fa/setup", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      if (user.totpEnabled) {
+        return res.status(400).json({ error: "Two-factor authentication is already enabled" });
+      }
+
+      const secret = totpGenerateSecret();
+      const otpauth = totpGenerateURI({ issuer: "AegisAI360", label: user.username, secret, type: "totp" });
+      const qrCode = await QRCode.toDataURL(otpauth);
+
+      await storage.updateUserTotpSecret(user.id, secret);
+
+      res.json({ secret, qrCode, otpauth });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to setup two-factor authentication" });
+    }
+  });
+
+  app.post("/api/auth/2fa/enable", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { code } = req.body;
+      if (!code) return res.status(400).json({ error: "Verification code is required" });
+
+      const freshUser = await storage.getUser(user.id);
+      if (!freshUser?.totpSecret) {
+        return res.status(400).json({ error: "Please complete 2FA setup first" });
+      }
+
+      const verifyResult = totpVerifySync({ token: code, secret: freshUser.totpSecret });
+      if (!verifyResult.valid) {
+        return res.status(400).json({ error: "Invalid verification code. Please try again." });
+      }
+
+      await storage.enableUserTotp(user.id);
+
+      await storage.createAuditLog({
+        organizationId: user.organizationId,
+        userId: user.id,
+        action: "2fa_enabled",
+        targetType: "user",
+        targetId: user.id,
+        details: "Two-factor authentication enabled",
+      });
+
+      res.json({ enabled: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to enable two-factor authentication" });
+    }
+  });
+
+  app.post("/api/auth/2fa/disable", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+
+      await storage.disableUserTotp(user.id);
+
+      await storage.createAuditLog({
+        organizationId: user.organizationId,
+        userId: user.id,
+        action: "2fa_disabled",
+        targetType: "user",
+        targetId: user.id,
+        details: "Two-factor authentication disabled",
+      });
+
+      res.json({ enabled: false });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to disable two-factor authentication" });
+    }
+  });
+
+  app.post("/api/logout", async (req, res, next) => {
+    const sessionId = req.sessionID;
+    req.logout(async (err) => {
       if (err) return next(err);
+      try {
+        if (sessionId) await storage.deleteSessionMetadata(sessionId);
+      } catch (_e) {}
       res.sendStatus(200);
     });
   });
@@ -166,8 +355,82 @@ export function setupAuth(app: Express) {
     if (!req.isAuthenticated() || !req.user) {
       return res.status(401).json({ error: "Not authenticated" });
     }
-    const { password: _, ...safeUser } = req.user as User;
+    const { password: _, totpSecret: _ts, ...safeUser } = req.user as User;
     res.json(safeUser);
+  });
+
+  app.get("/api/auth/sessions", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const sessions = await storage.getSessionsByUser(user.id);
+      const currentSessionId = req.sessionID;
+      res.json(sessions.map(s => ({
+        ...s,
+        isCurrent: s.sessionId === currentSessionId,
+      })));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch sessions" });
+    }
+  });
+
+  app.delete("/api/auth/sessions/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const sessionId = req.params.id;
+
+      if (sessionId === req.sessionID) {
+        return res.status(400).json({ error: "Cannot revoke current session. Use logout instead." });
+      }
+
+      const sessionMeta = await storage.getSessionMetadata(sessionId);
+      if (!sessionMeta || sessionMeta.userId !== user.id) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      await db.execute(sql`DELETE FROM "session" WHERE sid = ${sessionId}`);
+      await storage.deleteSessionMetadata(sessionId);
+
+      await storage.createAuditLog({
+        organizationId: user.organizationId,
+        userId: user.id,
+        action: "session_revoked",
+        targetType: "session",
+        targetId: sessionId,
+        details: `Revoked session from ${sessionMeta.ipAddress || "unknown"}`,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to revoke session" });
+    }
+  });
+
+  app.post("/api/auth/sessions/revoke-all", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const currentSessionId = req.sessionID;
+
+      const revokedSessionIds = await storage.deleteAllSessionsExcept(user.id, currentSessionId);
+
+      for (const sid of revokedSessionIds) {
+        try {
+          await db.execute(sql`DELETE FROM "session" WHERE sid = ${sid}`);
+        } catch (_e) {}
+      }
+
+      await storage.createAuditLog({
+        organizationId: user.organizationId,
+        userId: user.id,
+        action: "all_sessions_revoked",
+        targetType: "session",
+        targetId: user.id,
+        details: `Revoked ${revokedSessionIds.length} other session(s)`,
+      });
+
+      res.json({ success: true, revokedCount: revokedSessionIds.length });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to revoke sessions" });
+    }
   });
 }
 

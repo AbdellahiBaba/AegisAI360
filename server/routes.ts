@@ -26,6 +26,7 @@ import { createAgentRouter } from "./agentApi";
 import { abuseIpdbLookup, otxLookup, urlscanLookup, safeBrowsingLookup, malwareBazaarLookup } from "./services/threatIntel";
 import { ResponseEngine } from "./responseEngine";
 import { AlertEngine } from "./alertEngine";
+import { testChannel } from "./notificationService";
 import { scanPorts, lookupDNS, checkSSL, scanHeaders, scanVulnerabilities, isPrivateTarget } from "./scanEngine";
 import { enumerateSubdomains, bruteforceDirectories, fingerprintTechnology, detectWAF, whoisLookup, testSQLInjection, testXSS, identifyHash, crackHash, analyzePassword } from "./pentestEngine";
 import { lookupHash, classifyBehavior, generateYARARule, generateSigmaRule, extractIOCs, listFamilies } from "./trojanAnalyzer";
@@ -37,6 +38,9 @@ import { analyzePassword as auditAnalyzePassword, checkBreachStatus, auditPolicy
 import { analyzeEmail } from "./emailAnalyzer";
 import { searchCves, getCveDetail, getRecentCves } from "./cveDatabase";
 import { inspectSSL } from "./sslInspector";
+import { db } from "./db";
+import * as schema from "@shared/schema";
+import { and, eq, desc, sql } from "drizzle-orm";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -744,6 +748,102 @@ export async function registerRoutes(
     }
   });
 
+  const geoCache = new Map<string, { country: string; countryCode: string; lat: number; lng: number } | null>();
+
+  app.get("/api/dashboard/threat-map", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const events = await storage.getSecurityEvents(orgId);
+
+      const ipCounts = new Map<string, { count: number; severities: string[] }>();
+      for (const event of events) {
+        const ip = event.sourceIp;
+        if (!ip || ip === "network-scanner" || ip === "vuln-scanner" || ip === "system" || ip === "internal" || /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.)/.test(ip)) continue;
+        const existing = ipCounts.get(ip);
+        if (existing) {
+          existing.count++;
+          existing.severities.push(event.severity);
+        } else {
+          ipCounts.set(ip, { count: 1, severities: [event.severity] });
+        }
+      }
+
+      const topIps = [...ipCounts.entries()]
+        .sort((a, b) => b[1].count - a[1].count)
+        .slice(0, 50);
+
+      const uncachedIps = topIps.filter(([ip]) => !geoCache.has(ip)).map(([ip]) => ip);
+
+      if (uncachedIps.length > 0) {
+        const batchSize = 15;
+        for (let i = 0; i < uncachedIps.length; i += batchSize) {
+          const batch = uncachedIps.slice(i, i + batchSize);
+          try {
+            for (const ip of batch) {
+              try {
+                const geoResp = await fetch(`https://ipwho.is/${ip}`, { signal: AbortSignal.timeout(5000) });
+                if (geoResp.ok) {
+                  const r = await geoResp.json() as any;
+                  if (r.success) {
+                    geoCache.set(ip, { country: r.country, countryCode: r.country_code, lat: r.latitude, lng: r.longitude });
+                  } else {
+                    geoCache.set(ip, null);
+                  }
+                }
+              } catch {
+                geoCache.set(ip, null);
+              }
+            }
+          } catch {
+            for (const ip of batch) {
+              if (!geoCache.has(ip)) geoCache.set(ip, null);
+            }
+          }
+          if (i + batchSize < uncachedIps.length) {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+          }
+        }
+      }
+
+      const attackOrigins: { ip: string; country: string; countryCode: string; lat: number; lng: number; count: number; maxSeverity: string }[] = [];
+      const countrySummary = new Map<string, { country: string; countryCode: string; count: number }>();
+
+      for (const [ip, data] of topIps) {
+        const geo = geoCache.get(ip);
+        if (!geo) continue;
+
+        const severityOrder = ["critical", "high", "medium", "low", "info"];
+        const maxSeverity = severityOrder.find(s => data.severities.includes(s)) || "info";
+
+        attackOrigins.push({
+          ip,
+          country: geo.country,
+          countryCode: geo.countryCode,
+          lat: geo.lat,
+          lng: geo.lng,
+          count: data.count,
+          maxSeverity,
+        });
+
+        const existing = countrySummary.get(geo.countryCode);
+        if (existing) {
+          existing.count += data.count;
+        } else {
+          countrySummary.set(geo.countryCode, { country: geo.country, countryCode: geo.countryCode, count: data.count });
+        }
+      }
+
+      const topCountries = [...countrySummary.values()]
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+
+      res.json({ attackOrigins, topCountries, totalAttacks: attackOrigins.reduce((s, a) => s + a.count, 0) });
+    } catch (error) {
+      console.error("Threat map error:", error);
+      res.status(500).json({ error: "Failed to fetch threat map data" });
+    }
+  });
+
   app.get("/api/security-events", async (req, res) => {
     try {
       const orgId = getOrgId(req);
@@ -1108,17 +1208,112 @@ export async function registerRoutes(
   app.post("/api/api-keys", requireRole("admin"), async (req, res) => {
     try {
       const orgId = getOrgId(req);
-      const { name, permissions } = z.object({ name: z.string().min(1), permissions: z.string().default("ingest") }).parse(req.body);
+      const { name, description, permissions, expiresAt } = z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+        permissions: z.string().default("ingest"),
+        expiresAt: z.string().optional(),
+      }).parse(req.body);
       const rawKey = `aegis_${randomBytes(32).toString("hex")}`;
       const keyHash = createHash("sha256").update(rawKey).digest("hex");
       const keyPrefix = rawKey.slice(0, 12);
 
-      const key = await storage.createApiKey({ organizationId: orgId, name, keyHash, keyPrefix, permissions });
+      const key = await storage.createApiKey({
+        organizationId: orgId,
+        name,
+        description: description || null,
+        keyHash,
+        keyPrefix,
+        permissions,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+      });
       await storage.createAuditLog({ organizationId: orgId, userId: getUserId(req), action: "create_api_key", targetType: "api_key", targetId: String(key.id), details: name });
       res.status(201).json({ ...key, rawKey, keyHash: undefined });
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
       res.status(500).json({ error: "Failed to create API key" });
+    }
+  });
+
+  app.patch("/api/api-keys/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const data = z.object({
+        name: z.string().min(1).optional(),
+        description: z.string().nullable().optional(),
+        expiresAt: z.string().nullable().optional(),
+      }).parse(req.body);
+
+      const updateData: any = {};
+      if (data.name !== undefined) updateData.name = data.name;
+      if (data.description !== undefined) updateData.description = data.description;
+      if (data.expiresAt !== undefined) updateData.expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
+
+      const updated = await storage.updateApiKey(id, orgId, updateData);
+      if (!updated) return res.status(404).json({ error: "API key not found" });
+      await storage.createAuditLog({ organizationId: orgId, userId: getUserId(req), action: "update_api_key", targetType: "api_key", targetId: String(id), details: data.name || "Updated" });
+      res.json({ ...updated, keyHash: undefined });
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to update API key" });
+    }
+  });
+
+  app.post("/api/api-keys/:id/revoke", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const revoked = await storage.revokeApiKey(id, orgId);
+      if (!revoked) return res.status(404).json({ error: "API key not found" });
+      await storage.createAuditLog({ organizationId: orgId, userId: getUserId(req), action: "revoke_api_key", targetType: "api_key", targetId: String(id), details: revoked.name });
+      res.json({ ...revoked, keyHash: undefined });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to revoke API key" });
+    }
+  });
+
+  app.post("/api/api-keys/:id/rotate", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const existingKey = await storage.getApiKeyById(id);
+      if (!existingKey || existingKey.organizationId !== orgId) {
+        return res.status(404).json({ error: "API key not found" });
+      }
+      if (existingKey.revokedAt) {
+        return res.status(400).json({ error: "Cannot rotate a revoked key" });
+      }
+
+      const rawKey = `aegis_${randomBytes(32).toString("hex")}`;
+      const keyHash = createHash("sha256").update(rawKey).digest("hex");
+      const keyPrefix = rawKey.slice(0, 12);
+
+      const newKey = await storage.createApiKey({
+        organizationId: orgId,
+        name: existingKey.name,
+        description: existingKey.description,
+        keyHash,
+        keyPrefix,
+        permissions: existingKey.permissions,
+        expiresAt: existingKey.expiresAt,
+      });
+
+      const gracePeriod = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await storage.updateApiKey(id, orgId, { expiresAt: gracePeriod });
+
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "rotate_api_key",
+        targetType: "api_key",
+        targetId: String(newKey.id),
+        details: `Rotated key "${existingKey.name}" (old key #${id} expires in 24h)`,
+      });
+
+      res.status(201).json({ ...newKey, rawKey, keyHash: undefined, oldKeyId: id, gracePeriodEnds: gracePeriod });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to rotate API key" });
     }
   });
 
@@ -1128,7 +1323,7 @@ export async function registerRoutes(
       const orgId = getOrgId(req);
       const deleted = await storage.deleteApiKey(id, orgId);
       if (!deleted) return res.status(404).json({ error: "API key not found" });
-      await storage.createAuditLog({ organizationId: orgId, userId: getUserId(req), action: "revoke_api_key", targetType: "api_key", targetId: String(id) });
+      await storage.createAuditLog({ organizationId: orgId, userId: getUserId(req), action: "delete_api_key", targetType: "api_key", targetId: String(id) });
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete API key" });
@@ -2606,6 +2801,53 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/settings/retention", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const org = await storage.getOrganization(orgId);
+      if (!org) return res.status(404).json({ error: "Organization not found" });
+      res.json({
+        logRetentionDays: org.logRetentionDays,
+        auditRetentionDays: org.auditRetentionDays,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch retention settings" });
+    }
+  });
+
+  app.patch("/api/settings/retention", requireRole("admin"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { logRetentionDays, auditRetentionDays } = z.object({
+        logRetentionDays: z.number().int().min(7).max(3650),
+        auditRetentionDays: z.number().int().min(30).max(3650),
+      }).parse(req.body);
+      await storage.updateOrganization(orgId, { logRetentionDays, auditRetentionDays } as any);
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "update_retention_policy",
+        targetType: "organization",
+        targetId: String(orgId),
+        details: `Retention policy updated: logs=${logRetentionDays}d, audit=${auditRetentionDays}d`,
+      });
+      res.json({ logRetentionDays, auditRetentionDays });
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to update retention settings" });
+    }
+  });
+
+  app.post("/api/settings/retention/run-now", requireRole("admin"), async (req, res) => {
+    try {
+      const { runDataRetention } = await import("./dataRetention");
+      const stats = await runDataRetention();
+      res.json({ success: true, stats });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to run cleanup" });
+    }
+  });
+
   app.get("/api/settings/defense-mode", async (req, res) => {
     try {
       const orgId = getOrgId(req);
@@ -2635,6 +2877,108 @@ export async function registerRoutes(
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
       res.status(500).json({ error: "Failed to update defense mode" });
+    }
+  });
+
+  app.get("/api/settings/notification-channels", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const channels = await storage.getNotificationChannels(orgId);
+      res.json(channels);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch notification channels" });
+    }
+  });
+
+  app.post("/api/settings/notification-channels", requireRole("admin"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const data = z.object({
+        name: z.string().min(1).max(100),
+        type: z.enum(["webhook", "email"]),
+        config: z.record(z.any()),
+        enabled: z.boolean().optional().default(true),
+      }).parse(req.body);
+
+      const channel = await storage.createNotificationChannel({
+        organizationId: orgId,
+        name: data.name,
+        type: data.type,
+        config: data.config,
+        enabled: data.enabled,
+      });
+
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "create_notification_channel",
+        targetType: "notification_channel",
+        targetId: String(channel.id),
+        details: `Created ${data.type} notification channel: ${data.name}`,
+      });
+
+      res.status(201).json(channel);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to create notification channel" });
+    }
+  });
+
+  app.patch("/api/settings/notification-channels/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const id = parseInt(req.params.id);
+      const data = z.object({
+        enabled: z.boolean().optional(),
+        config: z.record(z.any()).optional(),
+      }).parse(req.body);
+
+      const updated = await storage.updateNotificationChannel(id, orgId, data);
+      if (!updated) return res.status(404).json({ error: "Channel not found" });
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to update notification channel" });
+    }
+  });
+
+  app.delete("/api/settings/notification-channels/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteNotificationChannel(id, orgId);
+      if (!deleted) return res.status(404).json({ error: "Channel not found" });
+
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "delete_notification_channel",
+        targetType: "notification_channel",
+        targetId: String(id),
+        details: `Deleted notification channel`,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete notification channel" });
+    }
+  });
+
+  app.post("/api/settings/notification-channels/:id/test", requireRole("admin"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const id = parseInt(req.params.id);
+      const channels = await storage.getNotificationChannels(orgId);
+      const channel = channels.find((c) => c.id === id);
+      if (!channel) return res.status(404).json({ error: "Channel not found" });
+
+      const result = await testChannel(channel);
+      if (result.success) {
+        await storage.updateNotificationChannel(id, orgId, { lastUsed: new Date() });
+      }
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to test notification channel" });
     }
   });
 
@@ -3300,6 +3644,94 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/search", requireAuth, async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const q = String(req.query.q || "").trim();
+      if (!q || q.length < 2) {
+        return res.json({ events: [], incidents: [], devices: [], pages: [] });
+      }
+      const searchTerm = `%${q}%`;
+
+      const [events, incidents, devices] = await Promise.all([
+        db.select().from(schema.securityEvents)
+          .where(and(
+            eq(schema.securityEvents.organizationId, orgId),
+            sql`(${schema.securityEvents.description} ILIKE ${searchTerm} OR ${schema.securityEvents.sourceIp} ILIKE ${searchTerm} OR ${schema.securityEvents.eventType} ILIKE ${searchTerm})`
+          ))
+          .orderBy(desc(schema.securityEvents.createdAt))
+          .limit(5),
+        db.select().from(schema.incidents)
+          .where(and(
+            eq(schema.incidents.organizationId, orgId),
+            sql`(${schema.incidents.title} ILIKE ${searchTerm} OR ${schema.incidents.description} ILIKE ${searchTerm})`
+          ))
+          .orderBy(desc(schema.incidents.createdAt))
+          .limit(5),
+        db.select().from(schema.networkDevices)
+          .where(and(
+            eq(schema.networkDevices.organizationId, orgId),
+            sql`(${schema.networkDevices.hostname} ILIKE ${searchTerm} OR ${schema.networkDevices.ipAddress} ILIKE ${searchTerm} OR ${schema.networkDevices.macAddress} ILIKE ${searchTerm})`
+          ))
+          .limit(5),
+      ]);
+
+      const allPages = [
+        { title: "Dashboard", url: "/", keywords: "dashboard home overview" },
+        { title: "Protection Center", url: "/protection-center", keywords: "protection center shield" },
+        { title: "AI Analysis", url: "/ai-analysis", keywords: "ai analysis chat assistant" },
+        { title: "Security Events", url: "/alerts", keywords: "security events alerts" },
+        { title: "Attack Heatmap", url: "/attack-map", keywords: "attack heatmap mitre" },
+        { title: "Scanner", url: "/scanner", keywords: "scanner port dns ssl" },
+        { title: "Network Monitor", url: "/network-monitor", keywords: "network monitor devices" },
+        { title: "Honeypot", url: "/honeypot", keywords: "honeypot trap decoy" },
+        { title: "Alert Rules", url: "/alert-rules", keywords: "alert rules notifications" },
+        { title: "Hash Tools", url: "/hash-tools", keywords: "hash tools identify crack" },
+        { title: "Traffic Analysis", url: "/traffic-analysis", keywords: "traffic analysis bandwidth" },
+        { title: "Network Security", url: "/network-security", keywords: "network security pentest" },
+        { title: "Payload Generator", url: "/payload-generator", keywords: "payload generator reverse shell" },
+        { title: "Trojan Analyzer", url: "/trojan-analyzer", keywords: "trojan analyzer malware" },
+        { title: "Mobile Pentest", url: "/mobile-pentest", keywords: "mobile pentest android ios" },
+        { title: "SSL Inspector", url: "/ssl-inspector", keywords: "ssl inspector certificate tls" },
+        { title: "Email Analyzer", url: "/email-analyzer", keywords: "email analyzer phishing" },
+        { title: "Password Auditor", url: "/password-auditor", keywords: "password auditor strength" },
+        { title: "Incidents", url: "/incidents", keywords: "incidents response" },
+        { title: "Quarantine", url: "/quarantine", keywords: "quarantine isolate" },
+        { title: "Playbooks", url: "/playbooks", keywords: "playbooks automation response" },
+        { title: "Firewall", url: "/firewall", keywords: "firewall rules block" },
+        { title: "Policies", url: "/policies", keywords: "security policies" },
+        { title: "Compliance", url: "/compliance", keywords: "compliance framework audit" },
+        { title: "Endpoints", url: "/endpoints", keywords: "endpoints agents" },
+        { title: "Deploy Agent", url: "/download-agent", keywords: "deploy agent download install" },
+        { title: "Threat Intel", url: "/threat-intel", keywords: "threat intelligence indicators" },
+        { title: "Network Map", url: "/network-map", keywords: "network map topology" },
+        { title: "Forensic Timeline", url: "/forensics", keywords: "forensic timeline investigation" },
+        { title: "Dark Web Monitor", url: "/dark-web-monitor", keywords: "dark web monitor breach" },
+        { title: "CVE Database", url: "/cve-database", keywords: "cve database vulnerability" },
+        { title: "Settings", url: "/settings", keywords: "settings configuration" },
+        { title: "Billing", url: "/billing", keywords: "billing subscription plan" },
+        { title: "Support", url: "/support", keywords: "support help ticket" },
+      ];
+      const lowerQ = q.toLowerCase();
+      const pages = allPages.filter(p =>
+        p.title.toLowerCase().includes(lowerQ) || p.keywords.includes(lowerQ)
+      ).slice(0, 8);
+
+      let cves: any[] = [];
+      if (/^cve-/i.test(q)) {
+        try {
+          const cveResults = await searchCves({ cveId: q.toUpperCase(), resultsPerPage: 5 });
+          cves = (cveResults?.results || []).slice(0, 5);
+        } catch {}
+      }
+
+      res.json({ events, incidents, devices, pages, cves });
+    } catch (error) {
+      console.error("Search error:", error);
+      res.status(500).json({ error: "Search failed" });
+    }
+  });
+
   app.get("/api/cve/detail/:id", requireAuth, async (req, res) => {
     try {
       const cveId = req.params.id;
@@ -3311,6 +3743,86 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       res.status(502).json({ error: error?.message || "Failed to reach NVD API. Try again shortly." });
+    }
+  });
+
+  app.use("/api/scheduled-scans", requireAuth);
+
+  app.get("/api/scheduled-scans", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const scans = await storage.getScheduledScans(orgId);
+      res.json(scans);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch scheduled scans" });
+    }
+  });
+
+  app.post("/api/scheduled-scans", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const data = z.object({
+        scanType: z.enum(["network_scan", "vulnerability_scan", "dark_web_check", "ssl_check"]),
+        target: z.string().min(1).max(253),
+        frequency: z.enum(["daily", "weekly", "monthly"]),
+        enabled: z.boolean().optional().default(true),
+      }).parse(req.body);
+
+      const { calculateNextRun } = await import("./scanScheduler");
+      const nextRun = calculateNextRun(data.frequency);
+
+      const scan = await storage.createScheduledScan({
+        organizationId: orgId,
+        scanType: data.scanType,
+        target: data.target,
+        frequency: data.frequency,
+        enabled: data.enabled,
+        nextRun,
+      });
+
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: getUserId(req),
+        action: "create_scheduled_scan",
+        targetType: "scheduled_scan",
+        targetId: String(scan.id),
+        details: `Created ${data.frequency} ${data.scanType} scan for ${data.target}`,
+      });
+
+      res.status(201).json(scan);
+    } catch (error: any) {
+      if (error?.name === "ZodError") {
+        return res.status(400).json({ error: "Invalid scan configuration", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create scheduled scan" });
+    }
+  });
+
+  app.patch("/api/scheduled-scans/:id", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const id = parseInt(req.params.id);
+      const data = z.object({
+        enabled: z.boolean().optional(),
+      }).parse(req.body);
+
+      const updated = await storage.updateScheduledScan(id, orgId, data);
+      if (!updated) return res.status(404).json({ error: "Scheduled scan not found" });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update scheduled scan" });
+    }
+  });
+
+  app.delete("/api/scheduled-scans/:id", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteScheduledScan(id, orgId);
+      if (!deleted) return res.status(404).json({ error: "Scheduled scan not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete scheduled scan" });
     }
   });
 

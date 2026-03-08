@@ -427,7 +427,19 @@
     "simulating": "Simulating...",
     "simulationStarted": "Simulation started",
     "simulationComplete": "Simulation complete - check your dashboard",
-    "simulationFailed": "Simulation failed"
+    "simulationFailed": "Simulation failed",
+    "dataRetention": "Data Retention Policy",
+    "dataRetentionDescription": "Configure how long different types of data are retained before automated cleanup. Cleanup runs daily at midnight.",
+    "logRetentionDays": "Security Event Retention (days)",
+    "auditRetentionDays": "Audit Log Retention (days)",
+    "retentionUpdated": "Retention policy updated",
+    "retentionUpdateFailed": "Failed to update retention policy",
+    "runCleanupNow": "Run Cleanup Now",
+    "cleanupComplete": "Data cleanup complete",
+    "cleanupFailed": "Cleanup failed",
+    "honeypotRetention": "Honeypot events: 30 days",
+    "packetCaptureRetention": "Packet captures: 30 days",
+    "commandRetention": "Stale agent commands: 30 days"
   },
   "billing": {
     "title": "Billing & Subscription",

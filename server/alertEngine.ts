@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import type { SecurityEvent, AlertRule } from "@shared/schema";
+import { dispatchToChannels } from "./notificationService";
 
 const DESTRUCTIVE_ACTIONS = ["block_source", "auto_quarantine", "auto_sinkhole"];
 
@@ -215,6 +216,16 @@ export class AlertEngine {
       });
 
       this.broadcast({ type: "alert_triggered", rule: rule.name, orgId });
+
+      dispatchToChannels({
+        ruleName: rule.name,
+        severity: rule.severity,
+        eventDescription: event.description,
+        eventSource: event.source,
+        sourceIp: event.sourceIp || null,
+        timestamp: new Date().toISOString(),
+        organizationId: orgId,
+      }).catch((err) => console.error("Notification dispatch error:", err));
     } catch (err) {
       console.error("Alert action execution error:", err);
     }

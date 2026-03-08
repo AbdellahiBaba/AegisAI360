@@ -6,7 +6,7 @@ import {
   Network, Target, Clock, Radio, Lock, BookOpen, FileText,
   Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar, LifeBuoy, Server, Key,
   Monitor, Download, Terminal, Activity, ScanSearch, Smartphone, Eye, ShieldCheck,
-  Mail, KeyRound, ShieldBan, FileSearch,
+  Mail, KeyRound, ShieldBan, FileSearch, CalendarClock,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -81,6 +81,7 @@ export function AppSidebar() {
     { title: "SSL Inspector", testId: "ssl-inspector", url: "/ssl-inspector", icon: ShieldBan },
     { title: "Email Analyzer", testId: "email-analyzer", url: "/email-analyzer", icon: Mail },
     { title: "Password Auditor", testId: "password-auditor", url: "/password-auditor", icon: KeyRound },
+    { title: "Scheduled Scans", testId: "scheduled-scans", url: "/scheduled-scans", icon: CalendarClock },
   ];
 
   const respondItems: NavItem[] = [
