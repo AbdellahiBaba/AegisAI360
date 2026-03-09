@@ -43,6 +43,14 @@ The frontend uses React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Recharts, Wo
 - **Public Pages**: Landing, Features, Pricing, About, Contact, FAQ, Security, and Interactive Guide pages, all fully internationalized.
 - **Cybersecurity Animations**: Landing page features CyberThreatFeed, CyberTerminal, CyberNetwork, CyberShieldPulse, CyberStats, and CyberAttackFlow.
 - **i18n Translation Coverage**: Comprehensive translation coverage across public and internal pages using `t()` with specific namespaces.
+- **Light/Dark Mode Toggle**: Theme toggle in sidebar footer switches between light and dark mode, persisted in localStorage. Light mode has clean white/gray/blue HSL values. Dark mode retains cyber palette.
+- **CSV Export**: Generic `exportToCsv()` utility in `client/src/lib/csvExport.ts`. Export buttons on Alerts, Incidents, Endpoints, Firewall, and Audit Log pages.
+- **Scheduled Reports**: `scheduled_reports` DB table. CRUD API endpoints. Admins can create daily/weekly/monthly report schedules in Settings.
+- **Audit Log Viewer**: Searchable, filterable audit log table in Settings for org admins. Supports action type filter, text search, and CSV export.
+- **User Deletion**: `DELETE /api/organization/users/:userId` endpoint with self-deletion prevention, last-admin guard, and audit logging. Confirmation dialog in team management.
+- **Login History**: `login_history` DB table. Records login_success, login_failed, logout events with IP and user agent. Viewable in Settings for admins.
+- **Onboarding Wizard**: Multi-step dialog for new users (Welcome, Agent Setup, Alert Rules, Scan, Done). Auto-shown when `user.onboardingCompleted` is false. `PATCH /api/user/onboarding` marks complete.
+- **Dashboard Customization**: `dashboardLayout` jsonb field on users table. Customize button opens dialog with toggles for 9 widget sections. Preferences persist via `PATCH /api/user/dashboard-layout`.
 
 ### System Design Choices
 The architecture is modular (`server/`, `client/`, `shared/`). Authentication uses Passport-local with scrypt and optional TOTP. Data access is scoped by `organizationId` for multi-tenancy. Agent authentication is token-based, and the remote terminal ensures safety via command whitelisting/blacklisting.

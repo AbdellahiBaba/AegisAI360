@@ -71,6 +71,7 @@ export function setupAuth(app: Express) {
         const valid = await comparePasswords(password, user.password);
         if (!valid) {
           const attempts = (user.failedLoginAttempts || 0) + 1;
+          storage.createLoginHistory({ userId: user.id, organizationId: user.organizationId, action: "login_failed" }).catch(e => console.error("Failed to record login history:", e));
           if (attempts >= MAX_FAILED_ATTEMPTS) {
             await storage.updateUserLockout(user.id, attempts, new Date(Date.now() + LOCKOUT_DURATION_MS));
             await storage.createSecurityEvent({
@@ -226,6 +227,8 @@ export function setupAuth(app: Express) {
       req.login(user, async (err) => {
         if (err) return next(err);
         await trackSessionMetadata(req, user);
+        const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
+        storage.createLoginHistory({ userId: user.id, organizationId: user.organizationId, action: "login_success", ipAddress: typeof ip === "string" ? ip : String(ip), userAgent: req.headers["user-agent"] || null }).catch(e => console.error("Failed to record login history:", e));
         const { password: _, totpSecret: _ts, ...safeUser } = user;
         res.json(safeUser);
       });
@@ -262,6 +265,8 @@ export function setupAuth(app: Express) {
       req.login(user, async (err) => {
         if (err) return next(err);
         await trackSessionMetadata(req, user);
+        const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
+        storage.createLoginHistory({ userId: user.id, organizationId: user.organizationId, action: "login_success", ipAddress: typeof ip === "string" ? ip : String(ip), userAgent: req.headers["user-agent"] || null }).catch(e => console.error("Failed to record login history:", e));
         const { password: _, totpSecret: _ts, ...safeUser } = user;
         res.json(safeUser);
       });
@@ -345,6 +350,11 @@ export function setupAuth(app: Express) {
 
   app.post("/api/logout", async (req, res, next) => {
     const sessionId = req.sessionID;
+    const user = req.user as User | undefined;
+    if (user) {
+      const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
+      storage.createLoginHistory({ userId: user.id, organizationId: user.organizationId, action: "logout", ipAddress: typeof ip === "string" ? ip : String(ip), userAgent: req.headers["user-agent"] || null }).catch(e => console.error("Failed to record login history:", e));
+    }
     req.logout(async (err) => {
       if (err) return next(err);
       try {

@@ -12,7 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Search, Plus, Shield, Trash2, ShieldOff } from "lucide-react";
+import { Search, Plus, Shield, Trash2, ShieldOff, Download } from "lucide-react";
+import { exportToCsv } from "@/lib/csvExport";
 import { useToast } from "@/hooks/use-toast";
 import type { FirewallRule } from "@shared/schema";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -151,6 +152,31 @@ export default function Firewall() {
           <Badge variant="secondary" className="font-mono text-xs" data-testid="text-rule-count">
             {filtered.length} {t("common.rules")}
           </Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              exportToCsv(
+                "firewall-rules",
+                ["ID", "Type", "Value", "Action", "Status", "Reason", "Expires At", "Created At"],
+                filtered.map((r) => [
+                  r.id,
+                  r.ruleType,
+                  r.value,
+                  r.action,
+                  r.status,
+                  r.reason || "",
+                  r.expiresAt ? new Date(r.expiresAt as unknown as string).toISOString() : "",
+                  r.createdAt ? new Date(r.createdAt as unknown as string).toISOString() : "",
+                ])
+              );
+            }}
+            disabled={filtered.length === 0}
+            data-testid="button-export-csv"
+          >
+            <Download className="w-4 h-4 me-1" />
+            {t("common.exportCsv", "Export CSV")}
+          </Button>
           <Button
             onClick={() => setDialogOpen(true)}
             data-testid="button-add-rule"

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useTheme } from "@/components/theme-provider";
 import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard, ShieldAlert, Bug, Brain, Database,
@@ -8,6 +9,7 @@ import {
   Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar, LifeBuoy, Server, Key,
   Monitor, Download, Terminal, Activity, ScanSearch, Smartphone, Eye, ShieldCheck,
   Mail, KeyRound, ShieldBan, FileSearch, CalendarClock, Zap, ChevronDown, Gamepad2,
+  Sun, Moon,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -67,6 +69,7 @@ function NavGroup({ label, items, location, defaultOpen = true }: { label: strin
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logoutMutation } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const { t } = useTranslation();
 
   const isSuperAdmin = user?.isSuperAdmin === true;
@@ -190,7 +193,16 @@ export function AppSidebar() {
         <div className="flex items-center gap-2">
           <div className="w-1.5 h-1.5 rounded-full bg-status-online animate-pulse-glow" />
           <span className="text-[10px] text-muted-foreground font-mono">{t("common.operational")}</span>
-          <Badge variant="secondary" className="ml-auto text-[9px] font-mono">{t("common.version")}</Badge>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            data-testid="button-theme-toggle"
+            className="ml-auto"
+          >
+            {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+          </Button>
+          <Badge variant="secondary" className="text-[9px] font-mono">{t("common.version")}</Badge>
         </div>
       </SidebarFooter>
     </Sidebar>

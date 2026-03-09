@@ -49,6 +49,10 @@ import {
   type PushSubscription, type InsertPushSubscription,
   swTelemetry,
   type SwTelemetry, type InsertSwTelemetry,
+  scheduledReports,
+  type ScheduledReport, type InsertScheduledReport,
+  loginHistory,
+  type LoginHistory, type InsertLoginHistory,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, gte, count, lt, ne } from "drizzle-orm";
@@ -265,6 +269,19 @@ export interface IStorage {
 
   createSwTelemetry(entry: InsertSwTelemetry): Promise<SwTelemetry>;
   getSwTelemetry(userId?: string, limit?: number): Promise<SwTelemetry[]>;
+
+  getScheduledReports(orgId: number): Promise<ScheduledReport[]>;
+  createScheduledReport(report: InsertScheduledReport): Promise<ScheduledReport>;
+  updateScheduledReport(id: number, orgId: number, data: Partial<{ enabled: boolean; frequency: string; recipients: string; nextRun: Date; lastRun: Date }>): Promise<ScheduledReport | undefined>;
+  deleteScheduledReport(id: number, orgId: number): Promise<boolean>;
+  getDueScheduledReports(): Promise<ScheduledReport[]>;
+
+  createLoginHistory(entry: InsertLoginHistory): Promise<LoginHistory>;
+  getLoginHistory(orgId: number, limit?: number): Promise<LoginHistory[]>;
+
+  deleteOrganizationUser(userId: string, orgId: number): Promise<boolean>;
+  updateUserOnboarding(userId: string, completed: boolean): Promise<void>;
+  updateUserDashboardLayout(userId: string, layout: any): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -289,6 +306,7 @@ export class DatabaseStorage implements IStorage {
       role: users.role, isSuperAdmin: users.isSuperAdmin,
       totpSecret: users.totpSecret, totpEnabled: users.totpEnabled,
       failedLoginAttempts: users.failedLoginAttempts, lockedUntil: users.lockedUntil,
+      onboardingCompleted: users.onboardingCompleted, dashboardLayout: users.dashboardLayout,
     }).from(users).orderBy(desc(users.username));
   }
 
@@ -1226,6 +1244,51 @@ export class DatabaseStorage implements IStorage {
       return db.select().from(swTelemetry).where(eq(swTelemetry.userId, userId)).orderBy(desc(swTelemetry.createdAt)).limit(limit);
     }
     return db.select().from(swTelemetry).orderBy(desc(swTelemetry.createdAt)).limit(limit);
+  }
+
+  async getScheduledReports(orgId: number): Promise<ScheduledReport[]> {
+    return db.select().from(scheduledReports).where(eq(scheduledReports.organizationId, orgId)).orderBy(desc(scheduledReports.createdAt));
+  }
+
+  async createScheduledReport(report: InsertScheduledReport): Promise<ScheduledReport> {
+    const [created] = await db.insert(scheduledReports).values(report).returning();
+    return created;
+  }
+
+  async updateScheduledReport(id: number, orgId: number, data: Partial<{ enabled: boolean; frequency: string; recipients: string; nextRun: Date; lastRun: Date }>): Promise<ScheduledReport | undefined> {
+    const [updated] = await db.update(scheduledReports).set(data).where(and(eq(scheduledReports.id, id), eq(scheduledReports.organizationId, orgId))).returning();
+    return updated || undefined;
+  }
+
+  async deleteScheduledReport(id: number, orgId: number): Promise<boolean> {
+    const result = await db.delete(scheduledReports).where(and(eq(scheduledReports.id, id), eq(scheduledReports.organizationId, orgId)));
+    return (result as any).rowCount > 0;
+  }
+
+  async getDueScheduledReports(): Promise<ScheduledReport[]> {
+    return db.select().from(scheduledReports).where(and(eq(scheduledReports.enabled, true), lt(scheduledReports.nextRun, new Date())));
+  }
+
+  async createLoginHistory(entry: InsertLoginHistory): Promise<LoginHistory> {
+    const [created] = await db.insert(loginHistory).values(entry).returning();
+    return created;
+  }
+
+  async getLoginHistory(orgId: number, limit: number = 100): Promise<LoginHistory[]> {
+    return db.select().from(loginHistory).where(eq(loginHistory.organizationId, orgId)).orderBy(desc(loginHistory.createdAt)).limit(limit);
+  }
+
+  async deleteOrganizationUser(userId: string, orgId: number): Promise<boolean> {
+    const result = await db.delete(users).where(and(eq(users.id, userId), eq(users.organizationId, orgId)));
+    return (result as any).rowCount > 0;
+  }
+
+  async updateUserOnboarding(userId: string, completed: boolean): Promise<void> {
+    await db.update(users).set({ onboardingCompleted: completed }).where(eq(users.id, userId));
+  }
+
+  async updateUserDashboardLayout(userId: string, layout: any): Promise<void> {
+    await db.update(users).set({ dashboardLayout: layout }).where(eq(users.id, userId));
   }
 }
 

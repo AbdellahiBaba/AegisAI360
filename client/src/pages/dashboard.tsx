@@ -9,6 +9,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -16,7 +19,7 @@ import {
   ShieldAlert, AlertTriangle, Bug, Activity, ArrowUpRight, ArrowDownRight,
   Clock, Monitor, Lock, Radio, ShieldOff, Flame, Crosshair, Zap, CreditCard,
   Shield, ScanLine, Ban, Eye, Info, Server, FileDown, ChevronDown, ChevronUp,
-  BarChart3, Waves, LayoutDashboard,
+  BarChart3, Waves, LayoutDashboard, Settings2,
 } from "lucide-react";
 import { generateExecutiveSummaryPDF } from "@/lib/reportGenerator";
 import {
@@ -26,6 +29,94 @@ import {
 import type { SecurityEvent, ResponseAction } from "@shared/schema";
 import { ThreatMap } from "@/components/threat-map";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+
+type WidgetId = "threat_level" | "stat_cards" | "quick_actions" | "event_trend" | "severity_breakdown" | "threat_map" | "recent_alerts" | "activity_feed" | "response_actions";
+
+interface DashboardLayout {
+  [key: string]: boolean;
+}
+
+const WIDGET_DEFINITIONS: { id: WidgetId; labelKey: string; defaultLabel: string }[] = [
+  { id: "threat_level", labelKey: "dashboard.widgetThreatLevel", defaultLabel: "Threat Level" },
+  { id: "stat_cards", labelKey: "dashboard.widgetStatCards", defaultLabel: "Stat Cards" },
+  { id: "quick_actions", labelKey: "dashboard.widgetQuickActions", defaultLabel: "Quick Actions" },
+  { id: "event_trend", labelKey: "dashboard.widgetEventTrend", defaultLabel: "Event Trend Chart" },
+  { id: "severity_breakdown", labelKey: "dashboard.widgetSeverityBreakdown", defaultLabel: "Severity Breakdown" },
+  { id: "threat_map", labelKey: "dashboard.widgetThreatMap", defaultLabel: "Threat Map" },
+  { id: "recent_alerts", labelKey: "dashboard.widgetRecentAlerts", defaultLabel: "Recent Alerts" },
+  { id: "activity_feed", labelKey: "dashboard.widgetActivityFeed", defaultLabel: "Activity Feed" },
+  { id: "response_actions", labelKey: "dashboard.widgetResponseActions", defaultLabel: "Response Actions" },
+];
+
+function isWidgetVisible(layout: DashboardLayout | null | undefined, widgetId: WidgetId): boolean {
+  if (!layout) return true;
+  return layout[widgetId] !== false;
+}
+
+function CustomizeDashboardDialog({ layout, onSave, isPending }: { layout: DashboardLayout | null | undefined; onSave: (layout: DashboardLayout) => void; isPending: boolean }) {
+  const { t } = useTranslation();
+  const [localLayout, setLocalLayout] = useState<DashboardLayout>({});
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      const initial: DashboardLayout = {};
+      for (const w of WIDGET_DEFINITIONS) {
+        initial[w.id] = isWidgetVisible(layout, w.id);
+      }
+      setLocalLayout(initial);
+    }
+  }, [open, layout]);
+
+  const handleToggle = (widgetId: WidgetId, checked: boolean) => {
+    setLocalLayout((prev) => ({ ...prev, [widgetId]: checked }));
+  };
+
+  const handleSave = () => {
+    onSave(localLayout);
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" data-testid="button-customize-dashboard">
+          <Settings2 className="w-4 h-4 me-1" />
+          {t("dashboard.customize", "Customize")}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("dashboard.customizeTitle", "Customize Dashboard")}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          {WIDGET_DEFINITIONS.map((w) => (
+            <div key={w.id} className="flex items-center justify-between gap-4" data-testid={`toggle-widget-${w.id}`}>
+              <Label htmlFor={`widget-${w.id}`} className="text-sm">
+                {t(w.labelKey, w.defaultLabel)}
+              </Label>
+              <Switch
+                id={`widget-${w.id}`}
+                checked={localLayout[w.id] !== false}
+                onCheckedChange={(checked) => handleToggle(w.id, checked)}
+                data-testid={`switch-widget-${w.id}`}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" onClick={() => setOpen(false)} data-testid="button-cancel-customize">
+            {t("common.cancel", "Cancel")}
+          </Button>
+          <Button onClick={handleSave} disabled={isPending} data-testid="button-save-customize">
+            {isPending ? t("common.saving", "Saving...") : t("common.save", "Save")}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+import { OnboardingWizard } from "@/components/onboarding-wizard";
 
 interface DashboardStats {
   totalEvents: number;
@@ -569,6 +660,31 @@ export default function Dashboard() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const [, navigate] = useLocation();
+  const { toast } = useToast();
+
+  const dashLayout = user?.dashboardLayout as DashboardLayout | null | undefined;
+  const show = (id: WidgetId) => isWidgetVisible(dashLayout, id);
+
+  const layoutMutation = useMutation({
+    mutationFn: async (layout: DashboardLayout) => {
+      await apiRequest("PATCH", "/api/user/dashboard-layout", { layout });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      toast({ title: t("dashboard.layoutSaved", "Dashboard layout saved") });
+    },
+    onError: () => {
+      toast({ title: t("dashboard.layoutSaveFailed", "Failed to save layout"), variant: "destructive" });
+    },
+  });
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    if (user && user.onboardingCompleted === false) {
+      setShowOnboarding(true);
+    }
+  }, [user]);
 
   const { data: billingStatus } = useQuery<BillingStatus>({
     queryKey: ["/api/billing/status"],
@@ -652,6 +768,8 @@ export default function Dashboard() {
 
   return (
     <div className="p-4 md:p-6 space-y-5 grid-pattern">
+      <OnboardingWizard open={showOnboarding} onComplete={() => setShowOnboarding(false)} />
+
       {showUpgradeBanner && (
         <Card className="border-primary/30 bg-primary/5" data-testid="upgrade-banner">
           <CardContent className="p-4 flex items-center justify-between gap-4 flex-wrap">
@@ -679,89 +797,105 @@ export default function Dashboard() {
       <SectionHeading icon={LayoutDashboard} title={t("dashboard.overview", "Overview")} subtitle={t("dashboard.overviewSubtitle", "System status at a glance")} />
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <ThreatLevelIndicator stats={stats!} />
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => generateExecutiveSummaryPDF(stats!, events || [], severityData)}
-          data-testid="button-generate-pdf-report"
-        >
-          <FileDown className="w-4 h-4 me-1" />
-          {t("dashboard.generateReport", "Generate PDF Report")}
-        </Button>
+        {show("threat_level") ? <ThreatLevelIndicator stats={stats!} /> : <div className="flex-1" />}
+        <div className="flex items-center gap-2 flex-wrap">
+          <CustomizeDashboardDialog layout={dashLayout} onSave={(l) => layoutMutation.mutate(l)} isPending={layoutMutation.isPending} />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => generateExecutiveSummaryPDF(stats!, events || [], severityData)}
+            data-testid="button-generate-pdf-report"
+          >
+            <FileDown className="w-4 h-4 me-1" />
+            {t("dashboard.generateReport", "Generate PDF Report")}
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
-          title={t("dashboard.events24h")}
-          value={stats?.totalEvents ?? 0}
-          icon={ShieldAlert}
-          trend={stats?.eventTrend ?? 0}
-          trendLabel={t("dashboard.vsYesterday")}
-        />
-        <StatCard
-          title={t("dashboard.critical")}
-          value={stats?.criticalAlerts ?? 0}
-          icon={AlertTriangle}
-          accent={(stats?.criticalAlerts ?? 0) > 0 ? "text-severity-critical" : undefined}
-        />
-        <StatCard
-          title={t("dashboard.incidents")}
-          value={stats?.activeIncidents ?? 0}
-          icon={Bug}
-          trend={stats?.incidentTrend ?? 0}
-          trendLabel={t("dashboard.thisWeek")}
-        />
-        <StatCard
-          title={t("dashboard.blockedIps")}
-          value={stats?.blockedIps ?? 0}
-          icon={ShieldOff}
-          accent={(stats?.blockedIps ?? 0) > 0 ? "text-severity-high" : undefined}
-        />
-      </div>
+      {show("stat_cards") && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard
+              title={t("dashboard.events24h")}
+              value={stats?.totalEvents ?? 0}
+              icon={ShieldAlert}
+              trend={stats?.eventTrend ?? 0}
+              trendLabel={t("dashboard.vsYesterday")}
+            />
+            <StatCard
+              title={t("dashboard.critical")}
+              value={stats?.criticalAlerts ?? 0}
+              icon={AlertTriangle}
+              accent={(stats?.criticalAlerts ?? 0) > 0 ? "text-severity-critical" : undefined}
+            />
+            <StatCard
+              title={t("dashboard.incidents")}
+              value={stats?.activeIncidents ?? 0}
+              icon={Bug}
+              trend={stats?.incidentTrend ?? 0}
+              trendLabel={t("dashboard.thisWeek")}
+            />
+            <StatCard
+              title={t("dashboard.blockedIps")}
+              value={stats?.blockedIps ?? 0}
+              icon={ShieldOff}
+              accent={(stats?.blockedIps ?? 0) > 0 ? "text-severity-high" : undefined}
+            />
+          </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <StatCard
-          title={t("dashboard.assets")}
-          value={stats?.assetCount ?? 0}
-          icon={Monitor}
-        />
-        <StatCard
-          title={t("dashboard.quarantined")}
-          value={stats?.quarantineCount ?? 0}
-          icon={Lock}
-          accent={(stats?.quarantineCount ?? 0) > 0 ? "text-severity-high" : undefined}
-        />
-        <StatCard
-          title={t("dashboard.activeRules")}
-          value={stats?.activeRules ?? 0}
-          icon={Activity}
-        />
-      </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <StatCard
+              title={t("dashboard.assets")}
+              value={stats?.assetCount ?? 0}
+              icon={Monitor}
+            />
+            <StatCard
+              title={t("dashboard.quarantined")}
+              value={stats?.quarantineCount ?? 0}
+              icon={Lock}
+              accent={(stats?.quarantineCount ?? 0) > 0 ? "text-severity-high" : undefined}
+            />
+            <StatCard
+              title={t("dashboard.activeRules")}
+              value={stats?.activeRules ?? 0}
+              icon={Activity}
+            />
+          </div>
+        </>
+      )}
 
-      <QuickActions />
+      {show("quick_actions") && <QuickActions />}
 
-      <SectionHeading icon={BarChart3} title={t("dashboard.analytics", "Analytics")} subtitle={t("dashboard.analyticsSubtitle", "Trends & severity distribution")} />
+      {(show("event_trend") || show("severity_breakdown")) && (
+        <>
+          <SectionHeading icon={BarChart3} title={t("dashboard.analytics", "Analytics")} subtitle={t("dashboard.analyticsSubtitle", "Trends & severity distribution")} />
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+            {show("event_trend") && <EventTrendChart data={trendData || []} />}
+            {show("severity_breakdown") && <SeverityBreakdown data={severityData} />}
+          </div>
+        </>
+      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
-        <EventTrendChart data={trendData || []} />
-        <SeverityBreakdown data={severityData} />
-      </div>
+      {show("threat_map") && <ThreatMap />}
 
-      <ThreatMap />
+      {(show("recent_alerts") || show("activity_feed")) && (
+        <>
+          <SectionHeading icon={Waves} title={t("dashboard.activity", "Activity")} subtitle={t("dashboard.activitySubtitle", "Recent alerts & live event feed")} />
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+            {show("recent_alerts") && <RecentAlerts events={recentEvents} />}
+            {show("activity_feed") && <ActivityFeed events={feedEvents} />}
+          </div>
+        </>
+      )}
 
-      <SectionHeading icon={Waves} title={t("dashboard.activity", "Activity")} subtitle={t("dashboard.activitySubtitle", "Recent alerts & live event feed")} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
-        <RecentAlerts events={recentEvents} />
-        <ActivityFeed events={feedEvents} />
-      </div>
-
-      <SectionHeading icon={Zap} title={t("dashboard.response", "Response")} subtitle={t("dashboard.responseSubtitle", "Automated response actions")} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <ResponseActionsFeed actions={recentActions} />
-      </div>
+      {show("response_actions") && (
+        <>
+          <SectionHeading icon={Zap} title={t("dashboard.response", "Response")} subtitle={t("dashboard.responseSubtitle", "Automated response actions")} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <ResponseActionsFeed actions={recentActions} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

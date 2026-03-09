@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Monitor, Cpu, MemoryStick, Wifi, WifiOff, Terminal, Send, RefreshCw, Clock, Activity, ArrowDown, ArrowUp, HardDrive, Globe, Server, Layers, Info, FileSearch, AlertTriangle, FileText, Shield } from "lucide-react";
+import { Loader2, Monitor, Cpu, MemoryStick, Wifi, WifiOff, Terminal, Send, RefreshCw, Clock, Activity, ArrowDown, ArrowUp, HardDrive, Globe, Server, Layers, Info, FileSearch, AlertTriangle, FileText, Shield, Download } from "lucide-react";
 import { useLocation } from "wouter";
+import { exportToCsv } from "@/lib/csvExport";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const COMMANDS = [
@@ -557,10 +558,37 @@ export default function Endpoints() {
           <h1 className="text-xl md:text-2xl font-bold" data-testid="text-endpoints-title">{t("endpoints.title")}</h1>
           <p className="text-muted-foreground text-sm">{t("endpoints.agentsRegistered", { count: agents?.length || 0 })}</p>
         </div>
-        <Button onClick={() => navigate("/download-agent")} data-testid="button-download-agent">
-          <Monitor className="w-4 h-4 me-2" />
-          {t("endpoints.deployNewAgent")}
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              exportToCsv(
+                "endpoints-agents",
+                ["ID", "Hostname", "OS", "IP", "Status", "CPU Usage %", "RAM Usage %", "Last Seen"],
+                (agents || []).map((a: any) => [
+                  a.id,
+                  a.hostname || "",
+                  a.os || "",
+                  a.ip || "",
+                  a.status || "",
+                  a.cpuUsage ?? "",
+                  a.ramUsage ?? "",
+                  a.lastSeen ? new Date(a.lastSeen).toISOString() : "",
+                ])
+              );
+            }}
+            disabled={!agents || agents.length === 0}
+            data-testid="button-export-csv"
+          >
+            <Download className="w-4 h-4 me-1" />
+            {t("common.exportCsv", "Export CSV")}
+          </Button>
+          <Button onClick={() => navigate("/download-agent")} data-testid="button-download-agent">
+            <Monitor className="w-4 h-4 me-2" />
+            {t("endpoints.deployNewAgent")}
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

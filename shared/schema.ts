@@ -33,6 +33,8 @@ export const users = pgTable("users", {
   totpEnabled: boolean("totp_enabled").notNull().default(false),
   failedLoginAttempts: integer("failed_login_attempts").notNull().default(0),
   lockedUntil: timestamp("locked_until"),
+  onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
+  dashboardLayout: jsonb("dashboard_layout"),
 });
 
 export const securityEvents = pgTable("security_events", {
@@ -674,3 +676,36 @@ export const swTelemetry = pgTable("sw_telemetry", {
 export const insertSwTelemetrySchema = createInsertSchema(swTelemetry).omit({ id: true, createdAt: true });
 export type InsertSwTelemetry = z.infer<typeof insertSwTelemetrySchema>;
 export type SwTelemetry = typeof swTelemetry.$inferSelect;
+
+export const scheduledReports = pgTable("scheduled_reports", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  reportType: text("report_type").notNull(),
+  frequency: text("frequency").notNull(),
+  recipients: text("recipients").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  nextRun: timestamp("next_run").notNull(),
+  lastRun: timestamp("last_run"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertScheduledReportSchema = createInsertSchema(scheduledReports).omit({ id: true, createdAt: true, lastRun: true });
+export type InsertScheduledReport = z.infer<typeof insertScheduledReportSchema>;
+export type ScheduledReport = typeof scheduledReports.$inferSelect;
+
+export const loginHistory = pgTable("login_history", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
+  organizationId: integer("organization_id").references(() => organizations.id),
+  action: text("action").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_login_history_org_id").on(table.organizationId),
+  index("idx_login_history_user_id").on(table.userId),
+]);
+
+export const insertLoginHistorySchema = createInsertSchema(loginHistory).omit({ id: true, createdAt: true });
+export type InsertLoginHistory = z.infer<typeof insertLoginHistorySchema>;
+export type LoginHistory = typeof loginHistory.$inferSelect;

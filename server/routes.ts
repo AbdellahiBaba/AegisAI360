@@ -1160,7 +1160,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/audit-logs", async (req, res) => {
+  app.get("/api/audit-logs", requireRole("admin"), async (req, res) => {
     try {
       const list = await storage.getAuditLogs(getOrgId(req));
       res.json(list);
@@ -4475,6 +4475,152 @@ export async function registerRoutes(
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch status" });
+    }
+  });
+
+  app.get("/api/scheduled-reports", requireAuth, requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const reports = await storage.getScheduledReports(user.organizationId!);
+      res.json(reports);
+    } catch (error) {
+      console.error("Failed to fetch scheduled reports:", error);
+      res.status(500).json({ error: "Failed to fetch scheduled reports" });
+    }
+  });
+
+  app.post("/api/scheduled-reports", requireAuth, requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { reportType, frequency, recipients } = req.body;
+      if (!reportType || !frequency || !recipients) {
+        return res.status(400).json({ error: "reportType, frequency, and recipients are required" });
+      }
+      const now = new Date();
+      let nextRun = new Date(now);
+      if (frequency === "daily") nextRun.setDate(nextRun.getDate() + 1);
+      else if (frequency === "weekly") nextRun.setDate(nextRun.getDate() + 7);
+      else if (frequency === "monthly") nextRun.setMonth(nextRun.getMonth() + 1);
+      nextRun.setHours(8, 0, 0, 0);
+
+      const report = await storage.createScheduledReport({
+        organizationId: user.organizationId!,
+        reportType,
+        frequency,
+        recipients,
+        enabled: true,
+        nextRun,
+      });
+      await storage.createAuditLog({
+        organizationId: user.organizationId,
+        userId: user.id,
+        action: "scheduled_report_created",
+        targetType: "scheduled_report",
+        targetId: String(report.id),
+        details: `Created ${frequency} ${reportType} report`,
+      });
+      res.status(201).json(report);
+    } catch (error) {
+      console.error("Failed to create scheduled report:", error);
+      res.status(500).json({ error: "Failed to create scheduled report" });
+    }
+  });
+
+  app.patch("/api/scheduled-reports/:id", requireAuth, requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateScheduledReport(id, user.organizationId!, req.body);
+      if (!updated) return res.status(404).json({ error: "Report not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update scheduled report:", error);
+      res.status(500).json({ error: "Failed to update scheduled report" });
+    }
+  });
+
+  app.delete("/api/scheduled-reports/:id", requireAuth, requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteScheduledReport(id, user.organizationId!);
+      if (!deleted) return res.status(404).json({ error: "Report not found" });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete scheduled report:", error);
+      res.status(500).json({ error: "Failed to delete scheduled report" });
+    }
+  });
+
+  app.delete("/api/organization/users/:userId", requireAuth, requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const targetUserId = req.params.userId;
+      if (targetUserId === user.id) {
+        return res.status(400).json({ error: "Cannot delete your own account" });
+      }
+      const targetUser = await storage.getUser(targetUserId);
+      if (!targetUser || targetUser.organizationId !== user.organizationId) {
+        return res.status(404).json({ error: "User not found in your organization" });
+      }
+      if (targetUser.role === "admin") {
+        const orgUsers = await storage.getOrganizationUsers(user.organizationId!);
+        const adminCount = orgUsers.filter(u => u.role === "admin").length;
+        if (adminCount <= 1) {
+          return res.status(400).json({ error: "Cannot delete the last admin" });
+        }
+      }
+      await storage.deleteOrganizationUser(targetUserId, user.organizationId!);
+      await storage.createAuditLog({
+        organizationId: user.organizationId,
+        userId: user.id,
+        action: "user_deleted",
+        targetType: "user",
+        targetId: targetUserId,
+        details: `Deleted user "${targetUser.username}"`,
+      });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete user:", error);
+      res.status(500).json({ error: "Failed to delete user" });
+    }
+  });
+
+  app.get("/api/login-history", requireAuth, requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const limit = parseInt(req.query.limit as string) || 100;
+      const history = await storage.getLoginHistory(user.organizationId!, limit);
+      res.json(history);
+    } catch (error) {
+      console.error("Failed to fetch login history:", error);
+      res.status(500).json({ error: "Failed to fetch login history" });
+    }
+  });
+
+  app.patch("/api/user/onboarding", requireAuth, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      await storage.updateUserOnboarding(user.id, true);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to update onboarding:", error);
+      res.status(500).json({ error: "Failed to update onboarding status" });
+    }
+  });
+
+  app.patch("/api/user/dashboard-layout", requireAuth, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { layout } = req.body;
+      if (!layout || typeof layout !== "object") {
+        return res.status(400).json({ error: "Layout object is required" });
+      }
+      await storage.updateUserDashboardLayout(user.id, layout);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to update dashboard layout:", error);
+      res.status(500).json({ error: "Failed to update dashboard layout" });
     }
   });
 

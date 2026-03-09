@@ -10,7 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Search, Filter, Clock, Globe, Server, ArrowRight, ShieldBan, AlertTriangle, Loader2 } from "lucide-react";
+import { Search, Filter, Clock, Globe, Server, ArrowRight, ShieldBan, AlertTriangle, Loader2, Download } from "lucide-react";
+import { exportToCsv } from "@/lib/csvExport";
 import { useToast } from "@/hooks/use-toast";
 import type { SecurityEvent } from "@shared/schema";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -118,7 +119,37 @@ export default function Alerts() {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-lg font-semibold tracking-wide">{t("alerts.title")}</h1>
-        <Badge variant="secondary" className="font-mono text-xs">{filtered.length} {t("common.events")}</Badge>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              exportToCsv(
+                "security-alerts",
+                ["ID", "Description", "Type", "Source", "Source IP", "Destination IP", "Port", "Protocol", "Severity", "Status", "Created At"],
+                filtered.map((e) => [
+                  e.id,
+                  e.description,
+                  e.eventType,
+                  e.source,
+                  e.sourceIp || "",
+                  e.destinationIp || "",
+                  e.port || "",
+                  e.protocol || "",
+                  e.severity,
+                  e.status,
+                  e.createdAt ? new Date(e.createdAt as unknown as string).toISOString() : "",
+                ])
+              );
+            }}
+            disabled={filtered.length === 0}
+            data-testid="button-export-csv"
+          >
+            <Download className="w-4 h-4 me-1" />
+            {t("common.exportCsv", "Export CSV")}
+          </Button>
+          <Badge variant="secondary" className="font-mono text-xs">{filtered.length} {t("common.events")}</Badge>
+        </div>
       </div>
 
       <div className="flex gap-2 flex-wrap">

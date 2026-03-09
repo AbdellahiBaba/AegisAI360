@@ -18,9 +18,10 @@ import {
   Building2, Users, UserPlus, Copy, Shield, Zap, Play, Loader2,
   ShieldCheck, ShieldAlert, ShieldOff, Trash2, Clock, KeyRound,
   Bell, Webhook, Mail, Plus, Send, Power, X, Key, RotateCcw, Ban, Check, Monitor, AlertTriangle,
+  FileText, History, Search, Download, Calendar,
 } from "lucide-react";
-import type { Organization, Invite, NotificationChannel, ApiKey, SessionMetadata } from "@shared/schema";
-import { useState, useEffect } from "react";
+import type { Organization, Invite, NotificationChannel, ApiKey, SessionMetadata, AuditLog, ScheduledReport, LoginHistory } from "@shared/schema";
+import { useState, useEffect, useMemo } from "react";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const roleColors: Record<string, string> = {
@@ -391,6 +392,132 @@ export default function SettingsPage() {
     },
   });
 
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("DELETE", `/api/organization/users/${userId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/organization/users"] });
+      setDeleteConfirmUserId(null);
+      toast({ title: "User removed from organization" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to remove user", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const [deleteConfirmUserId, setDeleteConfirmUserId] = useState<string | null>(null);
+
+  const { data: auditLogs, isLoading: auditLogsLoading } = useQuery<AuditLog[]>({
+    queryKey: ["/api/audit-logs"],
+    enabled: isAdmin,
+  });
+  const [auditSearch, setAuditSearch] = useState("");
+  const [auditActionFilter, setAuditActionFilter] = useState<string>("all");
+
+  const filteredAuditLogs = useMemo(() => {
+    if (!auditLogs) return [];
+    let filtered = auditLogs;
+    if (auditActionFilter !== "all") {
+      filtered = filtered.filter(l => l.action === auditActionFilter);
+    }
+    if (auditSearch) {
+      const q = auditSearch.toLowerCase();
+      filtered = filtered.filter(l =>
+        l.action.toLowerCase().includes(q) ||
+        (l.details && l.details.toLowerCase().includes(q)) ||
+        (l.userId && l.userId.toLowerCase().includes(q)) ||
+        (l.targetType && l.targetType.toLowerCase().includes(q))
+      );
+    }
+    return filtered;
+  }, [auditLogs, auditSearch, auditActionFilter]);
+
+  const auditActions = useMemo(() => {
+    if (!auditLogs) return [];
+    return [...new Set(auditLogs.map(l => l.action))].sort();
+  }, [auditLogs]);
+
+  const exportAuditCsv = () => {
+    if (!filteredAuditLogs.length) return;
+    const headers = ["ID", "Action", "User ID", "Target Type", "Target ID", "Details", "IP Address", "Timestamp"];
+    const rows = filteredAuditLogs.map(l => [
+      l.id, l.action, l.userId || "", l.targetType || "", l.targetId || "",
+      l.details || "", l.ipAddress || "",
+      l.createdAt ? new Date(l.createdAt).toISOString() : "",
+    ]);
+    const safeCsv = (v: string | number) => {
+      let s = String(v);
+      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+    const csv = [headers.join(","), ...rows.map(r => r.map(safeCsv).join(","))].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const { data: loginHistoryData, isLoading: loginHistoryLoading } = useQuery<LoginHistory[]>({
+    queryKey: ["/api/login-history"],
+    enabled: isAdmin,
+  });
+
+  const { data: scheduledReportsData } = useQuery<ScheduledReport[]>({
+    queryKey: ["/api/scheduled-reports"],
+    enabled: isAdmin,
+  });
+
+  const [showCreateReport, setShowCreateReport] = useState(false);
+  const [newReportType, setNewReportType] = useState("executive_summary");
+  const [newReportFrequency, setNewReportFrequency] = useState("weekly");
+  const [newReportRecipients, setNewReportRecipients] = useState("");
+
+  const createReportMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/scheduled-reports", {
+        reportType: newReportType,
+        frequency: newReportFrequency,
+        recipients: newReportRecipients,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/scheduled-reports"] });
+      setShowCreateReport(false);
+      setNewReportRecipients("");
+      toast({ title: "Scheduled report created" });
+    },
+    onError: () => {
+      toast({ title: "Failed to create report", variant: "destructive" });
+    },
+  });
+
+  const toggleReportMutation = useMutation({
+    mutationFn: async ({ id, enabled }: { id: number; enabled: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/scheduled-reports/${id}`, { enabled });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/scheduled-reports"] });
+    },
+  });
+
+  const deleteReportMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/scheduled-reports/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/scheduled-reports"] });
+      toast({ title: "Report schedule deleted" });
+    },
+  });
+
   const copyInviteCode = (code: string) => {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
@@ -697,22 +824,59 @@ export default function SettingsPage() {
                   </TableCell>
                   {isAdmin && (
                     <TableCell>
-                      {u.id !== user?.id && (
-                        <Select
-                          value={u.role}
-                          onValueChange={(role) => updateRoleMutation.mutate({ userId: u.id, role })}
-                        >
-                          <SelectTrigger className="w-28 h-7 text-[10px]" data-testid={`select-role-${u.id}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="admin">{t("settings.admin")}</SelectItem>
-                            <SelectItem value="analyst">{t("settings.analyst")}</SelectItem>
-                            <SelectItem value="auditor">{t("settings.auditor")}</SelectItem>
-                            <SelectItem value="readonly">{t("settings.readOnly")}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {u.id !== user?.id && (
+                          <Select
+                            value={u.role}
+                            onValueChange={(role) => updateRoleMutation.mutate({ userId: u.id, role })}
+                          >
+                            <SelectTrigger className="w-28 h-7 text-[10px]" data-testid={`select-role-${u.id}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">{t("settings.admin")}</SelectItem>
+                              <SelectItem value="analyst">{t("settings.analyst")}</SelectItem>
+                              <SelectItem value="auditor">{t("settings.auditor")}</SelectItem>
+                              <SelectItem value="readonly">{t("settings.readOnly")}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                        {u.id !== user?.id && (
+                          deleteConfirmUserId === u.id ? (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="h-7 text-[10px]"
+                                onClick={() => deleteUserMutation.mutate(u.id)}
+                                disabled={deleteUserMutation.isPending}
+                                data-testid={`button-confirm-delete-user-${u.id}`}
+                              >
+                                {deleteUserMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Confirm"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 text-[10px]"
+                                onClick={() => setDeleteConfirmUserId(null)}
+                                data-testid={`button-cancel-delete-user-${u.id}`}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7"
+                              onClick={() => setDeleteConfirmUserId(u.id)}
+                              data-testid={`button-delete-user-${u.id}`}
+                            >
+                              <Trash2 className="w-3 h-3 text-destructive" />
+                            </Button>
+                          )
+                        )}
+                      </div>
                     </TableCell>
                   )}
                 </TableRow>
@@ -1273,6 +1437,301 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground text-center py-6" data-testid="text-no-api-keys">
                 No API keys yet. Create one to start ingesting security events.
               </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center justify-between gap-2 flex-wrap">
+              <span className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-primary" />Scheduled Reports
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs"
+                onClick={() => setShowCreateReport(!showCreateReport)}
+                data-testid="button-add-report"
+              >
+                {showCreateReport ? <X className="w-3 h-3 me-1" /> : <Plus className="w-3 h-3 me-1" />}
+                {showCreateReport ? "Cancel" : "Add Report"}
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground mb-4">
+              Schedule automated security reports to be delivered via email.
+            </p>
+
+            {showCreateReport && (
+              <Card className="mb-4">
+                <CardContent className="p-4 space-y-3">
+                  <div>
+                    <label className="text-xs font-medium">Report Type</label>
+                    <Select value={newReportType} onValueChange={setNewReportType}>
+                      <SelectTrigger data-testid="select-report-type"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="executive_summary">Executive Summary</SelectItem>
+                        <SelectItem value="compliance">Compliance Report</SelectItem>
+                        <SelectItem value="incidents">Incident Report</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium">Frequency</label>
+                    <Select value={newReportFrequency} onValueChange={setNewReportFrequency}>
+                      <SelectTrigger data-testid="select-report-frequency"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium">Recipients (comma-separated emails)</label>
+                    <Input
+                      value={newReportRecipients}
+                      onChange={(e) => setNewReportRecipients(e.target.value)}
+                      placeholder="admin@company.com, ciso@company.com"
+                      data-testid="input-report-recipients"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => createReportMutation.mutate()}
+                    disabled={createReportMutation.isPending || !newReportRecipients}
+                    data-testid="button-save-report"
+                  >
+                    {createReportMutation.isPending && <Loader2 className="w-3 h-3 me-1.5 animate-spin" />}
+                    Create Schedule
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {scheduledReportsData && scheduledReportsData.length > 0 ? (
+              <div className="overflow-x-auto"><Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Type</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Frequency</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Recipients</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Next Run</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Enabled</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {scheduledReportsData.map((report) => (
+                    <TableRow key={report.id} data-testid={`report-row-${report.id}`}>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-[10px] capitalize" data-testid={`text-report-type-${report.id}`}>
+                          {report.reportType.replace(/_/g, " ")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs capitalize">{report.frequency}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[10px] text-muted-foreground font-mono">{report.recipients}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {new Date(report.nextRun).toLocaleDateString()}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={report.enabled}
+                          onCheckedChange={(enabled) => toggleReportMutation.mutate({ id: report.id, enabled })}
+                          data-testid={`switch-report-${report.id}`}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => deleteReportMutation.mutate(report.id)}
+                          data-testid={`button-delete-report-${report.id}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table></div>
+            ) : (
+              <div className="text-center py-6 text-xs text-muted-foreground">
+                No scheduled reports. Create one to receive automated security summaries.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center justify-between gap-2 flex-wrap">
+              <span className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-primary" />Audit Log
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs"
+                onClick={exportAuditCsv}
+                disabled={!filteredAuditLogs.length}
+                data-testid="button-export-audit-csv"
+              >
+                <Download className="w-3 h-3 me-1" />Export CSV
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2 mb-4">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute start-2.5 top-2.5 w-3 h-3 text-muted-foreground" />
+                <Input
+                  placeholder="Search audit logs..."
+                  value={auditSearch}
+                  onChange={(e) => setAuditSearch(e.target.value)}
+                  className="ps-8 h-8 text-xs"
+                  data-testid="input-audit-search"
+                />
+              </div>
+              <Select value={auditActionFilter} onValueChange={setAuditActionFilter}>
+                <SelectTrigger className="w-48 h-8 text-xs" data-testid="select-audit-action-filter">
+                  <SelectValue placeholder="Filter by action" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Actions</SelectItem>
+                  {auditActions.map(action => (
+                    <SelectItem key={action} value={action}>{action.replace(/_/g, " ")}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {auditLogsLoading ? (
+              <Skeleton className="h-40 w-full" />
+            ) : filteredAuditLogs.length > 0 ? (
+              <div className="overflow-x-auto max-h-[400px] overflow-y-auto"><Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Action</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Target</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Details</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Timestamp</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredAuditLogs.slice(0, 50).map((log) => (
+                    <TableRow key={log.id} data-testid={`audit-row-${log.id}`}>
+                      <TableCell>
+                        <Badge variant="outline" className="text-[10px]" data-testid={`text-audit-action-${log.id}`}>
+                          {log.action.replace(/_/g, " ")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[10px] text-muted-foreground">
+                          {log.targetType && <span className="font-medium">{log.targetType}</span>}
+                          {log.targetId && <span className="font-mono ms-1">#{log.targetId.slice(0, 8)}</span>}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[10px] text-muted-foreground line-clamp-1">{log.details || "-"}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table></div>
+            ) : (
+              <div className="text-center py-6 text-xs text-muted-foreground">
+                {auditSearch || auditActionFilter !== "all" ? "No matching audit logs found." : "No audit logs yet."}
+              </div>
+            )}
+            {filteredAuditLogs.length > 50 && (
+              <p className="text-[10px] text-muted-foreground text-center mt-2">
+                Showing 50 of {filteredAuditLogs.length} entries. Export CSV for full data.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
+              <History className="w-4 h-4 text-primary" />Login History
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {loginHistoryLoading ? (
+              <div className="p-4"><Skeleton className="h-20 w-full" /></div>
+            ) : loginHistoryData && loginHistoryData.length > 0 ? (
+              <div className="overflow-x-auto max-h-[400px] overflow-y-auto"><Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Action</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">User</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">IP Address</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Browser</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider">Time</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loginHistoryData.map((entry) => {
+                    const ua = entry.userAgent || "";
+                    const browser = ua.includes("Firefox") ? "Firefox"
+                      : ua.includes("Edg") ? "Edge"
+                      : ua.includes("Chrome") ? "Chrome"
+                      : ua.includes("Safari") ? "Safari"
+                      : ua ? "Other" : "-";
+                    const actionColors: Record<string, string> = {
+                      login_success: "text-green-500",
+                      login_failed: "text-destructive",
+                      logout: "text-muted-foreground",
+                      session_revoked: "text-yellow-500",
+                    };
+                    return (
+                      <TableRow key={entry.id} data-testid={`login-history-row-${entry.id}`}>
+                        <TableCell>
+                          <span className={`text-[10px] font-medium capitalize ${actionColors[entry.action] || ""}`} data-testid={`text-login-action-${entry.id}`}>
+                            {entry.action.replace(/_/g, " ")}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-[10px] font-mono text-muted-foreground">{entry.userId ? entry.userId.slice(0, 8) + "..." : "-"}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-[10px] font-mono text-muted-foreground">{entry.ipAddress || "-"}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-[10px] text-muted-foreground">{browser}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-[10px] text-muted-foreground font-mono">
+                            {entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "-"}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table></div>
+            ) : (
+              <div className="p-4 text-center text-xs text-muted-foreground">No login history recorded yet.</div>
             )}
           </CardContent>
         </Card>

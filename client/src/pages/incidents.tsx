@@ -11,8 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Clock, User, ShieldBan, Loader2, Play, FileDown } from "lucide-react";
+import { Plus, Clock, User, ShieldBan, Loader2, Play, FileDown, Download } from "lucide-react";
 import { generateIncidentReportPDF } from "@/lib/reportGenerator";
+import { exportToCsv } from "@/lib/csvExport";
 import { useToast } from "@/hooks/use-toast";
 import type { Incident, ResponsePlaybook } from "@shared/schema";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -120,15 +121,40 @@ export default function Incidents() {
         <h1 className="text-lg font-semibold tracking-wide">{t("incidents.title")}</h1>
         <div className="flex gap-2 flex-wrap">
           {incidents && incidents.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => generateIncidentReportPDF(incidents as any)}
-              data-testid="button-generate-pdf-report"
-            >
-              <FileDown className="w-4 h-4 me-1" />
-              {t("incidents.generateReport", "Generate PDF Report")}
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  exportToCsv(
+                    "incidents",
+                    ["ID", "Title", "Description", "Severity", "Status", "Assignee", "Created At"],
+                    incidents.map((inc) => [
+                      inc.id,
+                      inc.title,
+                      inc.description,
+                      inc.severity,
+                      inc.status,
+                      inc.assignee || "",
+                      inc.createdAt ? new Date(inc.createdAt as unknown as string).toISOString() : "",
+                    ])
+                  );
+                }}
+                data-testid="button-export-csv"
+              >
+                <Download className="w-4 h-4 me-1" />
+                {t("common.exportCsv", "Export CSV")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => generateIncidentReportPDF(incidents as any)}
+                data-testid="button-generate-pdf-report"
+              >
+                <FileDown className="w-4 h-4 me-1" />
+                {t("incidents.generateReport", "Generate PDF Report")}
+              </Button>
+            </>
           )}
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
