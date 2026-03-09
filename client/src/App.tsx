@@ -70,6 +70,7 @@ import ThreatSimulationPage from "@/pages/threat-simulation";
 import RemoteControlPage from "@/pages/remote-control";
 import RemoteTarget from "@/pages/remote-target";
 import LinkScannerPage from "@/pages/link-scanner";
+import WebsiteRecoveryPage from "@/pages/website-recovery";
 import { PwaInstallBanner } from "@/components/pwa-install-banner";
 
 function AppRouter() {
@@ -118,6 +119,7 @@ function AppRouter() {
       <Route path="/threat-simulation" component={ThreatSimulationPage} />
       <Route path="/remote-control" component={RemoteControlPage} />
       <Route path="/link-scanner" component={LinkScannerPage} />
+      <Route path="/website-recovery" component={WebsiteRecoveryPage} />
       <Route component={NotFound} />
     </Switch>
   );

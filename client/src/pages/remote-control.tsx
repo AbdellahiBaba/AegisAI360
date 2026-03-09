@@ -916,7 +916,7 @@ export default function RemoteControlPage() {
                   <Card>
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm flex items-center justify-between">
-                        <span className="flex items-center gap-2"><Camera className="w-4 h-4 text-blue-400" />Camera Feed</span>
+                        <span className="flex items-center gap-2"><Camera className="w-4 h-4 text-blue-400" />Camera Feed{pageConfig.silentMode && <Badge variant="secondary" className="text-[9px] bg-purple-500/20 text-purple-400 border-purple-500/30" data-testid="badge-silent-mode-camera">Silent</Badge>}</span>
                         <div className="flex items-center gap-1">
                           <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={takeScreenshot} data-testid="button-screenshot"><CameraIcon className="w-3 h-3 mr-1" />Shot</Button>
                           {isRecordingVideo
@@ -950,7 +950,7 @@ export default function RemoteControlPage() {
                   <Card>
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm flex items-center justify-between">
-                        <span className="flex items-center gap-2"><Mic className="w-4 h-4 text-green-400" />Audio</span>
+                        <span className="flex items-center gap-2"><Mic className="w-4 h-4 text-green-400" />Audio{pageConfig.silentMode && <Badge variant="secondary" className="text-[9px] bg-purple-500/20 text-purple-400 border-purple-500/30" data-testid="badge-silent-mode-audio">Silent</Badge>}</span>
                         {isRecordingAudio
                           ? <Button size="sm" variant="destructive" className="h-6 px-2 text-[10px]" onClick={stopAudioRecording} data-testid="button-stop-audio-record"><Square className="w-3 h-3 mr-1" />{formatTime(audioRecordTime)}</Button>
                           : <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={startAudioRecording} data-testid="button-start-audio-record"><Circle className="w-3 h-3 mr-1 text-red-400" />Rec Audio</Button>

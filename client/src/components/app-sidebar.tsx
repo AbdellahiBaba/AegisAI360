@@ -9,7 +9,7 @@ import {
   Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar, LifeBuoy, Server, Key,
   Monitor, Download, Terminal, Activity, ScanSearch, Smartphone, Eye, ShieldCheck,
   Mail, KeyRound, ShieldBan, FileSearch, CalendarClock, Zap, ChevronDown, Gamepad2,
-  Sun, Moon, Globe,
+  Sun, Moon, Globe, RotateCcw,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -115,6 +115,7 @@ export function AppSidebar() {
     { title: t("sidebar.firewall"), testId: "firewall", url: "/firewall", icon: Flame },
     { title: t("sidebar.policies"), testId: "policies", url: "/policies", icon: FileText },
     { title: t("sidebar.compliance"), testId: "compliance", url: "/compliance", icon: ShieldCheck },
+    { title: "Website Recovery", testId: "website-recovery", url: "/website-recovery", icon: RotateCcw },
   ];
 
   const endpointItems: NavItem[] = [

