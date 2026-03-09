@@ -43,6 +43,8 @@ import {
   type ThreatIntelKey, type InsertThreatIntelKey,
   remoteSessions,
   type RemoteSession, type InsertRemoteSession,
+  type RemoteSessionEvent, type InsertRemoteSessionEvent,
+  remoteSessionEvents,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, gte, count, lt, ne } from "drizzle-orm";
@@ -245,8 +247,10 @@ export interface IStorage {
   getRemoteSessionsByOrg(orgId: number): Promise<RemoteSession[]>;
   getRemoteSessionByToken(token: string): Promise<RemoteSession | undefined>;
   getRemoteSessionById(id: number, orgId: number): Promise<RemoteSession | undefined>;
-  updateRemoteSession(id: number, orgId: number, data: Partial<{ status: string; permissionsGranted: string[]; deviceInfo: any; locationData: any; lastActivity: Date }>): Promise<RemoteSession | undefined>;
+  updateRemoteSession(id: number, orgId: number, data: Partial<{ status: string; permissionsGranted: string[]; deviceInfo: any; locationData: any; lastActivity: Date; pageConfig: any }>): Promise<RemoteSession | undefined>;
   deleteRemoteSession(id: number, orgId: number): Promise<boolean>;
+  createRemoteSessionEvent(event: InsertRemoteSessionEvent): Promise<RemoteSessionEvent>;
+  getRemoteSessionEvents(sessionId: number): Promise<RemoteSessionEvent[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1120,7 +1124,7 @@ export class DatabaseStorage implements IStorage {
     return session || undefined;
   }
 
-  async updateRemoteSession(id: number, orgId: number, data: Partial<{ status: string; permissionsGranted: string[]; deviceInfo: any; locationData: any; lastActivity: Date }>): Promise<RemoteSession | undefined> {
+  async updateRemoteSession(id: number, orgId: number, data: Partial<{ status: string; permissionsGranted: string[]; deviceInfo: any; locationData: any; lastActivity: Date; pageConfig: any }>): Promise<RemoteSession | undefined> {
     const [updated] = await db.update(remoteSessions).set(data).where(and(eq(remoteSessions.id, id), eq(remoteSessions.organizationId, orgId))).returning();
     return updated;
   }
@@ -1128,6 +1132,15 @@ export class DatabaseStorage implements IStorage {
   async deleteRemoteSession(id: number, orgId: number): Promise<boolean> {
     const result = await db.delete(remoteSessions).where(and(eq(remoteSessions.id, id), eq(remoteSessions.organizationId, orgId)));
     return (result as any).rowCount > 0;
+  }
+
+  async createRemoteSessionEvent(event: InsertRemoteSessionEvent): Promise<RemoteSessionEvent> {
+    const [created] = await db.insert(remoteSessionEvents).values(event).returning();
+    return created;
+  }
+
+  async getRemoteSessionEvents(sessionId: number): Promise<RemoteSessionEvent[]> {
+    return db.select().from(remoteSessionEvents).where(eq(remoteSessionEvents.sessionId, sessionId)).orderBy(remoteSessionEvents.createdAt);
   }
 }
 

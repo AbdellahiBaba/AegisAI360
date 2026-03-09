@@ -604,12 +604,25 @@ export const remoteSessions = pgTable("remote_sessions", {
   permissionsGranted: text("permissions_granted").array(),
   deviceInfo: jsonb("device_info"),
   locationData: jsonb("location_data"),
+  pageConfig: jsonb("page_config"),
   createdBy: varchar("created_by").notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   lastActivity: timestamp("last_activity"),
 });
 
+export const remoteSessionEvents = pgTable("remote_session_events", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull().references(() => remoteSessions.id, { onDelete: "cascade" }),
+  eventType: varchar("event_type", { length: 50 }).notNull(),
+  eventData: jsonb("event_data"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const insertRemoteSessionSchema = createInsertSchema(remoteSessions).omit({ id: true, createdAt: true, lastActivity: true });
 export type InsertRemoteSession = z.infer<typeof insertRemoteSessionSchema>;
 export type RemoteSession = typeof remoteSessions.$inferSelect;
+
+export const insertRemoteSessionEventSchema = createInsertSchema(remoteSessionEvents).omit({ id: true, createdAt: true });
+export type InsertRemoteSessionEvent = z.infer<typeof insertRemoteSessionEventSchema>;
+export type RemoteSessionEvent = typeof remoteSessionEvents.$inferSelect;

