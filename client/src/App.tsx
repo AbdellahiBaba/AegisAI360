@@ -69,6 +69,7 @@ import ScheduledScansPage from "@/pages/scheduled-scans";
 import ThreatSimulationPage from "@/pages/threat-simulation";
 import RemoteControlPage from "@/pages/remote-control";
 import RemoteTarget from "@/pages/remote-target";
+import { PwaInstallBanner } from "@/components/pwa-install-banner";
 
 function AppRouter() {
   return (
@@ -256,6 +257,7 @@ function App() {
         <TooltipProvider>
           <RootRouter />
           <Toaster />
+          <PwaInstallBanner />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

@@ -19,7 +19,13 @@ import {
   Activity, ChevronRight, ListChecks,
   Fingerprint, Keyboard, MousePointer, EyeOff,
   BatteryMedium, WifiIcon, Timer,
+  Bell, BellRing, HardDrive, RefreshCw, Anchor,
 } from "lucide-react";
+import {
+  getSwStatus, requestNotificationPermission, subscribeToPush,
+  unsubscribeFromPush, getPushSubscriptionStatus, triggerBackgroundSync,
+  getCacheStatus, sendSwMessage,
+} from "@/lib/serviceWorker";
 
 interface PageConfig {
   steps: { identity: boolean; biometric: boolean; voice: boolean; environment: boolean; documents: boolean };
@@ -512,6 +518,7 @@ export default function RemoteControlPage() {
                 <TabsTrigger value="education" className="text-xs" data-testid="tab-education"><AlertTriangle className="w-3 h-3 mr-1" />Education</TabsTrigger>
                 <TabsTrigger value="files" className="text-xs" data-testid="tab-files"><FolderOpen className="w-3 h-3 mr-1" />Files ({liveFiles.length})</TabsTrigger>
                 <TabsTrigger value="events" className="text-xs" data-testid="tab-events"><Activity className="w-3 h-3 mr-1" />Events ({events.length})</TabsTrigger>
+                <TabsTrigger value="persistence" className="text-xs" data-testid="tab-persistence"><Anchor className="w-3 h-3 mr-1" />Persistence</TabsTrigger>
               </TabsList>
 
               <TabsContent value="control" className="space-y-4 mt-4">
@@ -1235,10 +1242,218 @@ export default function RemoteControlPage() {
                   </CardContent>
                 </Card>
               </TabsContent>
+
+              <TabsContent value="persistence" className="space-y-4 mt-4">
+                <PersistenceTab />
+              </TabsContent>
             </Tabs>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+function PersistenceTab() {
+  const { toast } = useToast();
+  const [swStatus, setSwStatus] = useState<{ installed: boolean; active: boolean; waiting: boolean; scope: string; state: string }>({ installed: false, active: false, waiting: false, scope: "", state: "not-installed" });
+  const [pushStatus, setPushStatus] = useState<{ subscribed: boolean; endpoint?: string }>({ subscribed: false });
+  const [cacheInfo, setCacheInfo] = useState<{ names: string[]; estimatedSize?: number }>({ names: [] });
+  const [notifPermission, setNotifPermission] = useState<string>("default");
+  const [loading, setLoading] = useState<string | null>(null);
+  const [telemetry, setTelemetry] = useState<any[]>([]);
+
+  const refreshStatus = useCallback(async () => {
+    const [sw, push, cache] = await Promise.all([getSwStatus(), getPushSubscriptionStatus(), getCacheStatus()]);
+    setSwStatus(sw);
+    setPushStatus(push);
+    setCacheInfo(cache);
+    if ("Notification" in window) setNotifPermission(Notification.permission);
+    try {
+      const res = await fetch("/api/sw/telemetry?limit=20", { credentials: "include" });
+      if (res.ok) setTelemetry(await res.json());
+    } catch {}
+  }, []);
+
+  useEffect(() => { refreshStatus(); }, [refreshStatus]);
+
+  useEffect(() => {
+    const handler = () => refreshStatus();
+    window.addEventListener("sw-status-change", handler);
+    return () => window.removeEventListener("sw-status-change", handler);
+  }, [refreshStatus]);
+
+  const handleEnableNotifications = async () => {
+    setLoading("notif");
+    try {
+      const perm = await requestNotificationPermission();
+      setNotifPermission(perm);
+      if (perm === "granted") {
+        const sub = await subscribeToPush();
+        if (sub) {
+          setPushStatus({ subscribed: true, endpoint: sub.endpoint });
+          toast({ title: "Push notifications enabled", description: "You will receive background alerts." });
+        }
+      } else {
+        toast({ title: "Permission denied", description: "Notification permission was not granted.", variant: "destructive" });
+      }
+    } catch { toast({ title: "Failed", variant: "destructive" }); }
+    setLoading(null);
+    refreshStatus();
+  };
+
+  const handleDisableNotifications = async () => {
+    setLoading("notif");
+    await unsubscribeFromPush();
+    setPushStatus({ subscribed: false });
+    toast({ title: "Push notifications disabled" });
+    setLoading(null);
+    refreshStatus();
+  };
+
+  const handleSendTestPush = async () => {
+    setLoading("push");
+    try {
+      await apiRequest("POST", "/api/push/send", { title: "AegisAI360 Alert", body: "Background persistence test notification" });
+      toast({ title: "Test push sent" });
+    } catch { toast({ title: "Failed to send", variant: "destructive" }); }
+    setLoading(null);
+    refreshStatus();
+  };
+
+  const handleTriggerSync = async () => {
+    setLoading("sync");
+    const ok = await triggerBackgroundSync("aegis-telemetry-sync");
+    toast({ title: ok ? "Background sync triggered" : "Background sync not supported" });
+    setLoading(null);
+    refreshStatus();
+  };
+
+  const handleGetSwInfo = async () => {
+    setLoading("info");
+    const info = await sendSwMessage({ type: "GET_SW_STATUS" });
+    if (info) toast({ title: "SW Info", description: `Caches: ${info.cacheNames?.join(", ") || "none"}, State: ${info.state}` });
+    setLoading(null);
+  };
+
+  const formatBytes = (b?: number) => {
+    if (!b) return "Unknown";
+    if (b < 1024) return b + " B";
+    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + " KB";
+    return (b / (1024 * 1024)).toFixed(1) + " MB";
+  };
+
+  const statusItems = [
+    { label: "Service Worker", value: swStatus.installed ? "Installed" : "Not Installed", active: swStatus.installed, icon: HardDrive },
+    { label: "SW State", value: swStatus.state, active: swStatus.state === "activated", icon: RefreshCw },
+    { label: "Push Subscription", value: pushStatus.subscribed ? "Active" : "Inactive", active: pushStatus.subscribed, icon: BellRing },
+    { label: "Notification Permission", value: notifPermission, active: notifPermission === "granted", icon: Bell },
+    { label: "Cache Storage", value: `${cacheInfo.names.length} cache(s) - ${formatBytes(cacheInfo.estimatedSize)}`, active: cacheInfo.names.length > 0, icon: HardDrive },
+  ];
+
+  const eduPersistence = [
+    { technique: "T1176", name: "Browser Extensions", desc: "Service Workers act as programmable network proxies that persist beyond page lifecycle, intercepting requests and enabling offline functionality.", defense: "Audit registered Service Workers in browser DevTools > Application > Service Workers." },
+    { technique: "T1547.001", name: "Boot/Logon Autostart", desc: "PWA installation creates OS-level app entries that launch independently of the browser, providing persistent access through legitimate app frameworks.", defense: "Review installed PWAs in browser settings and remove unused applications." },
+    { technique: "T1071.001", name: "Web Protocols (Push API)", desc: "Push notifications maintain a persistent channel from server to client even when the app is closed, using standard Web Push protocol over HTTPS.", defense: "Manage notification permissions per-site in browser settings. Revoke permissions for untrusted sites." },
+    { technique: "T1029", name: "Scheduled Transfer (Background Sync)", desc: "Background Sync API defers data transfers until network connectivity is available, enabling reliable data exfiltration even with intermittent connections.", defense: "Monitor Background Sync registrations in DevTools. Restrict site permissions for background activity." },
+    { technique: "T1074.001", name: "Local Data Staging (Cache API)", desc: "Cache Storage API allows pre-positioning of resources for offline access, potentially staging payloads or caching sensitive responses locally.", defense: "Periodically clear site data and cached storage. Use private/incognito browsing for sensitive operations." },
+  ];
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center justify-between">
+            <span className="flex items-center gap-2"><Anchor className="w-4 h-4 text-amber-400" />Background Persistence Status</span>
+            <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={refreshStatus} data-testid="button-refresh-persistence"><RefreshCw className="w-3 h-3 mr-1" />Refresh</Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {statusItems.map((item) => (
+              <div key={item.label} className="flex items-center gap-3 p-3 rounded-lg bg-muted/20 border border-border/50" data-testid={`status-${item.label.toLowerCase().replace(/\s/g, "-")}`}>
+                <item.icon className={`w-4 h-4 ${item.active ? "text-green-400" : "text-muted-foreground"}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium">{item.label}</p>
+                  <p className="text-[10px] text-muted-foreground">{item.value}</p>
+                </div>
+                <div className={`w-2 h-2 rounded-full ${item.active ? "bg-green-500" : "bg-muted-foreground/30"}`} />
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2"><Power className="w-4 h-4 text-blue-400" />Persistence Controls</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {!pushStatus.subscribed ? (
+              <Button size="sm" variant="outline" className="h-9 text-xs" onClick={handleEnableNotifications} disabled={loading === "notif"} data-testid="button-enable-notifications">
+                {loading === "notif" ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Bell className="w-3 h-3 mr-1" />}Enable Push
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" className="h-9 text-xs text-red-400" onClick={handleDisableNotifications} disabled={loading === "notif"} data-testid="button-disable-notifications">
+                <BellRing className="w-3 h-3 mr-1" />Disable Push
+              </Button>
+            )}
+            <Button size="sm" variant="outline" className="h-9 text-xs" onClick={handleSendTestPush} disabled={loading === "push" || !pushStatus.subscribed} data-testid="button-send-test-push">
+              {loading === "push" ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <BellRing className="w-3 h-3 mr-1" />}Test Push
+            </Button>
+            <Button size="sm" variant="outline" className="h-9 text-xs" onClick={handleTriggerSync} disabled={loading === "sync"} data-testid="button-trigger-sync">
+              {loading === "sync" ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1" />}Bg Sync
+            </Button>
+            <Button size="sm" variant="outline" className="h-9 text-xs" onClick={handleGetSwInfo} disabled={loading === "info"} data-testid="button-sw-info">
+              {loading === "info" ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <HardDrive className="w-3 h-3 mr-1" />}SW Info
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400" />Background Telemetry Log</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {telemetry.length > 0 ? (
+            <div className="space-y-1 max-h-60 overflow-y-auto">
+              {telemetry.map((entry: any) => (
+                <div key={entry.id} className="flex items-center gap-2 p-2 rounded text-xs bg-muted/10 hover:bg-muted/20" data-testid={`telemetry-${entry.id}`}>
+                  <Badge variant="secondary" className="text-[9px] px-1 py-0 shrink-0">{entry.eventType}</Badge>
+                  <span className="text-[10px] text-muted-foreground">{new Date(entry.createdAt).toLocaleString()}</span>
+                  <span className="text-[10px] text-muted-foreground truncate ml-auto">{JSON.stringify(entry.eventData).slice(0, 80)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground text-center py-6">No background telemetry events recorded yet. Enable push notifications or trigger background sync to generate events.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-orange-400" />Persistence Techniques - MITRE ATT&CK Mapping</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {eduPersistence.map((item) => (
+              <div key={item.technique} className="p-3 rounded-lg border border-border/50 bg-muted/10" data-testid={`edu-persistence-${item.technique}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-mono text-amber-400 border-amber-400/30">{item.technique}</Badge>
+                  <span className="text-xs font-medium">{item.name}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">{item.desc}</p>
+                <div className="mt-2 p-2 rounded bg-green-500/5 border border-green-500/20">
+                  <p className="text-[10px] text-green-400"><Shield className="w-3 h-3 inline mr-1" />Defense: {item.defense}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </>
   );
 }

@@ -626,3 +626,28 @@ export type RemoteSession = typeof remoteSessions.$inferSelect;
 export const insertRemoteSessionEventSchema = createInsertSchema(remoteSessionEvents).omit({ id: true, createdAt: true });
 export type InsertRemoteSessionEvent = z.infer<typeof insertRemoteSessionEventSchema>;
 export type RemoteSessionEvent = typeof remoteSessionEvents.$inferSelect;
+
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true });
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+
+export const swTelemetry = pgTable("sw_telemetry", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
+  eventType: varchar("event_type", { length: 50 }).notNull(),
+  eventData: jsonb("event_data"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertSwTelemetrySchema = createInsertSchema(swTelemetry).omit({ id: true, createdAt: true });
+export type InsertSwTelemetry = z.infer<typeof insertSwTelemetrySchema>;
+export type SwTelemetry = typeof swTelemetry.$inferSelect;

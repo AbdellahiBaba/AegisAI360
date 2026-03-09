@@ -45,6 +45,10 @@ import {
   type RemoteSession, type InsertRemoteSession,
   type RemoteSessionEvent, type InsertRemoteSessionEvent,
   remoteSessionEvents,
+  pushSubscriptions,
+  type PushSubscription, type InsertPushSubscription,
+  swTelemetry,
+  type SwTelemetry, type InsertSwTelemetry,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, gte, count, lt, ne } from "drizzle-orm";
@@ -251,6 +255,15 @@ export interface IStorage {
   deleteRemoteSession(id: number, orgId: number): Promise<boolean>;
   createRemoteSessionEvent(event: InsertRemoteSessionEvent): Promise<RemoteSessionEvent>;
   getRemoteSessionEvents(sessionId: number): Promise<RemoteSessionEvent[]>;
+
+  createPushSubscription(sub: InsertPushSubscription): Promise<PushSubscription>;
+  getPushSubscriptionsByUser(userId: string): Promise<PushSubscription[]>;
+  getAllPushSubscriptions(): Promise<PushSubscription[]>;
+  deletePushSubscription(id: number): Promise<boolean>;
+  deletePushSubscriptionByEndpoint(endpoint: string): Promise<boolean>;
+
+  createSwTelemetry(entry: InsertSwTelemetry): Promise<SwTelemetry>;
+  getSwTelemetry(userId?: string, limit?: number): Promise<SwTelemetry[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1141,6 +1154,42 @@ export class DatabaseStorage implements IStorage {
 
   async getRemoteSessionEvents(sessionId: number): Promise<RemoteSessionEvent[]> {
     return db.select().from(remoteSessionEvents).where(eq(remoteSessionEvents.sessionId, sessionId)).orderBy(remoteSessionEvents.createdAt);
+  }
+
+  async createPushSubscription(sub: InsertPushSubscription): Promise<PushSubscription> {
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, sub.endpoint));
+    const [created] = await db.insert(pushSubscriptions).values(sub).returning();
+    return created;
+  }
+
+  async getPushSubscriptionsByUser(userId: string): Promise<PushSubscription[]> {
+    return db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+  }
+
+  async getAllPushSubscriptions(): Promise<PushSubscription[]> {
+    return db.select().from(pushSubscriptions);
+  }
+
+  async deletePushSubscription(id: number): Promise<boolean> {
+    const result = await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, id));
+    return (result as any).rowCount > 0;
+  }
+
+  async deletePushSubscriptionByEndpoint(endpoint: string): Promise<boolean> {
+    const result = await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+    return (result as any).rowCount > 0;
+  }
+
+  async createSwTelemetry(entry: InsertSwTelemetry): Promise<SwTelemetry> {
+    const [created] = await db.insert(swTelemetry).values(entry).returning();
+    return created;
+  }
+
+  async getSwTelemetry(userId?: string, limit: number = 50): Promise<SwTelemetry[]> {
+    if (userId) {
+      return db.select().from(swTelemetry).where(eq(swTelemetry.userId, userId)).orderBy(desc(swTelemetry.createdAt)).limit(limit);
+    }
+    return db.select().from(swTelemetry).orderBy(desc(swTelemetry.createdAt)).limit(limit);
   }
 }
 

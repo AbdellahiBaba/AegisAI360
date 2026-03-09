@@ -1,0 +1,36 @@
+{
+  "name": "AegisAI360 - Security Operations Center",
+  "short_name": "AegisAI360",
+  "description": "Enterprise-grade AI-powered cyber defense platform with real-time security monitoring, threat detection, and incident response",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d1020",
+  "theme_color": "#d4a520",
+  "orientation": "any",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["security", "utilities", "business"]
+}

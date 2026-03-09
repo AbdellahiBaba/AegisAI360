@@ -4330,5 +4330,122 @@ export async function registerRoutes(
     }
   });
 
+  // ── Push Notification & Service Worker Routes ──
+
+  app.get("/api/push/vapid-key", (_req, res) => {
+    res.json({ publicKey: process.env.VAPID_PUBLIC_KEY || "" });
+  });
+
+  app.post("/api/push/subscribe", requireAuth, async (req: any, res) => {
+    try {
+      const body = z.object({
+        endpoint: z.string().url(),
+        keys: z.object({
+          p256dh: z.string(),
+          auth: z.string(),
+        }),
+      }).parse(req.body);
+
+      const sub = await storage.createPushSubscription({
+        userId: req.user!.id,
+        endpoint: body.endpoint,
+        p256dh: body.keys.p256dh,
+        auth: body.keys.auth,
+      });
+
+      await storage.createSwTelemetry({
+        userId: req.user!.id,
+        eventType: "push_subscribed",
+        eventData: { endpoint: body.endpoint },
+      });
+
+      res.json({ success: true, id: sub.id });
+    } catch (error: any) {
+      res.status(400).json({ error: error?.message || "Failed to subscribe" });
+    }
+  });
+
+  app.post("/api/push/unsubscribe", requireAuth, async (req: any, res) => {
+    try {
+      const { endpoint } = z.object({ endpoint: z.string().url() }).parse(req.body);
+      await storage.deletePushSubscriptionByEndpoint(endpoint);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ error: error?.message || "Failed to unsubscribe" });
+    }
+  });
+
+  app.post("/api/push/send", requireAuth, requireRole("admin"), async (req: any, res) => {
+    try {
+      const body = z.object({
+        title: z.string().max(100),
+        body: z.string().max(500),
+        url: z.string().optional(),
+        targetUserId: z.string().optional(),
+      }).parse(req.body);
+
+      const pushService = await import("./pushService");
+      let results;
+      if (body.targetUserId) {
+        results = await pushService.sendPushToUser(body.targetUserId, { title: body.title, body: body.body, url: body.url });
+      } else {
+        results = await pushService.sendPushToAll({ title: body.title, body: body.body, url: body.url });
+      }
+
+      await storage.createSwTelemetry({
+        userId: req.user!.id,
+        eventType: "push_sent",
+        eventData: { title: body.title, targetUserId: body.targetUserId, results },
+      });
+
+      res.json({ success: true, results });
+    } catch (error: any) {
+      res.status(400).json({ error: error?.message || "Failed to send push" });
+    }
+  });
+
+  app.post("/api/sw/telemetry", requireAuth, async (req: any, res) => {
+    try {
+      const body = z.object({
+        eventType: z.string().max(50),
+        eventData: z.any().optional(),
+      }).parse(req.body);
+
+      const entry = await storage.createSwTelemetry({
+        userId: req.user!.id,
+        eventType: body.eventType,
+        eventData: body.eventData || {},
+      });
+
+      res.json({ success: true, id: entry.id });
+    } catch (error: any) {
+      res.status(400).json({ error: error?.message || "Failed to record telemetry" });
+    }
+  });
+
+  app.get("/api/sw/telemetry", requireAuth, async (req: any, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const entries = await storage.getSwTelemetry(req.user!.id, limit);
+      res.json(entries);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch telemetry" });
+    }
+  });
+
+  app.get("/api/sw/status", requireAuth, async (req: any, res) => {
+    try {
+      const subs = await storage.getPushSubscriptionsByUser(req.user!.id);
+      const telemetry = await storage.getSwTelemetry(req.user!.id, 20);
+      res.json({
+        pushSubscriptions: subs.length,
+        recentTelemetry: telemetry,
+        vapidConfigured: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch status" });
+    }
+  });
+
   return httpServer;
 }
