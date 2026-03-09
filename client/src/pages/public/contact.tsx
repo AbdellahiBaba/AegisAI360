@@ -16,8 +16,10 @@ import { Mail, Clock, MapPin, Globe } from "lucide-react";
 import { SiGithub, SiLinkedin, SiX } from "react-icons/si";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function ContactPage() {
+  useDocumentTitle("Contact");
   const { t } = useTranslation();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);

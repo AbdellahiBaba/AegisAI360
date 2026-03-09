@@ -14,6 +14,7 @@ import {
   Clock, Link2, Globe, Hash, AtSign, Loader2, ArrowRight, Search, Download,
 } from "lucide-react";
 import { generateEmailAnalysisReportPDF } from "@/lib/reportGenerator";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface AuthResult {
   protocol: string;
@@ -137,6 +138,7 @@ function IOCIcon({ type }: { type: string }) {
 }
 
 export default function EmailAnalyzerPage() {
+  useDocumentTitle("Email Analyzer");
   const [rawEmail, setRawEmail] = useState("");
 
   const analyzeMutation = useMutation<AnalysisResult, Error>({

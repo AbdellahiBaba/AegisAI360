@@ -14,6 +14,7 @@ import {
   Calendar, Users, Lock, Loader2, ChevronDown, ChevronUp, ExternalLink, Download,
 } from "lucide-react";
 import { generateDarkWebReportPDF } from "@/lib/reportGenerator";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface BreachResult {
   name: string;
@@ -191,6 +192,7 @@ function BreachCard({ breach }: { breach: BreachResult }) {
 }
 
 export default function DarkWebMonitor() {
+  useDocumentTitle("Dark Web Monitor");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchType, setSearchType] = useState<"domain" | "email">("domain");
   const [result, setResult] = useState<DarkWebCheckResult | null>(null);

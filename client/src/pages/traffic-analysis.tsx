@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Wifi, AlertTriangle, Globe, Server, Radio, Loader2 } from "lucide-react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface CaptureData {
   protocols: { tcp: number; udp: number; icmp: number; other: number };
@@ -137,6 +138,7 @@ function ProtocolBar({ protocols }: { protocols: CaptureData["protocols"] }) {
 }
 
 export default function TrafficAnalysis() {
+  useDocumentTitle("Traffic Analysis");
   const { toast } = useToast();
   const [selectedAgent, setSelectedAgent] = useState<string>("");
   const [duration, setDuration] = useState<string>("30");

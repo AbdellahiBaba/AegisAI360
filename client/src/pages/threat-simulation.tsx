@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import {
   Play, Shield, Zap, Package, UserX, Bug, Cpu, Wifi,
   Target, Lock, Search, Mail, Database, Skull, Loader2,
@@ -33,6 +34,7 @@ const SCENARIO_META: Record<string, { icon: typeof Shield; categoryKey: string }
 };
 
 export default function ThreatSimulationPage() {
+  useDocumentTitle("Threat Simulation");
   const { t } = useTranslation();
   const { toast } = useToast();
   const [runningScenario, setRunningScenario] = useState<string | null>(null);

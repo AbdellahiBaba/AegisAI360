@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useTranslation } from "react-i18next";
 import { CreditCard, Zap, Shield, Crown, Check, ExternalLink, Loader2, AlertTriangle } from "lucide-react";
 import { useMemo } from "react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface BillingStatus {
   plan: string;
@@ -44,6 +45,7 @@ const planMeta: Record<string, { features: string[]; icon: React.ElementType; po
 };
 
 export default function Billing() {
+  useDocumentTitle("Billing");
   const { t } = useTranslation();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";

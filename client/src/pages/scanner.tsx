@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { ScanResult } from "@shared/schema";
 import { generateScannerReportPDF } from "@/lib/reportGenerator";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const severityColor: Record<string, string> = {
   critical: "bg-severity-critical text-white",
@@ -1188,6 +1189,7 @@ function XSSResults({ data, target }: { data: any; target: string }) {
 }
 
 export default function ScannerPage() {
+  useDocumentTitle("Scanner");
   const { t } = useTranslation();
   const { data: history, isLoading } = useQuery<ScanResult[]>({ queryKey: ["/api/scan/history"] });
   const [tabGroup, setTabGroup] = useState<"recon" | "attack">("recon");

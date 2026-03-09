@@ -22,6 +22,7 @@ import {
   Lock, Unlock, FileWarning, ExternalLink,
 } from "lucide-react";
 import { generateNetworkMonitorReportPDF } from "@/lib/reportGenerator";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -378,6 +379,7 @@ function AssetDetail({ device, onBack }: { device: NetworkDevice; onBack: () => 
 }
 
 export default function NetworkMonitorPage() {
+  useDocumentTitle("Network Monitor");
   const { t } = useTranslation();
   const { toast } = useToast();
   const [selectedDevice, setSelectedDevice] = useState<NetworkDevice | null>(null);

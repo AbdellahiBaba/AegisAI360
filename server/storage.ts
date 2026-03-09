@@ -62,6 +62,7 @@ export interface IStorage {
   createOrganization(org: InsertOrganization): Promise<Organization>;
   getOrganization(id: number): Promise<Organization | undefined>;
   getAllOrganizations(): Promise<Organization[]>;
+  getAllOrganizationsWithUserCount(): Promise<(Organization & { userCount: number })[]>;
   updateOrganization(id: number, data: Partial<InsertOrganization & { suspended: boolean }>): Promise<Organization | undefined>;
   getOrganizationUserCount(orgId: number): Promise<number>;
 
@@ -303,6 +304,31 @@ export class DatabaseStorage implements IStorage {
 
   async getAllOrganizations(): Promise<Organization[]> {
     return db.select().from(organizations).orderBy(desc(organizations.createdAt));
+  }
+
+  async getAllOrganizationsWithUserCount(): Promise<(Organization & { userCount: number })[]> {
+    const rows = await db.select({
+      id: organizations.id,
+      name: organizations.name,
+      slug: organizations.slug,
+      plan: organizations.plan,
+      stripeCustomerId: organizations.stripeCustomerId,
+      stripeSubscriptionId: organizations.stripeSubscriptionId,
+      subscriptionStatus: organizations.subscriptionStatus,
+      planId: organizations.planId,
+      maxUsers: organizations.maxUsers,
+      suspended: organizations.suspended,
+      defenseMode: organizations.defenseMode,
+      logRetentionDays: organizations.logRetentionDays,
+      auditRetentionDays: organizations.auditRetentionDays,
+      createdAt: organizations.createdAt,
+      userCount: sql<number>`count(${users.id})`.as("user_count"),
+    })
+      .from(organizations)
+      .leftJoin(users, eq(organizations.id, users.organizationId))
+      .groupBy(organizations.id)
+      .orderBy(desc(organizations.createdAt));
+    return rows.map(r => ({ ...r, userCount: Number(r.userCount) }));
   }
 
   async updateOrganization(id: number, data: Partial<InsertOrganization & { suspended: boolean }>): Promise<Organization | undefined> {
@@ -696,29 +722,30 @@ export class DatabaseStorage implements IStorage {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
-    const [totalResult] = await db.select({ count: count() }).from(securityEvents)
-      .where(and(eq(securityEvents.organizationId, orgId), gte(securityEvents.createdAt, oneDayAgo)));
-    const [prevResult] = await db.select({ count: count() }).from(securityEvents)
-      .where(and(eq(securityEvents.organizationId, orgId), gte(securityEvents.createdAt, twoDaysAgo), lt(securityEvents.createdAt, oneDayAgo)));
-    const [criticalResult] = await db.select({ count: count() }).from(securityEvents)
-      .where(and(eq(securityEvents.organizationId, orgId), eq(securityEvents.severity, "critical"), gte(securityEvents.createdAt, oneDayAgo)));
-    const [activeResult] = await db.select({ count: count() }).from(incidents)
-      .where(and(eq(incidents.organizationId, orgId), sql`${incidents.status} NOT IN ('resolved', 'closed')`));
-    const [assetResult] = await db.select({ count: count() }).from(assets)
-      .where(eq(assets.organizationId, orgId));
-    const [quarantineResult] = await db.select({ count: count() }).from(quarantineItems)
-      .where(and(eq(quarantineItems.organizationId, orgId), eq(quarantineItems.status, "quarantined")));
-    const [honeypotResult] = await db.select({ count: count() }).from(honeypotEvents)
-      .where(and(eq(honeypotEvents.organizationId, orgId), gte(honeypotEvents.createdAt, oneDayAgo)));
-    const [blockedResult] = await db.select({ count: count() }).from(firewallRules)
-      .where(and(eq(firewallRules.organizationId, orgId), eq(firewallRules.status, "active")));
-    const [rulesResult] = await db.select({ count: count() }).from(alertRules)
-      .where(and(eq(alertRules.organizationId, orgId), eq(alertRules.enabled, true)));
+    const [eventStats, activeResult, assetResult, quarantineResult, honeypotResult, blockedResult, rulesResult] = await Promise.all([
+      db.select({
+        totalEvents: sql<number>`count(*) filter (where ${securityEvents.createdAt} >= ${oneDayAgo})`.as("total_events"),
+        prevEvents: sql<number>`count(*) filter (where ${securityEvents.createdAt} >= ${twoDaysAgo} and ${securityEvents.createdAt} < ${oneDayAgo})`.as("prev_events"),
+        criticalAlerts: sql<number>`count(*) filter (where ${securityEvents.severity} = 'critical' and ${securityEvents.createdAt} >= ${oneDayAgo})`.as("critical_alerts"),
+      }).from(securityEvents).where(eq(securityEvents.organizationId, orgId)),
+      db.select({ count: count() }).from(incidents)
+        .where(and(eq(incidents.organizationId, orgId), sql`${incidents.status} NOT IN ('resolved', 'closed')`)),
+      db.select({ count: count() }).from(assets)
+        .where(eq(assets.organizationId, orgId)),
+      db.select({ count: count() }).from(quarantineItems)
+        .where(and(eq(quarantineItems.organizationId, orgId), eq(quarantineItems.status, "quarantined"))),
+      db.select({ count: count() }).from(honeypotEvents)
+        .where(and(eq(honeypotEvents.organizationId, orgId), gte(honeypotEvents.createdAt, oneDayAgo))),
+      db.select({ count: count() }).from(firewallRules)
+        .where(and(eq(firewallRules.organizationId, orgId), eq(firewallRules.status, "active"))),
+      db.select({ count: count() }).from(alertRules)
+        .where(and(eq(alertRules.organizationId, orgId), eq(alertRules.enabled, true))),
+    ]);
 
-    const totalEvents = totalResult?.count ?? 0;
-    const prevEvents = prevResult?.count ?? 0;
-    const criticalAlerts = criticalResult?.count ?? 0;
-    const activeIncidents = activeResult?.count ?? 0;
+    const totalEvents = Number(eventStats[0]?.totalEvents ?? 0);
+    const prevEvents = Number(eventStats[0]?.prevEvents ?? 0);
+    const criticalAlerts = Number(eventStats[0]?.criticalAlerts ?? 0);
+    const activeIncidents = activeResult[0]?.count ?? 0;
     const threatScore = Math.min(100, Math.round(criticalAlerts * 15 + totalEvents * 0.5));
 
     const eventTrend = prevEvents > 0 ? Math.round(((totalEvents - prevEvents) / prevEvents) * 100) : 0;
@@ -730,34 +757,41 @@ export class DatabaseStorage implements IStorage {
       threatScore,
       eventTrend,
       incidentTrend: 0,
-      assetCount: assetResult?.count ?? 0,
-      quarantineCount: quarantineResult?.count ?? 0,
-      honeypotActivity: honeypotResult?.count ?? 0,
-      blockedIps: blockedResult?.count ?? 0,
-      activeRules: rulesResult?.count ?? 0,
+      assetCount: assetResult[0]?.count ?? 0,
+      quarantineCount: quarantineResult[0]?.count ?? 0,
+      honeypotActivity: honeypotResult[0]?.count ?? 0,
+      blockedIps: blockedResult[0]?.count ?? 0,
+      activeRules: rulesResult[0]?.count ?? 0,
     };
   }
 
   async getEventTrend(orgId: number): Promise<{ time: string; events: number }[]> {
-    const hours = [];
-    for (let i = 23; i >= 0; i--) {
-      const time = new Date(Date.now() - i * 60 * 60 * 1000);
-      hours.push({
-        start: new Date(time.getFullYear(), time.getMonth(), time.getDate(), time.getHours()),
-        label: time.toLocaleTimeString("en-US", { hour: "2-digit", hour12: true }),
-      });
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() - 23);
+
+    const rows = await db.select({
+      hourBucket: sql<string>`date_trunc('hour', ${securityEvents.createdAt})`.as("hour_bucket"),
+      eventCount: count().as("event_count"),
+    }).from(securityEvents)
+      .where(and(
+        eq(securityEvents.organizationId, orgId),
+        gte(securityEvents.createdAt, twentyFourHoursAgo),
+      ))
+      .groupBy(sql`date_trunc('hour', ${securityEvents.createdAt})`)
+      .orderBy(sql`date_trunc('hour', ${securityEvents.createdAt})`);
+
+    const countsByHour = new Map<number, number>();
+    for (const row of rows) {
+      const ts = new Date(row.hourBucket).getTime();
+      countsByHour.set(ts, Number(row.eventCount));
     }
 
     const results: { time: string; events: number }[] = [];
-    for (const hour of hours) {
-      const end = new Date(hour.start.getTime() + 60 * 60 * 1000);
-      const [result] = await db.select({ count: count() }).from(securityEvents)
-        .where(and(
-          eq(securityEvents.organizationId, orgId),
-          gte(securityEvents.createdAt, hour.start),
-          sql`${securityEvents.createdAt} < ${end}`,
-        ));
-      results.push({ time: hour.label, events: result?.count ?? 0 });
+    for (let i = 23; i >= 0; i--) {
+      const time = new Date(Date.now() - i * 60 * 60 * 1000);
+      const bucketStart = new Date(time.getFullYear(), time.getMonth(), time.getDate(), time.getHours());
+      const label = time.toLocaleTimeString("en-US", { hour: "2-digit", hour12: true });
+      results.push({ time: label, events: countsByHour.get(bucketStart.getTime()) ?? 0 });
     }
     return results;
   }
@@ -768,13 +802,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPlatformStats(): Promise<{ totalOrgs: number; totalUsers: number; totalEvents: number }> {
-    const [orgs] = await db.select({ count: count() }).from(organizations);
-    const [usersCount] = await db.select({ count: count() }).from(users);
-    const [events] = await db.select({ count: count() }).from(securityEvents);
+    const [orgsResult, usersResult, eventsResult] = await Promise.all([
+      db.select({ count: count() }).from(organizations),
+      db.select({ count: count() }).from(users),
+      db.select({ count: count() }).from(securityEvents),
+    ]);
     return {
-      totalOrgs: orgs?.count ?? 0,
-      totalUsers: usersCount?.count ?? 0,
-      totalEvents: events?.count ?? 0,
+      totalOrgs: orgsResult[0]?.count ?? 0,
+      totalUsers: usersResult[0]?.count ?? 0,
+      totalEvents: eventsResult[0]?.count ?? 0,
     };
   }
 

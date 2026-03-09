@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { CyberRadar } from "@/components/cyber-network";
 import { CyberStats } from "@/components/cyber-stats";
 import { CyberAttackFlow } from "@/components/cyber-attack-flow";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import {
   Brain, Activity, ShieldCheck, Target, Siren, Globe,
   Monitor, Scan, Mail, Search, Key, Wifi,
@@ -63,6 +64,7 @@ const featureCategories = [
 ];
 
 export default function FeaturesPage() {
+  useDocumentTitle("Features");
   const { t } = useTranslation();
 
   return (

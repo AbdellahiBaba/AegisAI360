@@ -15,6 +15,7 @@ import { Plus, Clock, User, ShieldBan, Loader2, Play, FileDown } from "lucide-re
 import { generateIncidentReportPDF } from "@/lib/reportGenerator";
 import { useToast } from "@/hooks/use-toast";
 import type { Incident, ResponsePlaybook } from "@shared/schema";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const severityClasses: Record<string, string> = {
   critical: "bg-severity-critical text-white",
@@ -38,6 +39,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function Incidents() {
+  useDocumentTitle("Incidents");
   const { t } = useTranslation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [title, setTitle] = useState("");

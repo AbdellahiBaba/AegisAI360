@@ -13,6 +13,7 @@ import {
   Download, ArrowLeft, BarChart3, ListChecks, Search, FileDown,
 } from "lucide-react";
 import { generateCompliancePDF } from "@/lib/reportGenerator";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 function GradeIndicator({ grade, percentage, size = "lg" }: { grade: string; percentage: number; size?: "sm" | "lg" }) {
   const dim = size === "lg" ? 96 : 56;
@@ -378,5 +379,6 @@ function FrameworkDetail({ frameworkId, onBack }: { frameworkId: string; onBack:
 }
 
 export default function CompliancePage() {
+  useDocumentTitle("Compliance");
   return <FrameworkOverview />;
 }

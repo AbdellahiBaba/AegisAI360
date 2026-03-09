@@ -9,8 +9,10 @@ import { Loader2, ShieldCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AegisLogoLarge } from "@/components/logo";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function AuthPage() {
+  useDocumentTitle("Sign In");
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");

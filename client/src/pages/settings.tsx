@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import type { Organization, Invite, NotificationChannel, ApiKey, SessionMetadata } from "@shared/schema";
 import { useState, useEffect } from "react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const roleColors: Record<string, string> = {
   admin: "bg-severity-critical text-white",
@@ -30,6 +31,7 @@ const roleColors: Record<string, string> = {
 };
 
 export default function SettingsPage() {
+  useDocumentTitle("Settings");
   const { t } = useTranslation();
   const { toast } = useToast();
   const { user } = useAuth();

@@ -10,6 +10,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Shield, Plus, Trash2, Zap, Clock, AlertTriangle, X, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { AlertRule } from "@shared/schema";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const severityClasses: Record<string, string> = {
   critical: "bg-severity-critical text-white",
@@ -67,6 +68,7 @@ function parseActions(actionsStr: string): string[] {
 }
 
 export default function AlertRules() {
+  useDocumentTitle("Alert Rules");
   return <AlertRulesContent />;
 }
 

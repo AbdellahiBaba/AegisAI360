@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import {
   Terminal, Loader2, Copy, Check, AlertTriangle, Shield,
   Code, Globe, Cpu, Lock, FileCode, Braces,
@@ -673,6 +674,7 @@ function MeterpreterTab() {
 }
 
 export default function PayloadGeneratorPage() {
+  useDocumentTitle("Payload Generator");
   return (
     <div className="p-4 space-y-4 max-w-5xl mx-auto">
       <div className="flex items-center gap-3 flex-wrap">

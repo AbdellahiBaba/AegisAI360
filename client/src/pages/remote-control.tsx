@@ -21,6 +21,7 @@ import {
   BatteryMedium, WifiIcon, Timer,
   Bell, BellRing, HardDrive, RefreshCw, Anchor,
 } from "lucide-react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import {
   getSwStatus, requestNotificationPermission, subscribeToPush,
   unsubscribeFromPush, getPushSubscriptionStatus, triggerBackgroundSync,
@@ -78,6 +79,7 @@ interface SessionEvent {
 }
 
 export default function RemoteControlPage() {
+  useDocumentTitle("Remote Control");
   const { toast } = useToast();
   const [sessionName, setSessionName] = useState("");
   const [expiryMinutes, setExpiryMinutes] = useState("60");
@@ -111,8 +113,8 @@ export default function RemoteControlPage() {
   const eventIdRef = useRef(0);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const latestAudioTrackRef = useRef<MediaStreamTrack | null>(null);
   const videoRecorderRef = useRef<MediaRecorder | null>(null);

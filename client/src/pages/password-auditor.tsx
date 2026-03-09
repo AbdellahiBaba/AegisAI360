@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { generatePasswordAuditReportPDF } from "@/lib/reportGenerator";
 import { useToast } from "@/hooks/use-toast";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface AnalysisResult {
   score: number;
@@ -92,6 +93,7 @@ function getGradeBadgeVariant(grade: string): "default" | "secondary" | "destruc
 }
 
 export default function PasswordAuditorPage() {
+  useDocumentTitle("Password Auditor");
   const { toast } = useToast();
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);

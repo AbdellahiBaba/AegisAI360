@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import { Clock, Download, Filter, User, Shield, FileText, AlertTriangle, Settings } from "lucide-react";
 import type { AuditLog } from "@shared/schema";
 import { useState, useMemo } from "react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const actionIcons: Record<string, React.ElementType> = {
   create_incident: AlertTriangle,
@@ -51,6 +52,7 @@ function formatTimeAgo(dateStr: string) {
 }
 
 export default function Forensics() {
+  useDocumentTitle("Forensics");
   const { t } = useTranslation();
   const [actionFilter, setActionFilter] = useState("all");
   const [search, setSearch] = useState("");

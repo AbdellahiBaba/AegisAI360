@@ -1,9 +1,11 @@
 import { useTranslation } from "react-i18next";
 import { PublicLayout } from "@/components/public-layout";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const sectionKeys = ["Accept", "Service", "Accounts", "Use", "Ip", "Liability", "Termination", "Law", "Contact"];
 
 export default function TermsPage() {
+  useDocumentTitle("Terms of Service");
   const { t } = useTranslation();
 
   return (

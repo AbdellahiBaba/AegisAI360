@@ -25,6 +25,7 @@ import {
 } from "recharts";
 import type { SecurityEvent, ResponseAction } from "@shared/schema";
 import { ThreatMap } from "@/components/threat-map";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface DashboardStats {
   totalEvents: number;
@@ -564,6 +565,7 @@ interface BillingStatus {
 }
 
 export default function Dashboard() {
+  useDocumentTitle("Dashboard");
   const { t } = useTranslation();
   const { user } = useAuth();
   const [, navigate] = useLocation();

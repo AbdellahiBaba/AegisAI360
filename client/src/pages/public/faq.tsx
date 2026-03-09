@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { PublicLayout } from "@/components/public-layout";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import {
   Accordion,
   AccordionContent,
@@ -29,6 +30,7 @@ const faqKeys = [
 ];
 
 export default function FaqPage() {
+  useDocumentTitle("FAQ");
   const { t } = useTranslation();
 
   return (

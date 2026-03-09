@@ -62,7 +62,8 @@ export class AlertEngine {
       }
 
       return true;
-    } catch {
+    } catch (err) {
+      console.error("Error matching alert rule conditions:", err);
       return false;
     }
   }
@@ -95,7 +96,7 @@ export class AlertEngine {
         if (org && (org as any).defenseMode) {
           defenseMode = (org as any).defenseMode;
         }
-      } catch {}
+      } catch (err) { console.error("Failed to fetch organization defense mode:", err); }
 
       for (const rawAction of actions) {
         const action = typeof rawAction === "string" ? rawAction : rawAction.type;
@@ -164,7 +165,7 @@ export class AlertEngine {
                   createdBy: null,
                   status: "active",
                 });
-              } catch {}
+              } catch (err) { console.error("Failed to create firewall rule for block_source:", err); }
             }
             break;
 
@@ -181,7 +182,7 @@ export class AlertEngine {
                   status: "quarantined",
                   quarantinedBy: null,
                 });
-              } catch {}
+              } catch (err) { console.error("Failed to create quarantine item:", err); }
             }
             break;
 
@@ -197,7 +198,7 @@ export class AlertEngine {
                   createdBy: null,
                   status: "active",
                 });
-              } catch {}
+              } catch (err) { console.error("Failed to create firewall rule for auto_sinkhole:", err); }
             }
             break;
 

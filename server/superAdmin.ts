@@ -18,13 +18,7 @@ export function createSuperAdminRouter() {
 
   router.get("/organizations", async (_req: Request, res: Response) => {
     try {
-      const orgs = await storage.getAllOrganizations();
-      const orgsWithStats = await Promise.all(
-        orgs.map(async (org) => {
-          const userCount = await storage.getOrganizationUserCount(org.id);
-          return { ...org, userCount };
-        })
-      );
+      const orgsWithStats = await storage.getAllOrganizationsWithUserCount();
       res.json(orgsWithStats);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch organizations" });

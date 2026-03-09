@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { FileWarning, RotateCcw, Trash2, ShieldOff, Lock } from "lucide-react";
 import type { QuarantineItem } from "@shared/schema";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const statusColors: Record<string, string> = {
   quarantined: "bg-severity-critical text-white",
@@ -25,6 +26,7 @@ function formatTime(dateStr: string) {
 }
 
 export default function Quarantine() {
+  useDocumentTitle("Quarantine");
   const { t } = useTranslation();
   const { toast } = useToast();
   const { data: items, isLoading } = useQuery<QuarantineItem[]>({ queryKey: ["/api/quarantine"] });

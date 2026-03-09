@@ -1,9 +1,11 @@
 import { useTranslation } from "react-i18next";
 import { PublicLayout } from "@/components/public-layout";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const sectionKeys = ["Collect", "Use", "Security", "Retention", "ThirdParty", "Rights", "Contact"];
 
 export default function PrivacyPage() {
+  useDocumentTitle("Privacy Policy");
   const { t } = useTranslation();
 
   return (

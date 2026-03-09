@@ -10,6 +10,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Bug, Globe, Terminal, Radio, MapPin, Wifi, ShieldBan, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { HoneypotEvent } from "@shared/schema";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const countryCodes: Record<string, string> = {
   CN: "CN", RU: "RU", US: "US", KR: "KR", BR: "BR",
@@ -39,6 +40,7 @@ function formatTimeAgo(dateStr: string) {
 }
 
 export default function Honeypot() {
+  useDocumentTitle("Honeypot");
   const { t } = useTranslation();
   const { toast } = useToast();
 

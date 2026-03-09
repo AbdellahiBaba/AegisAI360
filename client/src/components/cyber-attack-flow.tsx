@@ -53,7 +53,7 @@ export function CyberAttackFlow() {
   }, [cycle]);
 
   return (
-    <div className="w-full rounded-md border border-border/50 bg-black/80 backdrop-blur-sm overflow-hidden" data-testid="cyber-attack-flow">
+    <div className="w-full rounded-md border border-border/50 bg-black/80 backdrop-blur-sm overflow-hidden" data-testid="cyber-attack-flow" role="figure" aria-label="Kill chain defense visualization showing attack progression through MITRE ATT&CK stages and defense intervention points">
       <div className="flex items-center gap-2 px-4 py-2 border-b border-border/30 bg-black/50">
         <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
         <span className="text-[10px] font-mono tracking-[0.2em] uppercase text-red-400">Kill Chain Defense</span>
@@ -82,7 +82,8 @@ export function CyberAttackFlow() {
                     }}
                   >
                     {isBlocked ? (
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="animate-pulse">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="animate-pulse" role="img" aria-label="Attack blocked at this stage">
+                        <title>Blocked</title>
                         <circle cx="12" cy="12" r="10" stroke="#ef4444" strokeWidth="2" />
                         <line x1="8" y1="8" x2="16" y2="16" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" />
                         <line x1="16" y1="8" x2="8" y2="16" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" />

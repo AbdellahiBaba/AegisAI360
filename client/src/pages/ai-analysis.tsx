@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useTranslation } from "react-i18next";
 import { Brain, Send, Loader2, Trash2, Plus } from "lucide-react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface Message {
   role: "user" | "assistant";
@@ -18,6 +19,7 @@ interface Conversation {
 }
 
 export default function AiAnalysis() {
+  useDocumentTitle("AI Analysis");
   const { t } = useTranslation();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<number | null>(null);

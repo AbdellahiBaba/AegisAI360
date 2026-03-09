@@ -3,6 +3,7 @@ import { PublicLayout } from "@/components/public-layout";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Shield, Lock, Server, Bug, CheckCircle } from "lucide-react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const certifications = [
   { key: "nist", label: "NIST CSF" },
@@ -14,6 +15,7 @@ const certifications = [
 ];
 
 export default function SecurityPage() {
+  useDocumentTitle("Security");
   const { t } = useTranslation();
 
   return (

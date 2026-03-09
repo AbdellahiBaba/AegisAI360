@@ -13,6 +13,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Search, Filter, Clock, Globe, Server, ArrowRight, ShieldBan, AlertTriangle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { SecurityEvent } from "@shared/schema";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const severityClasses: Record<string, string> = {
   critical: "bg-severity-critical text-white",
@@ -40,6 +41,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function Alerts() {
+  useDocumentTitle("Security Alerts");
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");

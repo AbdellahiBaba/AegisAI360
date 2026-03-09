@@ -497,7 +497,7 @@ export function createAgentRouter(): Router {
               try {
                 const params = JSON.parse(existingCmd.params);
                 if (params.scanId) scanId = params.scanId;
-              } catch {}
+              } catch (err) { console.error("Failed to parse command params:", err); }
             }
 
             if (scanId) {

@@ -8,8 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Download, Copy, Key, Monitor, Apple, Terminal as TerminalIcon, CheckCircle, AlertCircle, Settings, Shield } from "lucide-react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function DownloadAgent() {
+  useDocumentTitle("Download Agent");
   const { t } = useTranslation();
   const { toast } = useToast();
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);

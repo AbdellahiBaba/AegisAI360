@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Check, Shield, Zap, Crown, LogOut, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function ChoosePlan() {
+  useDocumentTitle("Choose Plan");
   const { t } = useTranslation();
   const { user, logoutMutation } = useAuth();
   const [, navigate] = useLocation();

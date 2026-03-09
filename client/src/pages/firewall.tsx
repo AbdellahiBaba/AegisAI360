@@ -15,6 +15,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Search, Plus, Shield, Trash2, ShieldOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { FirewallRule } from "@shared/schema";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const ruleTypeBadgeClasses: Record<string, string> = {
   ip_block: "bg-severity-critical/20 text-severity-critical",
@@ -34,6 +35,7 @@ function formatDate(dateStr: string | null) {
 }
 
 export default function Firewall() {
+  useDocumentTitle("Firewall");
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");

@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import {
   Key, Hash, Shield, Loader2, CheckCircle2, XCircle,
   AlertTriangle, Info, Lock, Eye, EyeOff,
@@ -422,6 +423,7 @@ function PasswordAnalyzerSection() {
 }
 
 export default function HashToolsPage() {
+  useDocumentTitle("Hash Tools");
   const { t } = useTranslation();
 
   return (

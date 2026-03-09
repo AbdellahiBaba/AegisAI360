@@ -2,11 +2,13 @@ import { useTranslation } from "react-i18next";
 import { PublicLayout } from "@/components/public-layout";
 import { Card } from "@/components/ui/card";
 import { Shield, Lightbulb, Award, Scale } from "lucide-react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const valueIcons = [Shield, Lightbulb, Award, Scale];
 const valueKeys = ["Protection", "Innovation", "Excellence", "Integrity"];
 
 export default function AboutPage() {
+  useDocumentTitle("About");
   const { t } = useTranslation();
 
   return (

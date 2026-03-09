@@ -355,7 +355,7 @@ function detectPhishingIndicators(
         });
         break;
       }
-    } catch { }
+    } catch (err) { console.error("Error checking shortened URL:", err); }
   }
 
   const ipUrlRegex = /https?:\/\/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/gi;
@@ -452,7 +452,7 @@ function extractIOCs(rawContent: string): ExtractedIOC[] {
         seen.add(domain);
         iocs.push({ type: "domain", value: domain, context: "Domain extracted from URL" });
       }
-    } catch { }
+    } catch (err) { console.error("Error parsing URL for IOC extraction:", err); }
   }
 
   return iocs;
@@ -571,7 +571,7 @@ export function analyzeEmail(rawContent: string): EmailAnalysisResult {
         else if (diffSec < 3600) totalDelay = `${Math.floor(diffSec / 60)}m ${Math.round(diffSec % 60)}s`;
         else totalDelay = `${Math.floor(diffSec / 3600)}h ${Math.floor((diffSec % 3600) / 60)}m`;
       }
-    } catch { }
+    } catch (err) { console.error("Error calculating email hop delay:", err); }
   }
 
   return {

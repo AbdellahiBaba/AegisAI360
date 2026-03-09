@@ -100,7 +100,7 @@ export function createIngestionRouter(broadcast: (data: unknown) => void, evalua
       return null;
     }
 
-    storage.touchApiKey(key.id).catch(() => {});
+    storage.touchApiKey(key.id).catch((err) => console.error("Failed to touch API key:", err));
     return key.organizationId;
   }
 
@@ -134,13 +134,14 @@ export function createIngestionRouter(broadcast: (data: unknown) => void, evalua
 
         const stored = await storage.createSecurityEvent(event);
         broadcast({ type: "new_event", event: stored, orgId });
-        if (evaluateAlertRules) evaluateAlertRules(stored);
+        if (evaluateAlertRules) Promise.resolve(evaluateAlertRules(stored)).catch(console.error);
         results.push(stored);
       }
 
       res.status(201).json({ ingested: results.length, events: results });
     } catch (error: any) {
-      res.status(500).json({ error: "Ingestion failed", detail: error.message });
+      console.error("[ingestion] Event ingestion failed:", error);
+      res.status(500).json({ error: "Ingestion failed" });
     }
   });
 
@@ -175,13 +176,14 @@ export function createIngestionRouter(broadcast: (data: unknown) => void, evalua
 
         const stored = await storage.createSecurityEvent(event);
         broadcast({ type: "new_event", event: stored, orgId });
-        if (evaluateAlertRules) evaluateAlertRules(stored);
+        if (evaluateAlertRules) Promise.resolve(evaluateAlertRules(stored)).catch(console.error);
         results.push(stored);
       }
 
       res.status(201).json({ ingested: results.length, events: results });
     } catch (error: any) {
-      res.status(500).json({ error: "Syslog ingestion failed", detail: error.message });
+      console.error("[ingestion] Syslog ingestion failed:", error);
+      res.status(500).json({ error: "Syslog ingestion failed" });
     }
   });
 
@@ -213,11 +215,12 @@ export function createIngestionRouter(broadcast: (data: unknown) => void, evalua
 
       const stored = await storage.createSecurityEvent(event);
       broadcast({ type: "new_event", event: stored, orgId });
-      if (evaluateAlertRules) evaluateAlertRules(stored);
+      if (evaluateAlertRules) Promise.resolve(evaluateAlertRules(stored)).catch(console.error);
 
       res.status(201).json({ ingested: 1, event: stored });
     } catch (error: any) {
-      res.status(500).json({ error: "Webhook ingestion failed", detail: error.message });
+      console.error("[ingestion] Webhook ingestion failed:", error);
+      res.status(500).json({ error: "Webhook ingestion failed" });
     }
   });
 

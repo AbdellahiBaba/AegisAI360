@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, bigint, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, bigint, timestamp, boolean, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -52,7 +52,10 @@ export const securityEvents = pgTable("security_events", {
   tactic: text("tactic"),
   mitigated: boolean("mitigated").notNull().default(false),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (table) => [
+  index("idx_security_events_org_id").on(table.organizationId),
+  index("idx_security_events_created_at").on(table.createdAt),
+]);
 
 export const incidents = pgTable("incidents", {
   id: serial("id").primaryKey(),
@@ -64,7 +67,9 @@ export const incidents = pgTable("incidents", {
   assignee: text("assignee"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (table) => [
+  index("idx_incidents_org_id").on(table.organizationId),
+]);
 
 export const threatIntel = pgTable("threat_intel", {
   id: serial("id").primaryKey(),
@@ -113,7 +118,9 @@ export const assets = pgTable("assets", {
   status: text("status").notNull().default("online"),
   riskScore: integer("risk_score").notNull().default(0),
   lastSeen: timestamp("last_seen").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (table) => [
+  index("idx_assets_org_id").on(table.organizationId),
+]);
 
 export const auditLogs = pgTable("audit_logs", {
   id: serial("id").primaryKey(),
@@ -125,7 +132,10 @@ export const auditLogs = pgTable("audit_logs", {
   details: text("details"),
   ipAddress: text("ip_address"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (table) => [
+  index("idx_audit_logs_org_id").on(table.organizationId),
+  index("idx_audit_logs_created_at").on(table.createdAt),
+]);
 
 export const honeypotEvents = pgTable("honeypot_events", {
   id: serial("id").primaryKey(),
@@ -214,7 +224,11 @@ export const notifications = pgTable("notifications", {
   read: boolean("read").notNull().default(false),
   actionUrl: text("action_url"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (table) => [
+  index("idx_notifications_org_id").on(table.organizationId),
+  index("idx_notifications_user_id").on(table.userId),
+  index("idx_notifications_read").on(table.read),
+]);
 
 export const threatFeedConfigs = pgTable("threat_feed_configs", {
   id: serial("id").primaryKey(),
@@ -443,7 +457,10 @@ export const agents = pgTable("agents", {
   ramUsage: integer("ram_usage"),
   telemetry: jsonb("telemetry"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (table) => [
+  index("idx_agents_org_id").on(table.organizationId),
+  index("idx_agents_device_token").on(table.deviceToken),
+]);
 
 export const insertAgentSchema = createInsertSchema(agents).omit({ id: true, createdAt: true, lastSeen: true });
 export type InsertAgent = z.infer<typeof insertAgentSchema>;
@@ -451,14 +468,17 @@ export type Agent = typeof agents.$inferSelect;
 
 export const agentCommands = pgTable("agent_commands", {
   id: serial("id").primaryKey(),
-  agentId: integer("agent_id").notNull().references(() => agents.id),
+  agentId: integer("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
   command: text("command").notNull(),
   params: text("params"),
   status: text("status").notNull().default("pending"),
   result: text("result"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   executedAt: timestamp("executed_at"),
-});
+}, (table) => [
+  index("idx_agent_commands_agent_id").on(table.agentId),
+  index("idx_agent_commands_status").on(table.status),
+]);
 
 export const insertAgentCommandSchema = createInsertSchema(agentCommands).omit({ id: true, createdAt: true, executedAt: true, result: true });
 export type InsertAgentCommand = z.infer<typeof insertAgentCommandSchema>;
@@ -487,7 +507,10 @@ export const usageTracking = pgTable("usage_tracking", {
   commandsExecuted: integer("commands_executed").notNull().default(0),
   terminalCommandsExecuted: integer("terminal_commands_executed").notNull().default(0),
   threatIntelQueries: integer("threat_intel_queries").notNull().default(0),
-});
+}, (table) => [
+  index("idx_usage_tracking_org_id").on(table.organizationId),
+  index("idx_usage_tracking_date").on(table.date),
+]);
 
 export const insertUsageTrackingSchema = createInsertSchema(usageTracking).omit({ id: true });
 export type InsertUsageTracking = z.infer<typeof insertUsageTrackingSchema>;
@@ -584,7 +607,7 @@ export type SessionMetadata = typeof sessionsMetadata.$inferSelect;
 
 export const threatIntelKeys = pgTable("threat_intel_keys", {
   id: serial("id").primaryKey(),
-  organizationId: integer("organization_id").notNull(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
   service: text("service").notNull(),
   apiKey: text("api_key").notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),

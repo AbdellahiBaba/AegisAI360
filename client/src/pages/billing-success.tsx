@@ -5,8 +5,10 @@ import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, Loader2 } from "lucide-react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function BillingSuccess() {
+  useDocumentTitle("Billing Success");
   const [, navigate] = useLocation();
 
   const sessionId = new URLSearchParams(window.location.search).get("session_id") || "";

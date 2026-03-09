@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Search, Shield, ShieldCheck, ShieldX, Clock, Link2, AlertTriangle, CheckCircle, Info, Lock, Download } from "lucide-react";
 import { generateSSLInspectorReportPDF } from "@/lib/reportGenerator";
 import { useToast } from "@/hooks/use-toast";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface Finding {
   id: string;
@@ -65,6 +66,7 @@ const severityConfig: Record<string, { color: string; icon: typeof AlertTriangle
 };
 
 export default function SSLInspectorPage() {
+  useDocumentTitle("SSL Inspector");
   const [domain, setDomain] = useState("");
   const { toast } = useToast();
 

@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import type { SupportTicket } from "@shared/schema";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import {
   Shield,
   Building2,
@@ -118,6 +119,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function SuperAdmin() {
+  useDocumentTitle("Super Admin");
   const { t } = useTranslation();
   const { user } = useAuth();
   const { toast } = useToast();

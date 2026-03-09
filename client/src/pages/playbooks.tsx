@@ -15,8 +15,10 @@ import { useToast } from "@/hooks/use-toast";
 import { BookOpen, Plus, Zap, Play, AlertTriangle, CheckCircle } from "lucide-react";
 import type { ResponsePlaybook } from "@shared/schema";
 import { useState } from "react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function Playbooks() {
+  useDocumentTitle("Playbooks");
   const { t } = useTranslation();
   const { toast } = useToast();
   const [showAddDialog, setShowAddDialog] = useState(false);

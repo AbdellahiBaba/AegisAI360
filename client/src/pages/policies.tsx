@@ -15,6 +15,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Plus, Shield, Eye, Lock, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { SecurityPolicy } from "@shared/schema";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const tierConfig: Record<string, { labelKey: string; icon: React.ElementType; className: string }> = {
   observe: { labelKey: "policies.observe", icon: Eye, className: "bg-severity-info text-white" },
@@ -24,6 +25,7 @@ const tierConfig: Record<string, { labelKey: string; icon: React.ElementType; cl
 };
 
 export default function Policies() {
+  useDocumentTitle("Policies");
   const { t } = useTranslation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [name, setName] = useState("");

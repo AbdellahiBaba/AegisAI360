@@ -47,6 +47,17 @@ The frontend uses React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Recharts, Wo
 ### System Design Choices
 The architecture is modular (`server/`, `client/`, `shared/`). Authentication uses Passport-local with scrypt and optional TOTP. Data access is scoped by `organizationId` for multi-tenancy. Agent authentication is token-based, and the remote terminal ensures safety via command whitelisting/blacklisting.
 
+### Performance & Security Enhancements (Applied)
+- **WebSocket Broadcast Scoping**: Broadcasts are org-scoped via `clientOrgMap` WeakMap populated from session cookies during WS upgrade. Prevents cross-org data leakage.
+- **Database Indexes**: 15 indexes added across 8 tables (`security_events`, `audit_logs`, `incidents`, `agents`, `agent_commands`, `notifications`, `assets`, `usage_tracking`) on frequently queried columns.
+- **N+1 Query Optimization**: `getEventTrend` consolidated from 24 queries to 1 using `date_trunc`. `getDashboardStats` reduced from 9 sequential to 1+6 parallel. Super admin org listing uses single JOIN query.
+- **Error Handling**: All 30+ empty `catch {}` blocks in server code replaced with `console.error` logging. Fire-and-forget promises have `.catch()` handlers.
+- **Ingestion API**: Error responses sanitized to not leak `error.message` internals.
+- **Foreign Key Constraints**: Added to `threatIntelKeys.organizationId`, `agentCommands.agentId` (with `ON DELETE CASCADE`).
+- **Dynamic Page Titles**: `useDocumentTitle` hook applied to all 58 pages for SEO.
+- **SVG Accessibility**: `aria-label` and `<title>` elements added to all SVG visualizations.
+- **Session Middleware Export**: `sessionMiddleware` exported from `server/auth.ts` for WS upgrade session parsing.
+
 ## External Dependencies
 - **OpenAI**: AI-powered threat analysis.
 - **Stripe**: Subscription management and billing.

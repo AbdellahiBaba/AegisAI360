@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { Monitor, Server, Shield, Wifi, HardDrive, Plus, AlertTriangle } from "lucide-react";
 import type { Asset } from "@shared/schema";
 import { useState } from "react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const typeIcons: Record<string, React.ElementType> = {
   server: Server,
@@ -88,6 +89,7 @@ function AssetNode({ asset }: { asset: Asset }) {
 }
 
 export default function NetworkMap() {
+  useDocumentTitle("Network Map");
   const { t } = useTranslation();
   const { toast } = useToast();
   const [showAddDialog, setShowAddDialog] = useState(false);

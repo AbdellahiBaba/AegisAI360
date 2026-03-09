@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { CyberStats } from "@/components/cyber-stats";
 import { CyberAttackFlow } from "@/components/cyber-attack-flow";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import {
   Shield, Brain, Activity, Target, Bug, Database,
   Lock, Zap, Eye, ChevronRight, ArrowRight,
@@ -219,6 +220,7 @@ const trustIndicatorKeys = [
 ];
 
 export default function LandingPage() {
+  useDocumentTitle("Welcome");
   const { t } = useTranslation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 

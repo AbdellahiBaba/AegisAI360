@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CalendarClock, Plus, Trash2, Network, ShieldCheck, Eye, Lock } from "lucide-react";
 import type { ScheduledScan } from "@shared/schema";
 import { useState } from "react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const scanTypeLabels: Record<string, string> = {
   network_scan: "Network Scan",
@@ -37,6 +38,7 @@ const frequencyLabels: Record<string, string> = {
 };
 
 export default function ScheduledScansPage() {
+  useDocumentTitle("Scheduled Scans");
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
 

@@ -60,7 +60,8 @@ function WorldMapSVG({ origins }: { origins: AttackOrigin[] }) {
   ];
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full" data-testid="threat-map-svg">
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full" data-testid="threat-map-svg" role="img" aria-label={`World threat map showing ${origins.length} attack origins across global locations`}>
+      <title>Global Threat Map</title>
       <rect width={width} height={height} fill="transparent" />
 
       <defs>

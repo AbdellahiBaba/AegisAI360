@@ -14,6 +14,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Plus, Search, Globe, Hash, Link, Mail, Server, ShieldBan, Loader2, Scan, AlertTriangle, CheckCircle, XCircle, ExternalLink, KeyRound } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { ThreatIntel } from "@shared/schema";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const severityClasses: Record<string, string> = {
   critical: "bg-severity-critical text-white",
@@ -328,6 +329,7 @@ function ThreatLookupSection() {
 }
 
 export default function ThreatIntelPage() {
+  useDocumentTitle("Threat Intelligence");
   const { t } = useTranslation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");

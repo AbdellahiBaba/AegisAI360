@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CyberTerminal } from "@/components/cyber-terminal";
 import { CyberNetwork } from "@/components/cyber-network";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import {
   Shield, Brain, Activity, Target, Bug, Lock, Zap, Eye,
   Monitor, Scan, Mail, Search, Key, Wifi, Database,
@@ -83,6 +84,7 @@ function FaqItem({ qKey, aKey }: { qKey: string; aKey: string }) {
 }
 
 export default function GuidePage() {
+  useDocumentTitle("Guide");
   const { t } = useTranslation();
 
   return (

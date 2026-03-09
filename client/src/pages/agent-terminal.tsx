@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Terminal, ArrowLeft, AlertTriangle, Send } from "lucide-react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface TerminalEntry {
   id: number;
@@ -18,6 +19,7 @@ interface TerminalEntry {
 }
 
 export default function AgentTerminal() {
+  useDocumentTitle("Agent Terminal");
   const params = useParams<{ agentId: string }>();
   const agentId = parseInt(params.agentId || "0");
   const [, navigate] = useLocation();

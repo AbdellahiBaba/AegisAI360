@@ -18,6 +18,7 @@ import {
   Grid3X3, Mail, Link, FileText,
 } from "lucide-react";
 import { generateTrojanAnalysisReportPDF } from "@/lib/reportGenerator";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const severityColor: Record<string, string> = {
   critical: "bg-severity-critical text-white",
@@ -1134,6 +1135,7 @@ function ThreatProfileTab() {
 }
 
 export default function TrojanAnalyzerPage() {
+  useDocumentTitle("Trojan Analyzer");
   const { t } = useTranslation();
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-5xl mx-auto">

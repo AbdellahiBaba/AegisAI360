@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import {
   Loader2, Shield, Radar, Network, Bug, Search, Plus, RefreshCw,
   AlertTriangle, CheckCircle, Clock, Monitor, Wifi,
@@ -531,6 +532,7 @@ function VulnScannerTab() {
 }
 
 export default function NetworkSecurityPage() {
+  useDocumentTitle("Network Security");
   const [activeTab, setActiveTab] = useState<TabId>("rogue");
 
   return (

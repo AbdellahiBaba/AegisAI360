@@ -160,7 +160,8 @@ export function CyberNetwork() {
         <span className="text-[10px] font-mono tracking-[0.2em] uppercase text-emerald-400">Network Topology</span>
         <span className="text-[10px] font-mono text-muted-foreground ml-auto">{nodes.length} nodes</span>
       </div>
-      <svg viewBox="0 0 100 100" className="w-full h-auto" style={{ maxHeight: 340 }}>
+      <svg viewBox="0 0 100 100" className="w-full h-auto" style={{ maxHeight: 340 }} role="img" aria-label="Network topology visualization showing nodes, connections, and live packet traffic with attack detection">
+        <title>Network Topology</title>
         <defs>
           <filter id="glow">
             <feGaussianBlur stdDeviation="0.8" result="blur" />
@@ -309,7 +310,8 @@ export function CyberRadar() {
         <span className="text-[10px] font-mono text-muted-foreground ml-auto">{blips.length} detections</span>
       </div>
       <div className="flex items-center justify-center p-4">
-        <svg viewBox="0 0 100 100" className="w-full max-w-[280px] h-auto">
+        <svg viewBox="0 0 100 100" className="w-full max-w-[280px] h-auto" role="img" aria-label="Threat radar visualization displaying detected threats by severity and distance">
+          <title>Threat Radar</title>
           <defs>
             <radialGradient id="radarBg">
               <stop offset="0%" stopColor="#0a1628" />

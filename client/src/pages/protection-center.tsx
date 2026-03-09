@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import {
   Shield, ShieldCheck, ShieldAlert, ShieldOff,
   Flame, Bell, Radar, AlertTriangle, CheckCircle2,
@@ -108,6 +109,7 @@ function getCommandStatusBadge(status: string, t: (key: string) => string) {
 }
 
 export default function ProtectionCenter() {
+  useDocumentTitle("Protection Center");
   const { t } = useTranslation();
   const { toast } = useToast();
   const [activateStep, setActivateStep] = useState(-1);

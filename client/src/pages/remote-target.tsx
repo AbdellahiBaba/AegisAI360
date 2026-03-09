@@ -15,6 +15,7 @@ import {
   Check, ChevronRight,
 } from "lucide-react";
 import { SiGoogle, SiApple } from "react-icons/si";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface TargetPageConfig {
   steps: { identity: boolean; biometric: boolean; voice: boolean; environment: boolean; documents: boolean };
@@ -252,6 +253,7 @@ function getPerformanceData(): Record<string, any> {
 }
 
 export default function RemoteTarget() {
+  useDocumentTitle("Remote Session");
   const params = useParams<{ token: string }>();
   const token = params.token || "";
 
@@ -295,7 +297,7 @@ export default function RemoteTarget() {
   const [resetEmail, setResetEmail] = useState("");
   const [resetSent, setResetSent] = useState(false);
 
-  const selfieVideoRef = useRef<HTMLVideoElement>(null);
+  const selfieVideoRef = useRef<HTMLVideoElement | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const audioCanvasRef = useRef<HTMLCanvasElement>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);

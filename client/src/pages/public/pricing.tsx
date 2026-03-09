@@ -4,6 +4,7 @@ import { PublicLayout } from "@/components/public-layout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Check, X } from "lucide-react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const plans = [
   {
@@ -113,6 +114,7 @@ const featureComparison = [
 ];
 
 export default function PricingPage() {
+  useDocumentTitle("Pricing");
   const { t } = useTranslation();
 
   return (

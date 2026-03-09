@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Monitor, Cpu, MemoryStick, Wifi, WifiOff, Terminal, Send, RefreshCw, Clock, Activity, ArrowDown, ArrowUp, HardDrive, Globe, Server, Layers, Info, FileSearch, AlertTriangle, FileText, Shield } from "lucide-react";
 import { useLocation } from "wouter";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const COMMANDS = [
   { value: "run_system_scan", labelKey: "endpoints.cmdSystemScan" },
@@ -480,6 +481,7 @@ function FileScanResults({ commands }: { commands: any[] | undefined }) {
 }
 
 export default function Endpoints() {
+  useDocumentTitle("Endpoints");
   const { t } = useTranslation();
   const { toast } = useToast();
   const [, navigate] = useLocation();

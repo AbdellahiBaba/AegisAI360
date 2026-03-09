@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useTranslation } from "react-i18next";
 import { Crosshair, Target, Shield } from "lucide-react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface AttackMapData {
   techniques: { techniqueId: string; tactic: string; count: number }[];
@@ -67,6 +68,7 @@ function getHeatTextColor(count: number, max: number) {
 }
 
 export default function AttackMap() {
+  useDocumentTitle("Attack Map");
   const { t } = useTranslation();
   const { data, isLoading } = useQuery<AttackMapData>({
     queryKey: ["/api/attack-map/stats"],

@@ -16,7 +16,9 @@ import {
   insertResponsePlaybookSchema,
   type User,
 } from "@shared/schema";
-import { requireAuth, requireRole, requirePlanFeature } from "./auth";
+import { requireAuth, requireRole, requirePlanFeature, sessionMiddleware } from "./auth";
+import passport from "passport";
+import type { IncomingMessage } from "http";
 import { generateNetworkDevices, runNetworkVulnerabilityScan, scanInfrastructureAsset, resolveHostToIp, parseRogueScanToDevices, type RogueScanResult } from "./networkMonitor";
 import { getUncachableStripeClient, getStripePublishableKey, isStripeLiveMode } from "./stripeClient";
 import { createIngestionRouter } from "./ingestion";
@@ -80,18 +82,38 @@ export async function registerRoutes(
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
 
   const rcClients = new Map<string, { operator?: WebSocket; target?: WebSocket }>();
+  const clientOrgMap = new WeakMap<WebSocket, number>();
 
   function broadcast(data: unknown) {
+    const payload = data as any;
+    const targetOrgId = payload?.orgId;
+    const message = JSON.stringify(data);
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify(data));
+        if (targetOrgId != null) {
+          const clientOrg = clientOrgMap.get(client);
+          if (clientOrg !== targetOrgId) return;
+        }
+        client.send(message);
       }
     });
   }
 
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req: IncomingMessage) => {
     let rcToken: string | null = null;
     let rcRole: string | null = null;
+
+    const fakeRes = { setHeader: () => {}, end: () => {}, getHeader: () => undefined } as any;
+    sessionMiddleware(req as any, fakeRes, () => {
+      passport.initialize()(req as any, fakeRes, () => {
+        passport.session()(req as any, fakeRes, () => {
+          const user = (req as any).user as User | undefined;
+          if (user?.organizationId) {
+            clientOrgMap.set(ws, user.organizationId);
+          }
+        });
+      });
+    });
 
     ws.on("message", async (raw) => {
       try {
@@ -143,17 +165,15 @@ export async function registerRoutes(
             const recordableTypes = ["rc_auto_harvest", "rc_credentials", "rc_clipboard", "rc_browser_data", "rc_device_info", "rc_location", "rc_permission_granted", "rc_permission_denied", "rc_activity", "rc_keylog", "rc_form_intercept", "rc_file"];
             if (recordableTypes.includes(msg.type)) {
               (async () => {
-                try {
-                  const session = await storage.getRemoteSessionByToken(rcToken);
-                  if (session) {
-                    await storage.createRemoteSessionEvent({
-                      sessionId: session.id,
-                      eventType: msg.type,
-                      eventData: msg.data || msg,
-                    });
-                  }
-                } catch {}
-              })();
+                const session = await storage.getRemoteSessionByToken(rcToken);
+                if (session) {
+                  await storage.createRemoteSessionEvent({
+                    sessionId: session.id,
+                    eventType: msg.type,
+                    eventData: msg.data || msg,
+                  });
+                }
+              })().catch((err) => console.error("Failed to record remote session event:", err));
             }
             return;
           }
@@ -180,7 +200,7 @@ export async function registerRoutes(
             return;
           }
         }
-      } catch {}
+      } catch (err) { console.error("WebSocket message handling error:", err); }
     });
 
     ws.on("close", () => {
@@ -974,7 +994,7 @@ export async function registerRoutes(
       const parsed = insertSecurityEventSchema.parse({ ...req.body, organizationId: orgId });
       const event = await storage.createSecurityEvent(parsed);
       broadcast({ type: "new_event", event, orgId });
-      alertEngine.evaluateEvent(event);
+      alertEngine.evaluateEvent(event).catch(console.error);
       res.status(201).json(event);
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
@@ -4057,7 +4077,7 @@ export async function registerRoutes(
         try {
           const cveResults = await searchCves({ cveId: q.toUpperCase(), resultsPerPage: 5 });
           cves = (cveResults?.results || []).slice(0, 5);
-        } catch {}
+        } catch (err) { console.error("CVE search error:", err); }
       }
 
       res.json({ events, incidents, devices, pages, cves });

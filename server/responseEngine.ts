@@ -289,7 +289,7 @@ export class ResponseEngine {
           });
           await storage.mitigateEventsByIp(orgId, event.sourceIp);
           actionsTaken.push(`Blocked IP ${event.sourceIp}`);
-        } catch {}
+        } catch (err) { console.error("Failed to block IP in auto-defend:", err); }
       }
 
       const agents = await storage.getAgentsByOrg(orgId);
@@ -318,7 +318,7 @@ export class ResponseEngine {
               status: "pending",
             });
           }
-        } catch {}
+        } catch (err) { console.error("Failed to dispatch commands to agent:", err); }
       }
 
       if (onlineAgents.length > 0) {
@@ -378,7 +378,7 @@ export class ResponseEngine {
             }),
             status: "pending",
           });
-        } catch {}
+        } catch (err) { console.error("Failed to dispatch firewall block command:", err); }
       }
 
       if (onlineAgents.length > 0) {
@@ -405,7 +405,7 @@ export class ResponseEngine {
       try {
         await this.blockIP(orgId, ip, "Emergency lockdown", userId);
         blocked++;
-      } catch {}
+      } catch (err) { console.error(`Failed to block IP ${ip} during emergency lockdown:`, err); }
     }
 
     let isolated = 0;
@@ -414,7 +414,7 @@ export class ResponseEngine {
         try {
           await storage.updateAsset(asset.id, orgId, { status: "isolated" } as any);
           isolated++;
-        } catch {}
+        } catch (err) { console.error(`Failed to isolate asset ${asset.id} during emergency lockdown:`, err); }
       }
     }
 

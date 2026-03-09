@@ -30,6 +30,8 @@ async function comparePasswords(supplied: string, stored: string): Promise<boole
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
+export let sessionMiddleware: ReturnType<typeof session>;
+
 export function setupAuth(app: Express) {
   const PgStore = connectPg(session);
 
@@ -50,7 +52,8 @@ export function setupAuth(app: Express) {
     proxy: true,
   };
 
-  app.use(session(sessionSettings));
+  sessionMiddleware = session(sessionSettings);
+  app.use(sessionMiddleware);
   app.use(passport.initialize());
   app.use(passport.session());
 
@@ -203,7 +206,7 @@ export function setupAuth(app: Express) {
     if (req.isAuthenticated() && req.sessionID) {
       try {
         await storage.updateSessionLastActive(req.sessionID);
-      } catch (_e) {}
+      } catch (err) { console.error("Failed to update session last active:", err); }
     }
     next();
   });
@@ -346,7 +349,7 @@ export function setupAuth(app: Express) {
       if (err) return next(err);
       try {
         if (sessionId) await storage.deleteSessionMetadata(sessionId);
-      } catch (_e) {}
+      } catch (err) { console.error("Failed to delete session metadata on logout:", err); }
       res.sendStatus(200);
     });
   });
@@ -415,7 +418,7 @@ export function setupAuth(app: Express) {
       for (const sid of revokedSessionIds) {
         try {
           await db.execute(sql`DELETE FROM "session" WHERE sid = ${sid}`);
-        } catch (_e) {}
+        } catch (err) { console.error(`Failed to delete session ${sid}:`, err); }
       }
 
       await storage.createAuditLog({
