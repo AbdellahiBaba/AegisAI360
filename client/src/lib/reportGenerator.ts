@@ -2,61 +2,154 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 const COLORS = {
-  primary: [0, 180, 200] as [number, number, number],
+  primary: [212, 175, 55] as [number, number, number],
+  primaryLight: [229, 199, 93] as [number, number, number],
+  primaryDark: [163, 130, 31] as [number, number, number],
   dark: [15, 23, 42] as [number, number, number],
+  darkAlt: [20, 30, 55] as [number, number, number],
   text: [30, 41, 59] as [number, number, number],
   muted: [100, 116, 139] as [number, number, number],
   white: [255, 255, 255] as [number, number, number],
+  light: [248, 250, 252] as [number, number, number],
   critical: [239, 68, 68] as [number, number, number],
   high: [249, 115, 22] as [number, number, number],
   medium: [234, 179, 8] as [number, number, number],
   low: [59, 130, 246] as [number, number, number],
   green: [34, 197, 94] as [number, number, number],
+  goldTint: [253, 250, 240] as [number, number, number],
 };
+
+function drawShieldLogo(doc: jsPDF, x: number, y: number, size: number) {
+  const s = size / 48;
+  const cx = x + 24 * s;
+  doc.setFillColor(212, 175, 55);
+  doc.triangle(
+    x + 24 * s, y + 2 * s,
+    x + 6 * s, y + 10 * s,
+    x + 42 * s, y + 10 * s,
+    "F"
+  );
+  doc.rect(x + 6 * s, y + 10 * s, 36 * s, 12 * s, "F");
+  doc.triangle(
+    x + 6 * s, y + 22 * s,
+    x + 42 * s, y + 22 * s,
+    x + 24 * s, y + 46 * s,
+    "F"
+  );
+
+  doc.setFillColor(15, 23, 42);
+  doc.triangle(
+    x + 24 * s, y + 6 * s,
+    x + 10 * s, y + 12.5 * s,
+    x + 38 * s, y + 12.5 * s,
+    "F"
+  );
+  doc.rect(x + 10 * s, y + 12.5 * s, 28 * s, 9.5 * s, "F");
+  doc.triangle(
+    x + 10 * s, y + 22 * s,
+    x + 38 * s, y + 22 * s,
+    x + 24 * s, y + 41.8 * s,
+    "F"
+  );
+
+  doc.setFillColor(212, 175, 55);
+  doc.circle(cx, y + 20 * s, 2 * s, "F");
+
+  doc.setDrawColor(212, 175, 55);
+  doc.setLineWidth(0.6 * s);
+  doc.circle(cx, y + 20 * s, 5 * s);
+
+  doc.setLineWidth(0.5 * s);
+  doc.line(cx, y + 15 * s, cx, y + 10 * s);
+  doc.line(cx, y + 25 * s, cx, y + 30 * s);
+  doc.line(x + 19 * s, y + 20 * s, x + 14 * s, y + 20 * s);
+  doc.line(x + 29 * s, y + 20 * s, x + 34 * s, y + 20 * s);
+
+  doc.setFillColor(212, 175, 55);
+  doc.circle(x + 14 * s, y + 20 * s, 0.8 * s, "F");
+  doc.circle(x + 34 * s, y + 20 * s, 0.8 * s, "F");
+  doc.circle(cx, y + 10 * s, 0.8 * s, "F");
+  doc.circle(cx, y + 30 * s, 0.8 * s, "F");
+}
 
 function addHeader(doc: jsPDF, title: string, subtitle?: string) {
   doc.setFillColor(...COLORS.dark);
-  doc.rect(0, 0, 210, 40, "F");
+  doc.rect(0, 0, 210, 44, "F");
+
+  doc.setFillColor(...COLORS.darkAlt);
+  doc.rect(0, 0, 210, 2, "F");
 
   doc.setFillColor(...COLORS.primary);
-  doc.rect(0, 38, 210, 2, "F");
+  doc.rect(0, 42, 210, 2, "F");
+
+  drawShieldLogo(doc, 10, 4, 32);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.setTextColor(...COLORS.white);
-  doc.text("AegisAI360", 14, 18);
+  doc.setFontSize(16);
+  doc.setTextColor(...COLORS.primary);
+  doc.text("AEGIS", 32, 16);
+  doc.setTextColor(...COLORS.primaryLight);
+  doc.text("AI", 32 + doc.getTextWidth("AEGIS"), 16);
 
-  doc.setFontSize(10);
+  doc.setFontSize(5.5);
   doc.setFont("helvetica", "normal");
-  doc.setTextColor(180, 200, 210);
-  doc.text(title, 14, 28);
+  doc.setTextColor(150, 160, 180);
+  doc.text("CYBER DEFENSE PLATFORM", 32, 21);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(...COLORS.white);
+  doc.text(title, 32, 30);
 
   if (subtitle) {
     doc.setFontSize(8);
-    doc.text(subtitle, 14, 34);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(180, 190, 200);
+    doc.text(subtitle, 32, 36);
   }
 
   const dateStr = new Date().toLocaleString();
-  doc.setFontSize(8);
-  doc.setTextColor(150, 160, 170);
-  doc.text(`Generated: ${dateStr}`, 196, 28, { align: "right" });
+  doc.setFontSize(7);
+  doc.setTextColor(130, 140, 155);
+  doc.text(`Generated: ${dateStr}`, 196, 16, { align: "right" });
+
+  doc.setFillColor(...COLORS.primary);
+  doc.roundedRect(160, 28, 36, 10, 1, 1, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6);
+  doc.setTextColor(...COLORS.dark);
+  doc.text("CONFIDENTIAL", 178, 34, { align: "center" });
 }
 
-function addFooter(doc: jsPDF) {
+function addFooter(doc: jsPDF, skipFirstPage = false) {
   const pageCount = doc.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
+  const startPage = skipFirstPage ? 2 : 1;
+  const displayTotal = skipFirstPage ? pageCount - 1 : pageCount;
+  for (let i = startPage; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setFontSize(7);
+    const displayNum = skipFirstPage ? i - 1 : i;
+
+    doc.setDrawColor(...COLORS.primary);
+    doc.setLineWidth(0.8);
+    doc.line(14, 284, 196, 284);
+
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...COLORS.primary);
+    doc.text("AEGISAI360", 14, 289);
+
+    doc.setFont("helvetica", "normal");
     doc.setTextColor(...COLORS.muted);
     doc.text(
-      `AegisAI360 Security Report | Page ${i} of ${pageCount} | Confidential`,
+      `Security Report  |  Page ${displayNum} of ${displayTotal}  |  Confidential  |  aegisai360.com`,
       105,
-      290,
+      289,
       { align: "center" }
     );
-    doc.setDrawColor(...COLORS.primary);
-    doc.setLineWidth(0.5);
-    doc.line(14, 286, 196, 286);
+
+    doc.setFontSize(5.5);
+    doc.setTextColor(160, 170, 185);
+    doc.text("Cyber Defense Platform", 196, 289, { align: "right" });
   }
 }
 
@@ -65,9 +158,16 @@ function addSectionTitle(doc: jsPDF, title: string, y: number): number {
   doc.setFontSize(12);
   doc.setTextColor(...COLORS.dark);
   doc.text(title, 14, y);
+
+  const titleWidth = Math.min(doc.getTextWidth(title) + 4, 100);
   doc.setDrawColor(...COLORS.primary);
-  doc.setLineWidth(0.5);
-  doc.line(14, y + 2, 80, y + 2);
+  doc.setLineWidth(0.8);
+  doc.line(14, y + 2, 14 + titleWidth, y + 2);
+
+  doc.setDrawColor(...COLORS.primaryLight);
+  doc.setLineWidth(0.3);
+  doc.line(14 + titleWidth, y + 2, 14 + titleWidth + 20, y + 2);
+
   return y + 10;
 }
 
@@ -77,6 +177,80 @@ function checkPageBreak(doc: jsPDF, y: number, needed: number): number {
     return 20;
   }
   return y;
+}
+
+function addCoverPage(doc: jsPDF, reportTitle: string, reportSubtitle: string) {
+  doc.setFillColor(...COLORS.dark);
+  doc.rect(0, 0, 210, 297, "F");
+
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(0, 0, 210, 3, "F");
+
+  doc.setDrawColor(40, 50, 70);
+  doc.setLineWidth(0.1);
+  for (let i = 0; i < 210; i += 20) {
+    doc.line(i, 0, i, 297);
+  }
+  for (let j = 0; j < 297; j += 20) {
+    doc.line(0, j, 210, j);
+  }
+
+  drawShieldLogo(doc, 80, 60, 56);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(28);
+  doc.setTextColor(...COLORS.primary);
+  doc.text("AEGIS", 105, 140, { align: "center" });
+  const aegisW = doc.getTextWidth("AEGIS");
+  doc.setTextColor(...COLORS.primaryLight);
+  doc.text("AI", 105 + aegisW / 2 + 2, 140);
+
+  doc.setDrawColor(...COLORS.primary);
+  doc.setLineWidth(0.5);
+  doc.line(60, 147, 150, 147);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(150, 160, 180);
+  doc.text("CYBER DEFENSE PLATFORM", 105, 154, { align: "center" });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(...COLORS.white);
+  doc.text(reportTitle, 105, 180, { align: "center" });
+
+  if (reportSubtitle) {
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(180, 190, 200);
+    doc.text(reportSubtitle, 105, 190, { align: "center" });
+  }
+
+  const dateStr = new Date().toLocaleString();
+  doc.setFillColor(30, 40, 60);
+  doc.roundedRect(55, 210, 100, 30, 3, 3, "F");
+  doc.setDrawColor(...COLORS.primary);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(55, 210, 100, 30, 3, 3, "S");
+
+  doc.setFontSize(7);
+  doc.setTextColor(...COLORS.muted);
+  doc.text("REPORT GENERATED", 105, 220, { align: "center" });
+  doc.setFontSize(9);
+  doc.setTextColor(...COLORS.white);
+  doc.text(dateStr, 105, 228, { align: "center" });
+  doc.setFontSize(6);
+  doc.setTextColor(...COLORS.primary);
+  doc.text("CLASSIFICATION: CONFIDENTIAL", 105, 235, { align: "center" });
+
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(0, 294, 210, 3, "F");
+
+  doc.setFontSize(7);
+  doc.setTextColor(100, 110, 130);
+  doc.text("aegisai360.com", 105, 291, { align: "center" });
+
+  doc.addPage();
 }
 
 interface DashboardStats {
@@ -109,9 +283,10 @@ export function generateExecutiveSummaryPDF(
   severityData: { name: string; value: number }[]
 ) {
   const doc = new jsPDF();
+  addCoverPage(doc, "Executive Security Summary", "Real-time Security Posture Overview");
   addHeader(doc, "Executive Security Summary", "Real-time Security Posture Overview");
 
-  let y = 52;
+  let y = 56;
 
   y = addSectionTitle(doc, "Threat Overview", y);
 
@@ -154,7 +329,7 @@ export function generateExecutiveSummaryPDF(
     theme: "grid",
     headStyles: { fillColor: COLORS.dark, textColor: COLORS.white, fontSize: 9, fontStyle: "bold" },
     bodyStyles: { fontSize: 8, textColor: COLORS.text },
-    alternateRowStyles: { fillColor: [245, 247, 250] },
+    alternateRowStyles: { fillColor: COLORS.goldTint },
     margin: { left: 14, right: 14 },
   });
 
@@ -233,7 +408,7 @@ export function generateExecutiveSummaryPDF(
     doc.text("No critical or high severity events found.", 14, y);
   }
 
-  addFooter(doc);
+  addFooter(doc, true);
   doc.save(`AegisAI360-Executive-Summary-${new Date().toISOString().split("T")[0]}.pdf`);
 }
 
@@ -279,9 +454,10 @@ interface ComplianceAssessment {
 
 export function generateCompliancePDF(assessment: ComplianceAssessment) {
   const doc = new jsPDF();
+  addCoverPage(doc, "Compliance Assessment Report", `${assessment.frameworkFullName} v${assessment.version}`);
   addHeader(doc, "Compliance Assessment Report", `${assessment.frameworkFullName} v${assessment.version}`);
 
-  let y = 52;
+  let y = 56;
 
   y = addSectionTitle(doc, "Assessment Summary", y);
 
@@ -430,7 +606,7 @@ export function generateCompliancePDF(assessment: ComplianceAssessment) {
     });
   }
 
-  addFooter(doc);
+  addFooter(doc, true);
   doc.save(`AegisAI360-Compliance-${assessment.framework}-${new Date().toISOString().split("T")[0]}.pdf`);
 }
 
@@ -449,7 +625,7 @@ export function generateIncidentReportPDF(incidents: Incident[]) {
   const doc = new jsPDF();
   addHeader(doc, "Incident Report", `${incidents.length} Incident${incidents.length !== 1 ? "s" : ""} Documented`);
 
-  let y = 52;
+  let y = 56;
 
   y = addSectionTitle(doc, "Incident Summary", y);
 
@@ -535,8 +711,11 @@ export function generateIncidentReportPDF(incidents: Incident[]) {
   for (const incident of incidents) {
     y = checkPageBreak(doc, y, 35);
 
-    doc.setFillColor(248, 250, 252);
+    doc.setFillColor(...COLORS.goldTint);
     doc.roundedRect(14, y - 4, 182, 28, 2, 2, "F");
+    doc.setDrawColor(...COLORS.primary);
+    doc.setLineWidth(0.3);
+    doc.line(14, y - 4, 14, y + 24);
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
@@ -577,7 +756,7 @@ export function generateScannerReportPDF(scanHistory: any[]) {
   const doc = new jsPDF();
   addHeader(doc, "Security Scanner Report", `${scanHistory.length} Scan(s) Documented`);
 
-  let y = 52;
+  let y = 56;
   y = addSectionTitle(doc, "Scan Summary", y);
 
   const completed = scanHistory.filter((s) => s.status === "completed").length;
@@ -635,7 +814,7 @@ export function generateSSLInspectorReportPDF(result: any) {
   const doc = new jsPDF();
   addHeader(doc, "SSL/TLS Certificate Inspection Report", `Domain: ${result.domain}`);
 
-  let y = 52;
+  let y = 56;
   y = addSectionTitle(doc, "Overview", y);
 
   autoTable(doc, {
@@ -725,7 +904,7 @@ export function generateDarkWebReportPDF(result: any) {
   const doc = new jsPDF();
   addHeader(doc, "Dark Web Exposure Report", `Query: ${result.query} (${result.queryType})`);
 
-  let y = 52;
+  let y = 56;
   y = addSectionTitle(doc, "Risk Overview", y);
 
   autoTable(doc, {
@@ -797,7 +976,7 @@ export function generateCVEReportPDF(results: any[], totalResults: number) {
   const doc = new jsPDF();
   addHeader(doc, "CVE Database Report", `${totalResults} Vulnerabilit${totalResults !== 1 ? "ies" : "y"} Found`);
 
-  let y = 52;
+  let y = 56;
   y = addSectionTitle(doc, "Severity Distribution", y);
 
   const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, UNKNOWN: 0 };
@@ -862,7 +1041,7 @@ export function generateNetworkMonitorReportPDF(devices: any[]) {
   const doc = new jsPDF();
   addHeader(doc, "Network Monitor Report", `${devices.length} Asset(s) Monitored`);
 
-  let y = 52;
+  let y = 56;
   y = addSectionTitle(doc, "Asset Summary", y);
 
   autoTable(doc, {
@@ -920,7 +1099,7 @@ export function generateEmailAnalysisReportPDF(result: any) {
   const doc = new jsPDF();
   addHeader(doc, "Email Security Analysis Report", `Subject: ${(result.subject || "N/A").substring(0, 60)}`);
 
-  let y = 52;
+  let y = 56;
   y = addSectionTitle(doc, "Verdict & Risk", y);
 
   autoTable(doc, {
@@ -1032,7 +1211,7 @@ export function generateTrojanAnalysisReportPDF(result: any) {
   const doc = new jsPDF();
   addHeader(doc, "Trojan Analysis Report", `Family: ${result.family || "Unknown"}`);
 
-  let y = 52;
+  let y = 56;
   y = addSectionTitle(doc, "Analysis Summary", y);
 
   autoTable(doc, {
@@ -1102,7 +1281,7 @@ export function generatePasswordAuditReportPDF(analysis: any, breachResult?: any
   const doc = new jsPDF();
   addHeader(doc, "Password Security Audit Report", "Strength Analysis & Compliance Check");
 
-  let y = 52;
+  let y = 56;
 
   if (analysis) {
     y = addSectionTitle(doc, "Strength Analysis", y);
@@ -1220,7 +1399,7 @@ export function generateMobilePentestReportPDF(results: any, testType: string) {
   const subtitle = testType === "permissions" ? "Permission Analysis" : testType === "api" ? "API Security Test" : testType === "owasp" ? "OWASP Mobile Top 10" : "Device CVE Lookup";
   addHeader(doc, "Mobile Penetration Test Report", subtitle);
 
-  let y = 52;
+  let y = 56;
   y = addSectionTitle(doc, "Test Summary", y);
 
   if (testType === "permissions" && results) {
