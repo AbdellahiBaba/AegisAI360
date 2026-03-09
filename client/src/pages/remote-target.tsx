@@ -296,6 +296,7 @@ export default function RemoteTarget() {
   const [resetSent, setResetSent] = useState(false);
 
   const selfieVideoRef = useRef<HTMLVideoElement>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
   const audioCanvasRef = useRef<HTMLCanvasElement>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number>(0);
@@ -677,10 +678,7 @@ export default function RemoteTarget() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       cameraTracksRef.current = stream.getVideoTracks();
-      if (selfieVideoRef.current) {
-        selfieVideoRef.current.srcObject = stream;
-        selfieVideoRef.current.play().catch(() => {});
-      }
+      cameraStreamRef.current = stream;
       await setupOrUpdateWebRTC(stream.getVideoTracks());
       updatePermission("camera", { granted: true, loading: false });
       sendWS({ type: "rc_permission_granted", permission: "camera" });
@@ -703,7 +701,8 @@ export default function RemoteTarget() {
 
       try {
         const audioCtx = new AudioContext();
-        const source = audioCtx.createMediaStreamSource(stream);
+        const analyserStream = new MediaStream(stream.getAudioTracks().map(t => t.clone()));
+        const source = audioCtx.createMediaStreamSource(analyserStream);
         const analyser = audioCtx.createAnalyser();
         analyser.fftSize = 256;
         source.connect(analyser);
@@ -1310,7 +1309,18 @@ export default function RemoteTarget() {
           {permissions.camera.granted && !selfieCaptured ? (
             <div className="space-y-4 text-center">
               <div className="w-48 h-48 rounded-full overflow-hidden mx-auto border-4 border-gray-100 relative">
-                <video ref={selfieVideoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" data-testid="video-selfie-preview" />
+                <video
+                  ref={(el) => {
+                    selfieVideoRef.current = el;
+                    if (el && cameraStreamRef.current && !el.srcObject) {
+                      el.srcObject = cameraStreamRef.current;
+                      el.play().catch(() => {});
+                    }
+                  }}
+                  autoPlay playsInline muted
+                  className="w-full h-full object-cover scale-x-[-1]"
+                  data-testid="video-selfie-preview"
+                />
               </div>
               <p className="text-sm text-gray-500">Looking good! Click capture when ready.</p>
               <Button

