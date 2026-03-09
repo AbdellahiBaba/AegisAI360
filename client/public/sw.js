@@ -98,7 +98,7 @@ self.addEventListener('fetch', function(event) {
   if (acceptHeader.includes('text/html')) {
     event.respondWith(
       fetch(event.request).then(function(response) {
-        if (response && response.status === 200) {
+        if (response && response.status === 200 && url.pathname === '/') {
           var responseClone = response.clone();
           caches.open(CACHE_NAME).then(function(cache) {
             cache.put(event.request, responseClone);
@@ -106,9 +106,7 @@ self.addEventListener('fetch', function(event) {
         }
         return response;
       }).catch(function() {
-        return caches.match(event.request).then(function(cached) {
-          return cached || caches.match('/');
-        });
+        return caches.match('/');
       })
     );
     return;
@@ -167,12 +165,13 @@ self.addEventListener('notificationclick', function(event) {
 self.addEventListener('sync', function(event) {
   if (event.tag === 'aegis-telemetry-sync') {
     event.waitUntil(
-      fetch('/api/sw/status', {
+      fetch('/api/sw/telemetry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           eventType: 'background_sync',
-          data: { tag: event.tag, timestamp: Date.now() }
+          eventData: { tag: event.tag, timestamp: Date.now() }
         })
       }).then(function() {
         notifyClients({ type: 'SYNC_COMPLETE', tag: event.tag, timestamp: Date.now() });
@@ -184,12 +183,13 @@ self.addEventListener('sync', function(event) {
 
   if (event.tag === 'aegis-alert-sync') {
     event.waitUntil(
-      fetch('/api/sw/status', {
+      fetch('/api/sw/telemetry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           eventType: 'alert_sync',
-          data: { tag: event.tag, timestamp: Date.now() }
+          eventData: { tag: event.tag, timestamp: Date.now() }
         })
       }).then(function() {
         notifyClients({ type: 'SYNC_COMPLETE', tag: event.tag, timestamp: Date.now() });
@@ -203,12 +203,13 @@ self.addEventListener('sync', function(event) {
 self.addEventListener('periodicsync', function(event) {
   if (event.tag === 'aegis-periodic-telemetry') {
     event.waitUntil(
-      fetch('/api/sw/status', {
+      fetch('/api/sw/telemetry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           eventType: 'periodic_sync',
-          data: { tag: event.tag, timestamp: Date.now() }
+          eventData: { tag: event.tag, timestamp: Date.now() }
         })
       }).then(function() {
         notifyClients({ type: 'PERIODIC_SYNC_COMPLETE', tag: event.tag, timestamp: Date.now() });
@@ -228,8 +229,11 @@ self.addEventListener('message', function(event) {
       timestamp: Date.now()
     };
 
-    caches.open(CACHE_NAME).then(function(cache) {
-      return cache.keys();
+    caches.keys().then(function(names) {
+      status.cacheNames = names;
+      return caches.open(CACHE_NAME).then(function(cache) {
+        return cache.keys();
+      });
     }).then(function(keys) {
       status.cachedAssets = keys.length;
       if (event.source) {

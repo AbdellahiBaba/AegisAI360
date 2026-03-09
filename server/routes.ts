@@ -4368,7 +4368,10 @@ export async function registerRoutes(
   app.post("/api/push/unsubscribe", requireAuth, async (req: any, res) => {
     try {
       const { endpoint } = z.object({ endpoint: z.string().url() }).parse(req.body);
-      await storage.deletePushSubscriptionByEndpoint(endpoint);
+      const userSubs = await storage.getPushSubscriptionsByUser(req.user!.id);
+      const match = userSubs.find((s: any) => s.endpoint === endpoint);
+      if (!match) return res.status(404).json({ error: "Subscription not found" });
+      await storage.deletePushSubscription(match.id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(400).json({ error: error?.message || "Failed to unsubscribe" });
@@ -4387,9 +4390,19 @@ export async function registerRoutes(
       const pushService = await import("./pushService");
       let results;
       if (body.targetUserId) {
+        if (!req.user!.isSuperAdmin) {
+          const targetUser = await storage.getUser(body.targetUserId);
+          if (!targetUser || targetUser.organizationId !== req.user!.organizationId) {
+            return res.status(403).json({ error: "Cannot send push to users outside your organization" });
+          }
+        }
         results = await pushService.sendPushToUser(body.targetUserId, { title: body.title, body: body.body, url: body.url });
       } else {
-        results = await pushService.sendPushToAll({ title: body.title, body: body.body, url: body.url });
+        if (req.user!.isSuperAdmin) {
+          results = await pushService.sendPushToAll({ title: body.title, body: body.body, url: body.url });
+        } else {
+          results = await pushService.sendPushToUser(req.user!.id, { title: body.title, body: body.body, url: body.url });
+        }
       }
 
       await storage.createSwTelemetry({
