@@ -40,6 +40,7 @@ import { analyzePassword as auditAnalyzePassword, checkBreachStatus, auditPolicy
 import { analyzeEmail } from "./emailAnalyzer";
 import { searchCves, getCveDetail, getRecentCves } from "./cveDatabase";
 import { inspectSSL } from "./sslInspector";
+import { scanLink } from "./services/linkScanner";
 import { db } from "./db";
 import * as schema from "@shared/schema";
 import { and, eq, desc, sql } from "drizzle-orm";
@@ -4622,6 +4623,23 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Failed to update dashboard layout:", error);
       res.status(500).json({ error: "Failed to update dashboard layout" });
+    }
+  });
+
+  app.post("/api/link-scanner/scan", requireAuth, async (req, res) => {
+    try {
+      const { url } = z.object({
+        url: z.string().url("Invalid URL format"),
+      }).parse(req.body);
+
+      const result = await scanLink(url);
+      res.json(result);
+    } catch (error: any) {
+      if (error?.name === "ZodError") {
+        return res.status(400).json({ error: "Invalid URL format. Please provide a valid URL." });
+      }
+      console.error("Link scanner error:", error);
+      res.status(500).json({ error: "Failed to scan URL" });
     }
   });
 

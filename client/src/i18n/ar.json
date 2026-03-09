@@ -110,6 +110,7 @@
     "scheduledScans": "الفحوصات المجدولة",
     "cveDatabase": "قاعدة بيانات CVE",
     "emailAnalyzer": "محلل البريد الإلكتروني",
+    "linkScanner": "ماسح الروابط",
     "trafficAnalysis": "تحليل حركة المرور",
     "payloadGenerator": "مولد الحمولات",
     "trojanAnalyzer": "محلل أحصنة طروادة",

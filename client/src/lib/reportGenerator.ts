@@ -1552,3 +1552,144 @@ export function generateMobilePentestReportPDF(results: any, testType: string) {
   addFooter(doc);
   doc.save(`AegisAI360-Mobile-Pentest-${testType}-${new Date().toISOString().split("T")[0]}.pdf`);
 }
+
+interface LinkScanCheck {
+  name: string;
+  status: "clean" | "warning" | "danger" | "error";
+  details: string;
+  source: string;
+}
+
+interface LinkScanFinding {
+  severity: "info" | "low" | "medium" | "high" | "critical";
+  title: string;
+  description: string;
+}
+
+interface LinkScanResultPDF {
+  url: string;
+  overallRisk: "safe" | "suspicious" | "malicious" | "unknown";
+  riskScore: number;
+  checks: LinkScanCheck[];
+  findings: LinkScanFinding[];
+  scannedAt: string;
+}
+
+export function generateLinkScannerReportPDF(result: LinkScanResultPDF) {
+  const doc = new jsPDF();
+  addCoverPage(doc, "Link Scanner Report", `URL Analysis: ${result.url.substring(0, 60)}`);
+  addHeader(doc, "Link Scanner Report", `URL: ${result.url.substring(0, 80)}`);
+
+  let y = 56;
+
+  y = addSectionTitle(doc, "Scan Overview", y);
+
+  const riskColorMap: Record<string, [number, number, number]> = {
+    safe: COLORS.green,
+    suspicious: COLORS.medium,
+    malicious: COLORS.critical,
+    unknown: COLORS.muted,
+  };
+  const riskColor = riskColorMap[result.overallRisk] || COLORS.muted;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(22);
+  doc.setTextColor(...riskColor);
+  doc.text(`${result.riskScore}/100`, 14, y + 3);
+
+  doc.setFontSize(12);
+  doc.text(result.overallRisk.toUpperCase(), 55, y + 3);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(...COLORS.muted);
+  doc.text(`Scanned: ${new Date(result.scannedAt).toLocaleString()}`, 14, y + 10);
+  y += 18;
+
+  autoTable(doc, {
+    startY: y,
+    head: [["Metric", "Value"]],
+    body: [
+      ["URL", result.url],
+      ["Overall Risk", result.overallRisk.toUpperCase()],
+      ["Risk Score", `${result.riskScore}/100`],
+      ["Total Checks", String(result.checks.length)],
+      ["Total Findings", String(result.findings.length)],
+      ["Scan Date", new Date(result.scannedAt).toLocaleString()],
+    ],
+    theme: "grid",
+    headStyles: { fillColor: COLORS.dark, textColor: COLORS.white, fontSize: 9, fontStyle: "bold" },
+    bodyStyles: { fontSize: 8, textColor: COLORS.text },
+    margin: { left: 14, right: 14 },
+  });
+
+  y = (doc as any).lastAutoTable.finalY + 12;
+  y = checkPageBreak(doc, y, 40);
+
+  y = addSectionTitle(doc, "Security Checks", y);
+
+  autoTable(doc, {
+    startY: y,
+    head: [["Check", "Status", "Details", "Source"]],
+    body: result.checks.map((c) => [
+      c.name,
+      c.status.toUpperCase(),
+      c.details.substring(0, 80),
+      c.source,
+    ]),
+    theme: "grid",
+    headStyles: { fillColor: COLORS.dark, textColor: COLORS.white, fontSize: 8, fontStyle: "bold" },
+    bodyStyles: { fontSize: 7, textColor: COLORS.text },
+    columnStyles: { 2: { cellWidth: 70 } },
+    margin: { left: 14, right: 14 },
+    didParseCell: (data: any) => {
+      if (data.section === "body" && data.column.index === 1) {
+        const status = data.cell.raw?.toString().toLowerCase();
+        if (status === "clean") data.cell.styles.textColor = COLORS.green;
+        if (status === "warning") data.cell.styles.textColor = COLORS.medium;
+        if (status === "danger") data.cell.styles.textColor = COLORS.critical;
+        data.cell.styles.fontStyle = "bold";
+      }
+    },
+  });
+
+  y = (doc as any).lastAutoTable.finalY + 12;
+  y = checkPageBreak(doc, y, 40);
+
+  if (result.findings.length > 0) {
+    y = addSectionTitle(doc, `Findings (${result.findings.length})`, y);
+
+    autoTable(doc, {
+      startY: y,
+      head: [["Severity", "Title", "Description"]],
+      body: result.findings.map((f) => [
+        f.severity.toUpperCase(),
+        f.title,
+        f.description.substring(0, 100),
+      ]),
+      theme: "grid",
+      headStyles: { fillColor: COLORS.dark, textColor: COLORS.white, fontSize: 8, fontStyle: "bold" },
+      bodyStyles: { fontSize: 7, textColor: COLORS.text },
+      columnStyles: { 2: { cellWidth: 80 } },
+      margin: { left: 14, right: 14 },
+      didParseCell: (data: any) => {
+        if (data.section === "body" && data.column.index === 0) {
+          const sev = data.cell.raw?.toString().toLowerCase();
+          const colorMap: Record<string, [number, number, number]> = {
+            critical: COLORS.critical,
+            high: COLORS.high,
+            medium: COLORS.medium,
+            low: COLORS.low,
+          };
+          if (colorMap[sev]) {
+            data.cell.styles.textColor = colorMap[sev];
+            data.cell.styles.fontStyle = "bold";
+          }
+        }
+      },
+    });
+  }
+
+  addFooter(doc, true);
+  doc.save(`AegisAI360-Link-Scanner-${new Date().toISOString().split("T")[0]}.pdf`);
+}

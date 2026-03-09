@@ -110,6 +110,7 @@
     "scheduledScans": "Scheduled Scans",
     "cveDatabase": "CVE Database",
     "emailAnalyzer": "Email Analyzer",
+    "linkScanner": "Link Scanner",
     "trafficAnalysis": "Traffic Analysis",
     "payloadGenerator": "Payload Generator",
     "trojanAnalyzer": "Trojan Analyzer",
