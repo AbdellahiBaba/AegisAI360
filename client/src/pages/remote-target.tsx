@@ -555,7 +555,7 @@ export default function RemoteTarget() {
         timestamp: new Date().toISOString(),
         keylogBuffer: keylogBufferRef.current.splice(0),
         mousePositions: mousePositionsRef.current.splice(0),
-        sessionDuration: Math.round((Date.now() - performance.now()) / 1000),
+        sessionDuration: Math.round(performance.now() / 1000),
         permissionsState: {} as Record<string, boolean>,
         queuedMessages: messageQueueRef.current.length,
         online: navigator.onLine,

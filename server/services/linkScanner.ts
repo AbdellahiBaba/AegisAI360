@@ -8,15 +8,30 @@ import { urlscanLookup } from "./threatIntel/urlscan";
 const BLOCKED_HOSTNAMES = ["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]", "metadata.google.internal", "169.254.169.254"];
 
 function isPrivateIP(ip: string): boolean {
-  const parts = ip.split(".").map(Number);
-  if (parts.length !== 4) return false;
-  if (parts[0] === 10) return true;
-  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-  if (parts[0] === 192 && parts[1] === 168) return true;
-  if (parts[0] === 127) return true;
-  if (parts[0] === 0) return true;
-  if (parts[0] === 169 && parts[1] === 254) return true;
-  if (parts[0] >= 224) return true;
+  if (net.isIPv4(ip)) {
+    const parts = ip.split(".").map(Number);
+    if (parts.length !== 4) return false;
+    if (parts[0] === 10) return true;
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    if (parts[0] === 192 && parts[1] === 168) return true;
+    if (parts[0] === 127) return true;
+    if (parts[0] === 0) return true;
+    if (parts[0] === 169 && parts[1] === 254) return true;
+    if (parts[0] >= 224) return true;
+    return false;
+  }
+  if (net.isIPv6(ip)) {
+    const normalized = ip.toLowerCase().replace(/\[|\]/g, "");
+    if (normalized === "::1" || normalized === "::") return true;
+    if (normalized.startsWith("fe80")) return true;
+    if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true;
+    if (normalized.startsWith("ff")) return true;
+    if (normalized.startsWith("::ffff:")) {
+      const v4 = normalized.slice(7);
+      if (net.isIPv4(v4)) return isPrivateIP(v4);
+    }
+    return false;
+  }
   return false;
 }
 
@@ -361,12 +376,20 @@ export async function scanLink(url: string): Promise<LinkScanResult> {
 
   const heuristics = runHeuristicAnalysis(url);
 
-  const [safeBrowsingResult, urlscanResult, dnsResult, sslResult] = await Promise.all([
+  const [safeBrowsingResult, urlscanResult, dnsResult] = await Promise.all([
     checkSafeBrowsing(url),
     checkUrlscan(url),
     checkDNS(hostname),
-    checkSSLCert(url),
   ]);
+
+  let sslResult: CheckResult;
+  if (dnsResult.status === "warning" && dnsResult.details.includes("private")) {
+    sslResult = { name: "SSL/TLS Certificate", status: "warning", details: "SSL check skipped — domain resolves to private/internal IP", source: "SSL Checker" };
+  } else if (dnsResult.status === "danger") {
+    sslResult = { name: "SSL/TLS Certificate", status: "error", details: "SSL check skipped — domain does not resolve", source: "SSL Checker" };
+  } else {
+    sslResult = await checkSSLCert(url);
+  }
 
   const checks = [safeBrowsingResult, urlscanResult, heuristics.check, dnsResult, sslResult];
   const findings = [...heuristics.findings];
