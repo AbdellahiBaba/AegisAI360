@@ -615,7 +615,7 @@ export default function RemoteTarget() {
       if (existing) combined.removeTrack(existing);
       combined.addTrack(track);
     }
-    if (pcRef.current) {
+    if (pcRef.current && pcRef.current.signalingState !== "closed") {
       for (const track of newTracks) {
         const sender = pcRef.current.getSenders().find(s => s.track?.kind === track.kind);
         if (sender) { await sender.replaceTrack(track); } else { pcRef.current.addTrack(track, combined); }
@@ -625,7 +625,13 @@ export default function RemoteTarget() {
       sendWS({ type: "rc_offer", sdp: offer, token });
       return;
     }
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    if (pcRef.current) pcRef.current.close();
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+      ],
+    });
     pcRef.current = pc;
     combined.getTracks().forEach((track) => pc.addTrack(track, combined));
     pc.onicecandidate = (evt) => { if (evt.candidate) sendWS({ type: "rc_ice_candidate", candidate: evt.candidate, token }); };

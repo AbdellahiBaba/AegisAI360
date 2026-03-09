@@ -173,11 +173,9 @@ export async function registerRoutes(
             return;
           }
           if (msg.type === "rc_answer") {
-            if (pair.target && pair.target.readyState === WebSocket.OPEN) {
-              pair.target.send(JSON.stringify(msg));
-            }
-            if (pair.operator && pair.operator.readyState === WebSocket.OPEN && rcRole === "target") {
-              pair.operator.send(JSON.stringify(msg));
+            const dest = rcRole === "operator" ? pair.target : pair.operator;
+            if (dest && dest.readyState === WebSocket.OPEN) {
+              dest.send(JSON.stringify(msg));
             }
             return;
           }

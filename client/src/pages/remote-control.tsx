@@ -112,6 +112,7 @@ export default function RemoteControlPage() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const videoRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRecorderRef = useRef<MediaRecorder | null>(null);
@@ -204,15 +205,60 @@ export default function RemoteControlPage() {
   }, [activeSessionToken, addEvent]);
 
   const handleOffer = async (sdp: RTCSessionDescriptionInit, ws: WebSocket) => {
-    if (peerRef.current) peerRef.current.close();
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-    peerRef.current = pc;
-    pc.onicecandidate = (e) => { if (e.candidate && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "rc_ice_candidate", candidate: e.candidate })); };
-    pc.ontrack = (e) => { if (e.streams[0]) { receivedStreamRef.current = e.streams[0]; if (videoRef.current) videoRef.current.srcObject = e.streams[0]; } };
-    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "rc_answer", sdp: answer }));
+    let pc = peerRef.current;
+    const isRenegotiation = pc && pc.signalingState !== "closed";
+
+    if (!isRenegotiation) {
+      if (pc) pc.close();
+      pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+        ],
+      });
+      peerRef.current = pc;
+
+      pc.onicecandidate = (e) => {
+        if (e.candidate && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "rc_ice_candidate", candidate: e.candidate }));
+        }
+      };
+
+      pc.ontrack = (e) => {
+        if (!receivedStreamRef.current) {
+          receivedStreamRef.current = new MediaStream();
+        }
+        const existing = receivedStreamRef.current.getTracks().find(t => t.kind === e.track.kind);
+        if (existing) receivedStreamRef.current.removeTrack(existing);
+        receivedStreamRef.current.addTrack(e.track);
+
+        if (e.track.kind === "video" && videoRef.current) {
+          videoRef.current.srcObject = receivedStreamRef.current;
+          videoRef.current.play().catch(() => {});
+        }
+        if (e.track.kind === "audio" && audioRef.current) {
+          audioRef.current.srcObject = new MediaStream([e.track]);
+          audioRef.current.play().catch(() => {});
+        }
+        addEvent("data", `${e.track.kind} track received`);
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (pc!.connectionState === "connected") {
+          addEvent("connection", "WebRTC peer connection established");
+        }
+        if (pc!.connectionState === "disconnected" || pc!.connectionState === "failed") {
+          addEvent("connection", `WebRTC connection ${pc!.connectionState}`);
+        }
+      };
+    }
+
+    await pc!.setRemoteDescription(new RTCSessionDescription(sdp));
+    const answer = await pc!.createAnswer();
+    await pc!.setLocalDescription(answer);
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "rc_answer", sdp: answer }));
+    }
   };
 
   useEffect(() => { return () => { wsRef.current?.close(); peerRef.current?.close(); stopVideoRecording(); stopAudioRecording(); }; }, []);
@@ -622,7 +668,7 @@ export default function RemoteControlPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="aspect-video bg-black rounded-lg overflow-hidden relative">
-                        <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" data-testid="video-camera-feed" />
+                        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" data-testid="video-camera-feed" />
                         <div className="absolute bottom-2 left-2 flex items-center gap-1">
                           <Badge className="bg-red-500/80 text-white border-0 text-[10px]">LIVE</Badge>
                           {!cameraEnabled && <Badge className="bg-gray-800/80 text-gray-300 border-0 text-[10px]">Off</Badge>}
@@ -644,6 +690,7 @@ export default function RemoteControlPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="aspect-video bg-muted/30 rounded-lg flex items-center justify-center relative">
+                        <audio ref={audioRef} autoPlay data-testid="audio-live-feed" className="hidden" />
                         <div className="text-center space-y-2">
                           {micEnabled ? <Mic className="w-8 h-8 text-green-400 mx-auto animate-pulse" /> : <MicOff className="w-8 h-8 text-red-400 mx-auto" />}
                           <p className="text-xs text-muted-foreground">{micEnabled ? "Audio streaming live" : "Mic disabled"}</p>
