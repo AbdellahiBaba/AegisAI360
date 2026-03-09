@@ -58,7 +58,7 @@ export function setupAuth(app: Express) {
   app.use(passport.session());
 
   passport.use(
-    new LocalStrategy(async (username, password, done) => {
+    new LocalStrategy({ passReqToCallback: true }, async (req, username, password, done) => {
       try {
         const user = await storage.getUserByUsername(username);
         if (!user) return done(null, false, { message: "Invalid username or password" });
@@ -71,7 +71,8 @@ export function setupAuth(app: Express) {
         const valid = await comparePasswords(password, user.password);
         if (!valid) {
           const attempts = (user.failedLoginAttempts || 0) + 1;
-          storage.createLoginHistory({ userId: user.id, organizationId: user.organizationId, action: "login_failed" }).catch(e => console.error("Failed to record login history:", e));
+          const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
+          storage.createLoginHistory({ userId: user.id, organizationId: user.organizationId, action: "login_failed", ipAddress: typeof ip === "string" ? ip : String(ip), userAgent: req.headers["user-agent"] || null }).catch(e => console.error("Failed to record login history:", e));
           if (attempts >= MAX_FAILED_ATTEMPTS) {
             await storage.updateUserLockout(user.id, attempts, new Date(Date.now() + LOCKOUT_DURATION_MS));
             await storage.createSecurityEvent({

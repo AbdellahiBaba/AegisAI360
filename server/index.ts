@@ -307,6 +307,13 @@ app.use((req, res, next) => {
     console.log("Scan scheduler start skipped (non-fatal)");
   }
 
+  try {
+    const { startReportScheduler } = await import("./reportScheduler");
+    startReportScheduler();
+  } catch (err) {
+    console.log("Report scheduler start skipped (non-fatal)");
+  }
+
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = process.env.NODE_ENV === "production" ? "Internal Server Error" : (err.message || "Internal Server Error");

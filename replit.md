@@ -45,10 +45,10 @@ The frontend uses React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Recharts, Wo
 - **i18n Translation Coverage**: Comprehensive translation coverage across public and internal pages using `t()` with specific namespaces.
 - **Light/Dark Mode Toggle**: Theme toggle in sidebar footer switches between light and dark mode, persisted in localStorage. Light mode has clean white/gray/blue HSL values. Dark mode retains cyber palette.
 - **CSV Export**: Generic `exportToCsv()` utility in `client/src/lib/csvExport.ts`. Export buttons on Alerts, Incidents, Endpoints, Firewall, and Audit Log pages.
-- **Scheduled Reports**: `scheduled_reports` DB table. CRUD API endpoints. Admins can create daily/weekly/monthly report schedules in Settings.
+- **Scheduled Reports**: `scheduled_reports` DB table. CRUD API endpoints. Admins can create daily/weekly/monthly report schedules in Settings. Background worker in `server/reportScheduler.ts` polls every 60s for due reports, generates HTML email summaries (executive, incident, compliance types), and sends via SMTP using `sendReportEmail()` from `server/notificationService.ts`.
 - **Audit Log Viewer**: Searchable, filterable audit log table in Settings for org admins. Supports action type filter, text search, and CSV export.
 - **User Deletion**: `DELETE /api/organization/users/:userId` endpoint with self-deletion prevention, last-admin guard, and audit logging. Confirmation dialog in team management.
-- **Login History**: `login_history` DB table. Records login_success, login_failed, logout events with IP and user agent. Viewable in Settings for admins.
+- **Login History**: `login_history` DB table. Records login_success, login_failed, logout events with IP and user agent (including failed logins via `passReqToCallback`). Viewable in Settings for admins.
 - **Onboarding Wizard**: Multi-step dialog for new users (Welcome, Agent Setup, Alert Rules, Scan, Done). Auto-shown when `user.onboardingCompleted` is false. `PATCH /api/user/onboarding` marks complete.
 - **Dashboard Customization**: `dashboardLayout` jsonb field on users table. Customize button opens dialog with toggles for 9 widget sections. Preferences persist via `PATCH /api/user/dashboard-layout`.
 
@@ -57,6 +57,7 @@ The architecture is modular (`server/`, `client/`, `shared/`). Authentication us
 
 ### Performance & Security Enhancements (Applied)
 - **WebSocket Broadcast Scoping**: Broadcasts are org-scoped via `clientOrgMap` WeakMap populated from session cookies during WS upgrade. Prevents cross-org data leakage.
+- **AI Conversation Org-Scoping**: GET/:id, DELETE/:id, POST/:id/messages routes verify `conv.organizationId === getOrgId(req)` to prevent cross-org IDOR.
 - **Database Indexes**: 15 indexes added across 8 tables (`security_events`, `audit_logs`, `incidents`, `agents`, `agent_commands`, `notifications`, `assets`, `usage_tracking`) on frequently queried columns.
 - **N+1 Query Optimization**: `getEventTrend` consolidated from 24 queries to 1 using `date_trunc`. `getDashboardStats` reduced from 9 sequential to 1+6 parallel. Super admin org listing uses single JOIN query.
 - **Error Handling**: All 30+ empty `catch {}` blocks in server code replaced with `console.error` logging. Fire-and-forget promises have `.catch()` handlers.

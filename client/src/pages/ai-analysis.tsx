@@ -134,7 +134,11 @@ export default function AiAnalysis() {
                 return updated;
               });
             }
-          } catch {}
+          } catch (parseErr) {
+              if (trimmed.slice(6).trim().length > 0) {
+                console.error("SSE parse error:", parseErr, trimmed);
+              }
+            }
         }
       }
     } catch (error: any) {

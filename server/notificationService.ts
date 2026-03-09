@@ -156,6 +156,39 @@ export async function dispatchToChannels(payload: AlertPayload): Promise<void> {
   }
 }
 
+export async function sendReportEmail(recipients: string[], subject: string, html: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = parseInt(process.env.SMTP_PORT || "587");
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const smtpFrom = process.env.SMTP_FROM || smtpUser;
+
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      return { success: false, error: "SMTP not configured. Set SMTP_HOST, SMTP_USER, SMTP_PASS environment variables." };
+    }
+
+    const nodemailer = require("nodemailer") as typeof import("nodemailer");
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: { user: smtpUser, pass: smtpPass },
+    });
+
+    await transporter.sendMail({
+      from: smtpFrom,
+      to: recipients.join(", "),
+      subject,
+      html,
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Email delivery failed" };
+  }
+}
+
 export async function testChannel(channel: NotificationChannel): Promise<{ success: boolean; error?: string }> {
   const testPayload: AlertPayload = {
     ruleName: "Test Notification",

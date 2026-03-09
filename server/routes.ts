@@ -1756,6 +1756,7 @@ export async function registerRoutes(
       const id = parseInt(req.params.id);
       const conv = await chatStorage.getConversation(id);
       if (!conv) return res.status(404).json({ error: "Not found" });
+      if (conv.organizationId !== getOrgId(req)) return res.status(404).json({ error: "Not found" });
       const messages = await chatStorage.getMessagesByConversation(id);
       res.json({ ...conv, messages });
     } catch (error) {
@@ -1776,6 +1777,8 @@ export async function registerRoutes(
   app.delete("/api/ai-conversations/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
+      const conv = await chatStorage.getConversation(id);
+      if (!conv || conv.organizationId !== getOrgId(req)) return res.status(404).json({ error: "Not found" });
       await chatStorage.deleteConversation(id);
       res.status(204).send();
     } catch (error) {
@@ -2250,6 +2253,7 @@ export async function registerRoutes(
 
       const conv = await chatStorage.getConversation(conversationId);
       if (!conv) return res.status(404).json({ error: "Conversation not found" });
+      if (conv.organizationId !== getOrgId(req)) return res.status(404).json({ error: "Conversation not found" });
 
       await chatStorage.createMessage(conversationId, "user", content);
 
@@ -2267,7 +2271,7 @@ export async function registerRoutes(
       res.setHeader("Connection", "keep-alive");
 
       const stream = await openai.chat.completions.create({
-        model: "openai/gpt-4o-mini",
+        model: "gpt-4o-mini",
         messages: chatMessages,
         stream: true,
         max_completion_tokens: 8192,
