@@ -55,7 +55,7 @@ import {
   type LoginHistory, type InsertLoginHistory,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, and, gte, count, lt, ne } from "drizzle-orm";
+import { eq, desc, sql, and, gte, count, lt, ne, inArray } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -73,6 +73,8 @@ export interface IStorage {
   getSecurityEvents(orgId: number): Promise<SecurityEvent[]>;
   createSecurityEvent(event: InsertSecurityEvent): Promise<SecurityEvent>;
   updateSecurityEventStatus(id: number, orgId: number, status: string): Promise<SecurityEvent | undefined>;
+  bulkUpdateSecurityEventStatus(ids: number[], orgId: number, status: string): Promise<number>;
+  bulkDeleteSecurityEvents(ids: number[], orgId: number): Promise<number>;
   mitigateEventsByIp(orgId: number, ip: string): Promise<number>;
 
   getIncidents(orgId: number): Promise<Incident[]>;
@@ -375,6 +377,22 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(securityEvents.id, id), eq(securityEvents.organizationId, orgId)))
       .returning();
     return updated;
+  }
+
+  async bulkUpdateSecurityEventStatus(ids: number[], orgId: number, status: string): Promise<number> {
+    if (ids.length === 0) return 0;
+    const result = await db.update(securityEvents).set({ status })
+      .where(and(eq(securityEvents.organizationId, orgId), inArray(securityEvents.id, ids)))
+      .returning();
+    return result.length;
+  }
+
+  async bulkDeleteSecurityEvents(ids: number[], orgId: number): Promise<number> {
+    if (ids.length === 0) return 0;
+    const result = await db.delete(securityEvents)
+      .where(and(eq(securityEvents.organizationId, orgId), inArray(securityEvents.id, ids)))
+      .returning();
+    return result.length;
   }
 
   async mitigateEventsByIp(orgId: number, ip: string): Promise<number> {

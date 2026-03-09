@@ -19,7 +19,7 @@ import {
 import { requireAuth, requireRole, requirePlanFeature, sessionMiddleware } from "./auth";
 import passport from "passport";
 import type { IncomingMessage } from "http";
-import { generateNetworkDevices, runNetworkVulnerabilityScan, scanInfrastructureAsset, resolveHostToIp, parseRogueScanToDevices, type RogueScanResult } from "./networkMonitor";
+import { runNetworkVulnerabilityScan, scanInfrastructureAsset, resolveHostToIp, parseRogueScanToDevices, type RogueScanResult } from "./networkMonitor";
 import { getUncachableStripeClient, getStripePublishableKey, isStripeLiveMode } from "./stripeClient";
 import { createIngestionRouter } from "./ingestion";
 import { createSuperAdminRouter } from "./superAdmin";
@@ -391,50 +391,18 @@ export async function registerRoutes(
 
         res.json({ scanId: scan.id, status: "running", source: "agent", agentId: onlineAgent.id });
       } else {
-        res.json({ scanId: scan.id, status: "running", source: "demo" });
+        await storage.updateNetworkScan(scan.id, {
+          status: "failed",
+          completedAt: new Date(),
+          results: { error: "No online agents available" },
+        });
 
-        try {
-          const deviceCount = scanType === "full" ? 15 : 10;
-          const newDevices = generateNetworkDevices(orgId, deviceCount);
-
-          const existingDevices = await storage.getNetworkDevices(orgId);
-          const existingMacs = new Set(existingDevices.map(d => d.macAddress));
-
-          let created = 0;
-          let unauthorizedCount = 0;
-          for (const device of newDevices) {
-            if (!existingMacs.has(device.macAddress)) {
-              await storage.createNetworkDevice(device);
-              created++;
-            }
-            if (device.authorization === "unauthorized") unauthorizedCount++;
-          }
-
-          const totalDevices = existingDevices.length + created;
-          await storage.updateNetworkScan(scan.id, {
-            status: "completed",
-            devicesFound: totalDevices,
-            unauthorizedCount,
-            completedAt: new Date(),
-            results: { newDevices: created, totalDevices, scanType, source: "demo" },
-          });
-
-          if (unauthorizedCount > 0) {
-            await storage.createSecurityEvent({
-              organizationId: orgId,
-              eventType: "unauthorized_device",
-              severity: "high",
-              source: "network-monitor",
-              description: `[Demo Data] Network scan detected ${unauthorizedCount} unauthorized device(s) on the network`,
-              sourceIp: "network-scanner",
-              status: "new",
-            });
-          }
-
-        } catch (err) {
-          console.error("Network scan error:", err);
-          await storage.updateNetworkScan(scan.id, { status: "failed" });
-        }
+        res.json({
+          scanId: scan.id,
+          status: "no_agents",
+          source: "none",
+          message: "No online agents available. Deploy an endpoint agent to perform real network scans.",
+        });
       }
     } catch (error) {
       res.status(500).json({ error: "Failed to start network scan" });
@@ -999,6 +967,35 @@ export async function registerRoutes(
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
       res.status(500).json({ error: "Failed to create event" });
+    }
+  });
+
+  app.patch("/api/security-events/bulk", requireRole("admin", "analyst"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { ids, status } = z.object({
+        ids: z.array(z.number()).min(1).max(500),
+        status: z.enum(["new", "investigating", "resolved", "dismissed"]),
+      }).parse(req.body);
+      const count = await storage.bulkUpdateSecurityEventStatus(ids, orgId, status);
+      res.json({ updated: count });
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to bulk update events" });
+    }
+  });
+
+  app.delete("/api/security-events/bulk", requireRole("admin", "analyst"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { ids } = z.object({
+        ids: z.array(z.number()).min(1).max(500),
+      }).parse(req.body);
+      const count = await storage.bulkDeleteSecurityEvents(ids, orgId);
+      res.json({ deleted: count });
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to bulk delete events" });
     }
   });
 

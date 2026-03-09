@@ -617,16 +617,23 @@ export default function NetworkMonitorPage() {
           {devicesQuery.isLoading ? (
             <div className="p-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
           ) : filtered.length === 0 ? (
-            <div className="p-8 text-center">
-              <Server className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground" data-testid="text-no-devices">
-                {infrastructureAssets.length === 0 ? t("networkMonitor.noAssets") : t("networkMonitor.noMatchingAssets")}
-              </p>
-              {infrastructureAssets.length === 0 && (
-                <Button size="sm" className="mt-3" onClick={() => setShowAddForm(true)} data-testid="button-add-first-asset">
-                  <Plus className="w-3.5 h-3.5 ltr:mr-1 rtl:ml-1" />
-                  {t("networkMonitor.addFirstAsset")}
-                </Button>
+            <div className="py-16 text-center">
+              <Server className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-40" />
+              {infrastructureAssets.length === 0 ? (
+                <>
+                  <h2 className="text-base font-semibold mb-2" data-testid="text-network-empty-title">No monitored assets yet</h2>
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4" data-testid="text-no-devices">
+                    Add a domain, IP address, or URL to start monitoring your infrastructure. You can also deploy an agent for automatic network discovery.
+                  </p>
+                  <Button size="sm" onClick={() => setShowAddForm(true)} data-testid="button-add-first-asset">
+                    <Plus className="w-3.5 h-3.5 ltr:mr-1 rtl:ml-1" />
+                    {t("networkMonitor.addFirstAsset")}
+                  </Button>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground" data-testid="text-no-devices">
+                  {t("networkMonitor.noMatchingAssets")}
+                </p>
               )}
             </div>
           ) : (

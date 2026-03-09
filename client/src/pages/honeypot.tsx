@@ -105,6 +105,28 @@ export default function Honeypot() {
     );
   }
 
+  if (!events || events.length === 0) {
+    return (
+      <div className="p-4 md:p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold tracking-wider uppercase">{t("honeypot.title")}</h1>
+            <p className="text-xs text-muted-foreground">{t("honeypot.subtitle")}</p>
+          </div>
+        </div>
+        <Card>
+          <CardContent className="py-16 text-center">
+            <Bug className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-40" />
+            <h2 className="text-base font-semibold mb-2" data-testid="text-honeypot-empty-title">No honeypot events yet</h2>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto" data-testid="text-honeypot-empty-description">
+              Deploy an agent and start monitoring. Honeypot events will appear here as attackers interact with your decoy services.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between">

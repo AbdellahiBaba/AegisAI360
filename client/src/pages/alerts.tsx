@@ -5,12 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Search, Filter, Clock, Globe, Server, ArrowRight, ShieldBan, AlertTriangle, Loader2, Download } from "lucide-react";
+import { Search, Filter, Clock, Globe, Server, ArrowRight, ShieldBan, AlertTriangle, Loader2, Download, Trash2, CheckCircle, Eye, XCircle } from "lucide-react";
 import { exportToCsv } from "@/lib/csvExport";
 import { useToast } from "@/hooks/use-toast";
 import type { SecurityEvent } from "@shared/schema";
@@ -47,6 +48,7 @@ export default function Alerts() {
   const [severityFilter, setSeverityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedEvent, setSelectedEvent] = useState<SecurityEvent | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const { toast } = useToast();
   const { t } = useTranslation();
 
@@ -62,6 +64,36 @@ export default function Alerts() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
       toast({ title: t("alerts.statusUpdated") });
+    },
+  });
+
+  const bulkUpdateStatus = useMutation({
+    mutationFn: async ({ ids, status }: { ids: number[]; status: string }) => {
+      const res = await apiRequest("PATCH", "/api/security-events/bulk", { ids, status });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
+      setSelectedIds(new Set());
+      toast({ title: t("alerts.statusUpdated"), description: `${data.updated} events updated` });
+    },
+    onError: (err: Error) => {
+      toast({ title: t("alerts.failed"), description: err.message, variant: "destructive" });
+    },
+  });
+
+  const bulkDelete = useMutation({
+    mutationFn: async ({ ids }: { ids: number[] }) => {
+      const res = await apiRequest("DELETE", "/api/security-events/bulk", { ids });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
+      setSelectedIds(new Set());
+      toast({ title: "Events deleted", description: `${data.deleted} events removed` });
+    },
+    onError: (err: Error) => {
+      toast({ title: t("alerts.failed"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -105,6 +137,30 @@ export default function Alerts() {
     const matchesStatus = statusFilter === "all" || event.status === statusFilter;
     return matchesSearch && matchesSeverity && matchesStatus;
   });
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((e) => selectedIds.has(e.id));
+  const someFilteredSelected = filtered.some((e) => selectedIds.has(e.id));
+  const isBulkPending = bulkUpdateStatus.isPending || bulkDelete.isPending;
+
+  function toggleSelectAll() {
+    if (allFilteredSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map((e) => e.id)));
+    }
+  }
+
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   if (isLoading) {
     return (
@@ -191,11 +247,83 @@ export default function Alerts() {
         </Select>
       </div>
 
+      {selectedIds.size > 0 && (
+        <Card data-testid="bulk-action-bar">
+          <CardContent className="p-3 flex items-center gap-3 flex-wrap">
+            <Badge variant="secondary" className="font-mono text-xs" data-testid="text-selected-count">
+              {selectedIds.size} selected
+            </Badge>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isBulkPending}
+                onClick={() => bulkUpdateStatus.mutate({ ids: Array.from(selectedIds), status: "investigating" })}
+                data-testid="button-bulk-investigating"
+              >
+                {bulkUpdateStatus.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <Eye className="w-3 h-3 me-1" />}
+                Mark Investigating
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isBulkPending}
+                onClick={() => bulkUpdateStatus.mutate({ ids: Array.from(selectedIds), status: "resolved" })}
+                data-testid="button-bulk-resolved"
+              >
+                {bulkUpdateStatus.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <CheckCircle className="w-3 h-3 me-1" />}
+                Mark Resolved
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isBulkPending}
+                onClick={() => bulkUpdateStatus.mutate({ ids: Array.from(selectedIds), status: "dismissed" })}
+                data-testid="button-bulk-dismissed"
+              >
+                {bulkUpdateStatus.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <XCircle className="w-3 h-3 me-1" />}
+                Dismiss
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={isBulkPending}
+                onClick={() => {
+                  if (!window.confirm(`Delete ${selectedIds.size} selected events? This cannot be undone.`)) return;
+                  bulkDelete.mutate({ ids: Array.from(selectedIds) });
+                }}
+                data-testid="button-bulk-delete"
+              >
+                {bulkDelete.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <Trash2 className="w-3 h-3 me-1" />}
+                Delete
+              </Button>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedIds(new Set())}
+              data-testid="button-clear-selection"
+            >
+              Clear selection
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="p-0">
           <ScrollArea className="h-[calc(100vh-230px)]">
             <div className="min-w-[600px]">
-              <div className="grid grid-cols-[1fr_100px_120px_100px_80px_80px] gap-2 px-4 py-2 border-b text-[10px] text-muted-foreground uppercase tracking-wider font-medium sticky top-0 bg-card z-10">
+              <div className="grid grid-cols-[32px_1fr_100px_120px_100px_80px_80px] gap-2 px-4 py-2 border-b text-[10px] text-muted-foreground uppercase tracking-wider font-medium sticky top-0 bg-card z-10">
+                <span className="flex items-center justify-center">
+                  <Checkbox
+                    checked={allFilteredSelected}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all"
+                    data-testid="checkbox-select-all"
+                    className={someFilteredSelected && !allFilteredSelected ? "opacity-60" : ""}
+                  />
+                </span>
                 <span>{t("alerts.columnDescription")}</span>
                 <span>{t("alerts.columnType")}</span>
                 <span>{t("alerts.columnSource")}</span>
@@ -209,10 +337,18 @@ export default function Alerts() {
                 filtered.map((event) => (
                   <div
                     key={event.id}
-                    className="grid grid-cols-[1fr_100px_120px_100px_80px_80px] gap-2 px-4 py-2.5 border-b last:border-0 hover-elevate cursor-pointer items-center"
+                    className={`grid grid-cols-[32px_1fr_100px_120px_100px_80px_80px] gap-2 px-4 py-2.5 border-b last:border-0 hover-elevate cursor-pointer items-center ${selectedIds.has(event.id) ? "bg-accent/30" : ""}`}
                     onClick={() => setSelectedEvent(event)}
                     data-testid={`event-row-${event.id}`}
                   >
+                    <span className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(event.id)}
+                        onCheckedChange={() => toggleSelect(event.id)}
+                        aria-label={`Select event ${event.id}`}
+                        data-testid={`checkbox-event-${event.id}`}
+                      />
+                    </span>
                     <div className="min-w-0">
                       <p className="text-xs truncate">{event.description}</p>
                       <p className="text-[10px] text-muted-foreground font-mono mt-0.5">

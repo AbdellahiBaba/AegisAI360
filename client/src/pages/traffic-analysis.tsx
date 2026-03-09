@@ -248,9 +248,21 @@ export default function TrafficAnalysis() {
 
       {!agentId && (
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            <Server className="w-10 h-10 mx-auto mb-3 opacity-40" />
-            <p data-testid="text-select-agent-prompt">Select an agent to view traffic captures</p>
+          <CardContent className="py-16 text-center">
+            {!agentsLoading && (!agents || agents.length === 0) ? (
+              <>
+                <Wifi className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-40" />
+                <h2 className="text-base font-semibold mb-2" data-testid="text-traffic-empty-title">No traffic captures yet</h2>
+                <p className="text-sm text-muted-foreground max-w-md mx-auto" data-testid="text-traffic-empty-description">
+                  Deploy an agent to start capturing network traffic. Once an agent is online, you can initiate packet captures and analyze traffic patterns.
+                </p>
+              </>
+            ) : (
+              <>
+                <Server className="w-10 h-10 mx-auto mb-3 opacity-40 text-muted-foreground" />
+                <p className="text-muted-foreground" data-testid="text-select-agent-prompt">Select an agent to view traffic captures</p>
+              </>
+            )}
           </CardContent>
         </Card>
       )}
