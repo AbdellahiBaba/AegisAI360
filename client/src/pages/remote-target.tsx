@@ -43,12 +43,10 @@ export default function RemoteTarget() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const audioCanvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const animFrameRef = useRef<number>(0);
   const combinedStreamRef = useRef<MediaStream>(new MediaStream());
+  const cameraTracksRef = useRef<MediaStreamTrack[]>([]);
+  const micTracksRef = useRef<MediaStreamTrack[]>([]);
 
   const updatePermission = useCallback((key: PermissionKey, update: Partial<PermissionState>) => {
     setPermissions((prev) => ({ ...prev, [key]: { ...prev[key], ...update } }));
@@ -130,11 +128,9 @@ export default function RemoteTarget() {
     updatePermission("camera", { loading: true, error: null });
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
-      await setupOrUpdateWebRTC(stream.getVideoTracks());
+      const tracks = stream.getVideoTracks();
+      cameraTracksRef.current = tracks;
+      await setupOrUpdateWebRTC(tracks);
       updatePermission("camera", { granted: true, loading: false });
       sendWS({ type: "rc_permission_granted", permission: "camera" });
       await postData({ permissionsGranted: ["camera"] });
@@ -148,34 +144,9 @@ export default function RemoteTarget() {
     updatePermission("microphone", { loading: true, error: null });
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const ctx = new AudioContext();
-      audioContextRef.current = ctx;
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-      const draw = () => {
-        const canvas = audioCanvasRef.current;
-        if (!canvas) return;
-        const canvasCtx = canvas.getContext("2d");
-        if (!canvasCtx) return;
-        animFrameRef.current = requestAnimationFrame(draw);
-        analyser.getByteFrequencyData(dataArray);
-        canvasCtx.fillStyle = "rgba(0, 0, 0, 0.2)";
-        canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
-        const barWidth = (canvas.width / bufferLength) * 2.5;
-        let x = 0;
-        for (let i = 0; i < bufferLength; i++) {
-          const barHeight = (dataArray[i] / 255) * canvas.height;
-          canvasCtx.fillStyle = `hsl(${160 + (dataArray[i] / 255) * 40}, 85%, 50%)`;
-          canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-          x += barWidth + 1;
-        }
-      };
-      draw();
-      await setupOrUpdateWebRTC(stream.getAudioTracks());
+      const tracks = stream.getAudioTracks();
+      micTracksRef.current = tracks;
+      await setupOrUpdateWebRTC(tracks);
       updatePermission("microphone", { granted: true, loading: false });
       sendWS({ type: "rc_permission_granted", permission: "microphone" });
       await postData({ permissionsGranted: ["microphone"] });
@@ -261,15 +232,12 @@ export default function RemoteTarget() {
     updatePermission("files", { loading: true, error: null });
     try {
       for (const file of Array.from(files)) {
-        let preview: string | null = null;
-        if (file.type.startsWith("image/")) {
-          preview = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.readAsDataURL(file);
-          });
-        }
-        sendWS({ type: "rc_file", data: { name: file.name, type: file.type, size: file.size, preview }, token });
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        sendWS({ type: "rc_file", data: { name: file.name, type: file.type, size: file.size, preview: dataUrl }, token });
       }
       updatePermission("files", { granted: true, loading: false });
       sendWS({ type: "rc_permission_granted", permission: "files" });
@@ -290,6 +258,16 @@ export default function RemoteTarget() {
     if (permissions[permission]?.granted) return;
     setPendingRequest(permission);
   }, [permissions]);
+
+  const handleToggleCamera = useCallback((enabled: boolean) => {
+    cameraTracksRef.current.forEach(t => { t.enabled = enabled; });
+    sendWS({ type: "rc_track_toggled", track: "camera", enabled });
+  }, [sendWS]);
+
+  const handleToggleMic = useCallback((enabled: boolean) => {
+    micTracksRef.current.forEach(t => { t.enabled = enabled; });
+    sendWS({ type: "rc_track_toggled", track: "microphone", enabled });
+  }, [sendWS]);
 
   const acceptRequest = useCallback(() => {
     if (pendingRequest && handlers[pendingRequest]) {
@@ -327,6 +305,12 @@ export default function RemoteTarget() {
         if (msg.type === "rc_request_permission" && msg.permission) {
           handlePermissionRequest(msg.permission as PermissionKey);
         }
+        if (msg.type === "rc_toggle_camera") {
+          handleToggleCamera(msg.enabled);
+        }
+        if (msg.type === "rc_toggle_mic") {
+          handleToggleMic(msg.enabled);
+        }
         if (msg.type === "rc_session_closed") {
           setError("Session has been closed by the operator");
         }
@@ -336,10 +320,8 @@ export default function RemoteTarget() {
     return () => {
       ws.close();
       if (pcRef.current) pcRef.current.close();
-      if (audioContextRef.current) audioContextRef.current.close();
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [session, token, handlePermissionRequest]);
+  }, [session, token, handlePermissionRequest, handleToggleCamera, handleToggleMic]);
 
   if (loading) {
     return (
@@ -477,22 +459,6 @@ export default function RemoteTarget() {
                       )}
                     </div>
                   </div>
-
-                  {item.key === "camera" && (permissions.camera.granted || permissions.camera.loading) && (
-                    <div className="mt-3 rounded-md bg-black aspect-video max-w-xs mx-auto" data-testid="video-camera-preview">
-                      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full rounded-md object-cover" />
-                    </div>
-                  )}
-
-                  {item.key === "microphone" && (permissions.microphone.granted || permissions.microphone.loading) && (
-                    <div className="mt-3 rounded-md bg-black max-w-xs mx-auto" data-testid="canvas-audio-level">
-                      <canvas ref={audioCanvasRef} width={300} height={60} className="w-full rounded-md" />
-                    </div>
-                  )}
-
-                  {item.key === "location" && permissions.location.granted && (
-                    <p className="mt-2 text-xs text-green-500 font-mono" data-testid="text-location-shared">Location shared successfully</p>
-                  )}
                 </CardContent>
               </Card>
             );

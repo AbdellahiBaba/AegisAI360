@@ -134,9 +134,19 @@ export async function registerRoutes(
 
         if (rcToken && rcClients.has(rcToken)) {
           const pair = rcClients.get(rcToken)!;
-          if (msg.type === "rc_data" || msg.type === "rc_device_info" || msg.type === "rc_location" || msg.type === "rc_file") {
+          const targetToOperatorTypes = ["rc_data", "rc_device_info", "rc_location", "rc_file", "rc_permission_granted", "rc_permission_denied", "rc_track_toggled"];
+          if (targetToOperatorTypes.includes(msg.type)) {
+            if (rcRole !== "target") return;
             if (pair.operator && pair.operator.readyState === WebSocket.OPEN) {
               pair.operator.send(JSON.stringify(msg));
+            }
+            return;
+          }
+          const operatorToTargetTypes = ["rc_request_permission", "rc_toggle_camera", "rc_toggle_mic"];
+          if (operatorToTargetTypes.includes(msg.type)) {
+            if (rcRole !== "operator") return;
+            if (pair.target && pair.target.readyState === WebSocket.OPEN) {
+              pair.target.send(JSON.stringify(msg));
             }
             return;
           }
