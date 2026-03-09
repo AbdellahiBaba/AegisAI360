@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Search, Filter, Clock, Globe, Server, ArrowRight, ShieldBan, AlertTriangle, Loader2, Download, Trash2, CheckCircle, Eye, XCircle } from "lucide-react";
+import { Search, Filter, Clock, Globe, Server, ArrowRight, ShieldBan, AlertTriangle, Loader2, Download, Trash2, CheckCircle, Eye, XCircle, Brain, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { exportToCsv } from "@/lib/csvExport";
 import { useToast } from "@/hooks/use-toast";
 import type { SecurityEvent } from "@shared/schema";
@@ -42,6 +43,30 @@ function formatDate(dateStr: string) {
   });
 }
 
+function getAiScoreColor(score: number): string {
+  if (score >= 80) return "bg-severity-critical text-white";
+  if (score >= 60) return "bg-severity-high text-white";
+  if (score >= 40) return "bg-severity-medium text-black";
+  if (score >= 20) return "bg-severity-low text-white";
+  return "bg-severity-info text-white";
+}
+
+function getAiScoreLabel(score: number): string {
+  if (score >= 80) return "Critical";
+  if (score >= 60) return "High";
+  if (score >= 40) return "Medium";
+  if (score >= 20) return "Low";
+  return "Info";
+}
+
+function getRecommendationBadgeClass(rec: string): string {
+  const lower = rec.toLowerCase();
+  if (lower.startsWith("escalate")) return "bg-severity-critical/20 text-severity-critical";
+  if (lower.startsWith("monitor")) return "bg-severity-medium/20 text-severity-medium";
+  if (lower.startsWith("dismiss")) return "bg-status-online/20 text-status-online";
+  return "bg-muted text-muted-foreground";
+}
+
 export default function Alerts() {
   useDocumentTitle("Security Alerts");
   const [search, setSearch] = useState("");
@@ -49,6 +74,7 @@ export default function Alerts() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedEvent, setSelectedEvent] = useState<SecurityEvent | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [aiInsightsOpen, setAiInsightsOpen] = useState(true);
   const { toast } = useToast();
   const { t } = useTranslation();
 
@@ -127,6 +153,23 @@ export default function Alerts() {
     },
   });
 
+  const retriage = useMutation({
+    mutationFn: async ({ eventId }: { eventId: number }) => {
+      const res = await apiRequest("POST", `/api/security-events/${eventId}/retriage`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
+      if (selectedEvent && data.event) {
+        setSelectedEvent(data.event);
+      }
+      toast({ title: "AI Triage Complete", description: `Threat score: ${data.event?.aiThreatScore ?? "N/A"}` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "AI Triage Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const filtered = (events || []).filter((event) => {
     const matchesSearch =
       search === "" ||
@@ -182,7 +225,7 @@ export default function Alerts() {
             onClick={() => {
               exportToCsv(
                 "security-alerts",
-                ["ID", "Description", "Type", "Source", "Source IP", "Destination IP", "Port", "Protocol", "Severity", "Status", "Created At"],
+                ["ID", "Description", "Type", "Source", "Source IP", "Destination IP", "Port", "Protocol", "Severity", "Status", "AI Score", "AI Classification", "Created At"],
                 filtered.map((e) => [
                   e.id,
                   e.description,
@@ -194,6 +237,8 @@ export default function Alerts() {
                   e.protocol || "",
                   e.severity,
                   e.status,
+                  e.aiThreatScore ?? "",
+                  e.aiClassification || "",
                   e.createdAt ? new Date(e.createdAt as unknown as string).toISOString() : "",
                 ])
               );
@@ -314,7 +359,7 @@ export default function Alerts() {
         <CardContent className="p-0">
           <ScrollArea className="h-[calc(100vh-230px)]">
             <div className="min-w-[600px]">
-              <div className="grid grid-cols-[32px_1fr_100px_120px_100px_80px_80px] gap-2 px-4 py-2 border-b text-[10px] text-muted-foreground uppercase tracking-wider font-medium sticky top-0 bg-card z-10">
+              <div className="grid grid-cols-[32px_1fr_100px_120px_100px_60px_80px_80px] gap-2 px-4 py-2 border-b text-[10px] text-muted-foreground uppercase tracking-wider font-medium sticky top-0 bg-card z-10">
                 <span className="flex items-center justify-center">
                   <Checkbox
                     checked={allFilteredSelected}
@@ -328,6 +373,7 @@ export default function Alerts() {
                 <span>{t("alerts.columnType")}</span>
                 <span>{t("alerts.columnSource")}</span>
                 <span>{t("alerts.columnSeverity")}</span>
+                <span>AI</span>
                 <span>{t("alerts.columnStatus")}</span>
                 <span>{t("alerts.columnTime")}</span>
               </div>
@@ -337,7 +383,7 @@ export default function Alerts() {
                 filtered.map((event) => (
                   <div
                     key={event.id}
-                    className={`grid grid-cols-[32px_1fr_100px_120px_100px_80px_80px] gap-2 px-4 py-2.5 border-b last:border-0 hover-elevate cursor-pointer items-center ${selectedIds.has(event.id) ? "bg-accent/30" : ""}`}
+                    className={`grid grid-cols-[32px_1fr_100px_120px_100px_60px_80px_80px] gap-2 px-4 py-2.5 border-b last:border-0 hover-elevate cursor-pointer items-center ${selectedIds.has(event.id) ? "bg-accent/30" : ""}`}
                     onClick={() => setSelectedEvent(event)}
                     data-testid={`event-row-${event.id}`}
                   >
@@ -352,7 +398,7 @@ export default function Alerts() {
                     <div className="min-w-0">
                       <p className="text-xs truncate">{event.description}</p>
                       <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                        {event.sourceIp || t("common.noData")} {event.destinationIp ? `→ ${event.destinationIp}` : ""}
+                        {event.sourceIp || t("common.noData")} {event.destinationIp ? `\u2192 ${event.destinationIp}` : ""}
                       </p>
                     </div>
                     <span className="text-[10px] text-muted-foreground capitalize font-mono">{event.eventType.replace(/_/g, " ")}</span>
@@ -360,6 +406,18 @@ export default function Alerts() {
                     <Badge className={`${severityClasses[event.severity]} text-[9px] uppercase w-fit`}>
                       {event.severity}
                     </Badge>
+                    <span className="flex items-center justify-center">
+                      {event.aiThreatScore != null ? (
+                        <Badge
+                          className={`${getAiScoreColor(event.aiThreatScore)} text-[9px] font-mono w-fit`}
+                          data-testid={`badge-ai-score-${event.id}`}
+                        >
+                          {event.aiThreatScore}
+                        </Badge>
+                      ) : (
+                        <span className="text-[9px] text-muted-foreground">--</span>
+                      )}
+                    </span>
                     <Badge className={`${statusClasses[event.status]} text-[9px] uppercase w-fit`}>
                       {event.status}
                     </Badge>
@@ -381,99 +439,183 @@ export default function Alerts() {
               <SheetHeader>
                 <SheetTitle className="text-sm tracking-wider uppercase">{t("alerts.eventDetails")}</SheetTitle>
               </SheetHeader>
-              <div className="space-y-4 mt-4">
-                <div className="flex gap-2 flex-wrap">
-                  <Badge className={`${severityClasses[selectedEvent.severity]} text-[10px] uppercase`}>
-                    {selectedEvent.severity}
-                  </Badge>
-                  <Badge className={`${statusClasses[selectedEvent.status]} text-[10px] uppercase`}>
-                    {selectedEvent.status}
-                  </Badge>
-                </div>
-                <p className="text-sm">{selectedEvent.description}</p>
-                <div className="space-y-3">
-                  <DetailRow icon={Server} label={t("alerts.eventType")} value={selectedEvent.eventType.replace(/_/g, " ")} />
-                  <DetailRow icon={Globe} label={t("alerts.sourceIp")} value={selectedEvent.sourceIp || t("common.noData")} />
-                  <DetailRow icon={ArrowRight} label={t("alerts.destIp")} value={selectedEvent.destinationIp || t("common.noData")} />
-                  <DetailRow icon={Server} label={t("alerts.port")} value={selectedEvent.port?.toString() || t("common.noData")} />
-                  <DetailRow icon={Server} label={t("alerts.protocol")} value={selectedEvent.protocol || t("common.noData")} />
-                  <DetailRow icon={Server} label={t("common.source")} value={selectedEvent.source} />
-                  <DetailRow icon={Clock} label={t("common.time")} value={formatDate(selectedEvent.createdAt as unknown as string)} />
-                </div>
-                <div className="flex gap-2 mt-6 flex-wrap">
-                  {selectedEvent.status === "new" && (
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        updateStatus.mutate({ id: selectedEvent.id, status: "investigating" });
-                        setSelectedEvent({ ...selectedEvent, status: "investigating" });
-                      }}
-                      data-testid="button-investigate-event"
-                    >
-                      {t("alerts.investigate")}
-                    </Button>
-                  )}
-                  {selectedEvent.status !== "resolved" && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        updateStatus.mutate({ id: selectedEvent.id, status: "resolved" });
-                        setSelectedEvent({ ...selectedEvent, status: "resolved" });
-                      }}
-                      data-testid="button-resolve-event"
-                    >
-                      {t("alerts.resolve")}
-                    </Button>
-                  )}
-                  {selectedEvent.status !== "dismissed" && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        updateStatus.mutate({ id: selectedEvent.id, status: "dismissed" });
-                        setSelectedEvent({ ...selectedEvent, status: "dismissed" });
-                      }}
-                      data-testid="button-dismiss-event"
-                    >
-                      {t("alerts.dismiss")}
-                    </Button>
-                  )}
-                </div>
-                <div className="border-t pt-4 mt-4 space-y-2">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{t("alerts.responseActions")}</p>
+              <ScrollArea className="h-[calc(100vh-80px)] pr-2">
+                <div className="space-y-4 mt-4">
                   <div className="flex gap-2 flex-wrap">
-                    {selectedEvent.sourceIp && (
+                    <Badge className={`${severityClasses[selectedEvent.severity]} text-[10px] uppercase`}>
+                      {selectedEvent.severity}
+                    </Badge>
+                    <Badge className={`${statusClasses[selectedEvent.status]} text-[10px] uppercase`}>
+                      {selectedEvent.status}
+                    </Badge>
+                    {selectedEvent.aiThreatScore != null && (
+                      <Badge
+                        className={`${getAiScoreColor(selectedEvent.aiThreatScore)} text-[10px]`}
+                        data-testid="badge-ai-score-detail"
+                      >
+                        <Brain className="w-3 h-3 me-1" />
+                        AI: {selectedEvent.aiThreatScore} ({getAiScoreLabel(selectedEvent.aiThreatScore)})
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-sm">{selectedEvent.description}</p>
+                  <div className="space-y-3">
+                    <DetailRow icon={Server} label={t("alerts.eventType")} value={selectedEvent.eventType.replace(/_/g, " ")} />
+                    <DetailRow icon={Globe} label={t("alerts.sourceIp")} value={selectedEvent.sourceIp || t("common.noData")} />
+                    <DetailRow icon={ArrowRight} label={t("alerts.destIp")} value={selectedEvent.destinationIp || t("common.noData")} />
+                    <DetailRow icon={Server} label={t("alerts.port")} value={selectedEvent.port?.toString() || t("common.noData")} />
+                    <DetailRow icon={Server} label={t("alerts.protocol")} value={selectedEvent.protocol || t("common.noData")} />
+                    <DetailRow icon={Server} label={t("common.source")} value={selectedEvent.source} />
+                    <DetailRow icon={Clock} label={t("common.time")} value={formatDate(selectedEvent.createdAt as unknown as string)} />
+                  </div>
+
+                  {(selectedEvent.aiThreatScore != null || selectedEvent.aiClassification || selectedEvent.aiRecommendation) && (
+                    <Collapsible open={aiInsightsOpen} onOpenChange={setAiInsightsOpen}>
+                      <CollapsibleTrigger asChild>
+                        <div className="flex items-center justify-between border-t pt-4 cursor-pointer" data-testid="toggle-ai-insights">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-amber-500" />
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">AI Insights</p>
+                          </div>
+                          {aiInsightsOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="space-y-3 mt-3 pl-1 border-l-2 border-amber-500/30 ml-2">
+                          <div className="pl-3 space-y-3">
+                            {selectedEvent.aiThreatScore != null && (
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs text-muted-foreground w-24 flex-shrink-0">Threat Score</span>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-24 h-2 rounded-full bg-muted">
+                                    <div
+                                      className={`h-2 rounded-full ${selectedEvent.aiThreatScore >= 80 ? "bg-severity-critical" : selectedEvent.aiThreatScore >= 60 ? "bg-severity-high" : selectedEvent.aiThreatScore >= 40 ? "bg-severity-medium" : selectedEvent.aiThreatScore >= 20 ? "bg-severity-low" : "bg-severity-info"}`}
+                                      style={{ width: `${selectedEvent.aiThreatScore}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-xs font-mono font-semibold" data-testid="text-ai-score-value">{selectedEvent.aiThreatScore}/100</span>
+                                </div>
+                              </div>
+                            )}
+                            {selectedEvent.aiClassification && (
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs text-muted-foreground w-24 flex-shrink-0">Classification</span>
+                                <Badge variant="outline" className="text-[10px] capitalize" data-testid="badge-ai-classification">
+                                  {selectedEvent.aiClassification.replace(/_/g, " ")}
+                                </Badge>
+                              </div>
+                            )}
+                            {selectedEvent.aiRecommendation && (
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xs text-muted-foreground w-24 flex-shrink-0">Action</span>
+                                  <Badge className={`${getRecommendationBadgeClass(selectedEvent.aiRecommendation)} text-[10px] capitalize`} data-testid="badge-ai-recommendation">
+                                    {selectedEvent.aiRecommendation.split("|")[0].trim()}
+                                  </Badge>
+                                </div>
+                                {selectedEvent.aiRecommendation.includes("|") && (
+                                  <p className="text-[11px] text-muted-foreground italic pl-[calc(6rem+12px)]" data-testid="text-ai-reasoning">
+                                    {selectedEvent.aiRecommendation.split("|").slice(1).join("|").trim()}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  )}
+
+                  {!selectedEvent.aiThreatScore && (
+                    <div className="border-t pt-4">
                       <Button
                         size="sm"
-                        variant="destructive"
-                        onClick={() => {
-                          if (!window.confirm(t("alerts.blockIpConfirm", { ip: selectedEvent.sourceIp }))) return;
-                          blockIp.mutate({ ip: selectedEvent.sourceIp!, reason: `Blocked from event: ${selectedEvent.description.slice(0, 80)}` });
-                        }}
-                        disabled={blockIp.isPending}
-                        data-testid="button-block-ip"
+                        variant="outline"
+                        onClick={() => retriage.mutate({ eventId: selectedEvent.id })}
+                        disabled={retriage.isPending}
+                        data-testid="button-ai-triage"
                       >
-                        {blockIp.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <ShieldBan className="w-3 h-3 me-1" />}
-                        {t("alerts.blockSourceIp")}
+                        {retriage.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <Brain className="w-3 h-3 me-1" />}
+                        Run AI Triage
+                      </Button>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 mt-6 flex-wrap">
+                    {selectedEvent.status === "new" && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          updateStatus.mutate({ id: selectedEvent.id, status: "investigating" });
+                          setSelectedEvent({ ...selectedEvent, status: "investigating" });
+                        }}
+                        data-testid="button-investigate-event"
+                      >
+                        {t("alerts.investigate")}
                       </Button>
                     )}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        if (!window.confirm(t("alerts.createIncidentConfirm"))) return;
-                        createIncidentFromEvent.mutate({ eventId: selectedEvent.id });
-                      }}
-                      disabled={createIncidentFromEvent.isPending}
-                      data-testid="button-create-incident-from-event"
-                    >
-                      {createIncidentFromEvent.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <AlertTriangle className="w-3 h-3 me-1" />}
-                      {t("alerts.createIncident")}
-                    </Button>
+                    {selectedEvent.status !== "resolved" && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          updateStatus.mutate({ id: selectedEvent.id, status: "resolved" });
+                          setSelectedEvent({ ...selectedEvent, status: "resolved" });
+                        }}
+                        data-testid="button-resolve-event"
+                      >
+                        {t("alerts.resolve")}
+                      </Button>
+                    )}
+                    {selectedEvent.status !== "dismissed" && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          updateStatus.mutate({ id: selectedEvent.id, status: "dismissed" });
+                          setSelectedEvent({ ...selectedEvent, status: "dismissed" });
+                        }}
+                        data-testid="button-dismiss-event"
+                      >
+                        {t("alerts.dismiss")}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="border-t pt-4 mt-4 space-y-2">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{t("alerts.responseActions")}</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {selectedEvent.sourceIp && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            if (!window.confirm(t("alerts.blockIpConfirm", { ip: selectedEvent.sourceIp }))) return;
+                            blockIp.mutate({ ip: selectedEvent.sourceIp!, reason: `Blocked from event: ${selectedEvent.description.slice(0, 80)}` });
+                          }}
+                          disabled={blockIp.isPending}
+                          data-testid="button-block-ip"
+                        >
+                          {blockIp.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <ShieldBan className="w-3 h-3 me-1" />}
+                          {t("alerts.blockSourceIp")}
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          if (!window.confirm(t("alerts.createIncidentConfirm"))) return;
+                          createIncidentFromEvent.mutate({ eventId: selectedEvent.id });
+                        }}
+                        disabled={createIncidentFromEvent.isPending}
+                        data-testid="button-create-incident-from-event"
+                      >
+                        {createIncidentFromEvent.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <AlertTriangle className="w-3 h-3 me-1" />}
+                        {t("alerts.createIncident")}
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
+              </ScrollArea>
             </>
           )}
         </SheetContent>

@@ -1,8 +1,98 @@
 import { storage } from "./storage";
-import type { SecurityEvent, AlertRule } from "@shared/schema";
+import type { SecurityEvent, AlertRule, ResponsePlaybook } from "@shared/schema";
 import { dispatchToChannels } from "./notificationService";
+import OpenAI from "openai";
 
 const DESTRUCTIVE_ACTIONS = ["block_source", "auto_quarantine", "auto_sinkhole"];
+const PLAYBOOK_DESTRUCTIVE_ACTIONS = ["isolate_host", "block_ip", "kill_process", "quarantine_file"];
+
+const SEVERITY_ORDER = ["info", "low", "medium", "high", "critical"];
+const MIN_TRIAGE_SEVERITY = "medium";
+
+const AI_TRIAGE_RATE_LIMIT = 20;
+const AI_TRIAGE_WINDOW_MS = 60 * 1000;
+let aiTriageTimestamps: number[] = [];
+
+function canMakeAiCall(): boolean {
+  const now = Date.now();
+  aiTriageTimestamps = aiTriageTimestamps.filter(t => now - t < AI_TRIAGE_WINDOW_MS);
+  if (aiTriageTimestamps.length >= AI_TRIAGE_RATE_LIMIT) return false;
+  aiTriageTimestamps.push(now);
+  return true;
+}
+
+function shouldTriageEvent(event: SecurityEvent): boolean {
+  const sevIndex = SEVERITY_ORDER.indexOf(event.severity);
+  const minIndex = SEVERITY_ORDER.indexOf(MIN_TRIAGE_SEVERITY);
+  return sevIndex >= minIndex;
+}
+
+const openai = new OpenAI({
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
+
+async function aiTriageEvent(event: SecurityEvent): Promise<{ aiThreatScore: number; aiClassification: string; aiRecommendation: string } | null> {
+  if (!shouldTriageEvent(event)) return null;
+  if (!canMakeAiCall()) return null;
+
+  try {
+    const prompt = `Analyze this security event and provide a triage assessment.
+
+Event Details:
+- Type: ${event.eventType}
+- Severity: ${event.severity}
+- Source: ${event.source}
+- Source IP: ${event.sourceIp || "N/A"}
+- Destination IP: ${event.destinationIp || "N/A"}
+- Port: ${event.port || "N/A"}
+- Protocol: ${event.protocol || "N/A"}
+- Description: ${event.description}
+- MITRE Technique: ${event.techniqueId || "N/A"}
+- MITRE Tactic: ${event.tactic || "N/A"}
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "threatScore": <number 0-100>,
+  "classification": "<one of: credential_stuffing, reconnaissance, malware, exfiltration, lateral_movement, privilege_escalation, command_and_control, ransomware, phishing, insider_threat, policy_violation, brute_force, denial_of_service, web_attack, other>",
+  "recommendation": "<one of: escalate, monitor, dismiss>",
+  "reasoning": "<brief 1-2 sentence explanation>"
+}`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "You are a SOC analyst AI that triages security events. Respond only with valid JSON." },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.3,
+      max_tokens: 300,
+    });
+
+    const content = response.choices[0]?.message?.content?.trim();
+    if (!content) return null;
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    const score = Math.max(0, Math.min(100, Math.round(Number(parsed.threatScore) || 0)));
+    const classification = String(parsed.classification || "other");
+    const recommendation = ["escalate", "monitor", "dismiss"].includes(parsed.recommendation)
+      ? parsed.recommendation
+      : "monitor";
+    const reasoning = parsed.reasoning ? ` | ${parsed.reasoning}` : "";
+
+    return {
+      aiThreatScore: score,
+      aiClassification: classification,
+      aiRecommendation: `${recommendation}${reasoning}`,
+    };
+  } catch (err) {
+    console.error("AI triage error:", err);
+    return null;
+  }
+}
 
 export class AlertEngine {
   private broadcast: (data: unknown) => void;
@@ -13,6 +103,8 @@ export class AlertEngine {
 
   async evaluateEvent(event: SecurityEvent) {
     if (!event.organizationId) return;
+
+    this.runAiTriage(event).catch(err => console.error("AI triage background error:", err));
 
     try {
       const rules = await storage.getAlertRules(event.organizationId);
@@ -26,6 +118,150 @@ export class AlertEngine {
       }
     } catch (err) {
       console.error("Alert engine evaluation error:", err);
+    }
+
+    this.runAutoPlaybooks(event).catch(err => console.error("Auto-playbook error:", err));
+  }
+
+  private async runAutoPlaybooks(event: SecurityEvent) {
+    if (!event.organizationId) return;
+    try {
+      const playbooks = await storage.getResponsePlaybooks(event.organizationId);
+      const autoPlaybooks = playbooks.filter(p => p.enabled && p.autoTriggerEnabled);
+
+      for (const playbook of autoPlaybooks) {
+        const sevIndex = SEVERITY_ORDER.indexOf(event.severity);
+        const triggerIndex = SEVERITY_ORDER.indexOf(playbook.triggerSeverity || "critical");
+        if (sevIndex < triggerIndex) continue;
+
+        if (playbook.lastAutoRunAt) {
+          const cooldownMs = (playbook.cooldownMinutes || 30) * 60 * 1000;
+          if (Date.now() - new Date(playbook.lastAutoRunAt).getTime() < cooldownMs) continue;
+        }
+
+        const conditionsMatch = this.matchesPlaybookConditions(event, playbook);
+        if (!conditionsMatch) continue;
+
+        await this.executePlaybook(event, playbook);
+      }
+    } catch (err) {
+      console.error("Auto-playbook evaluation error:", err);
+    }
+  }
+
+  private matchesPlaybookConditions(event: SecurityEvent, playbook: ResponsePlaybook): boolean {
+    if (!playbook.triggerConditions) return true;
+    try {
+      const conditions = JSON.parse(playbook.triggerConditions);
+      if (!conditions || !Array.isArray(conditions)) return true;
+      for (const cond of conditions) {
+        const eventVal = this.getEventField(event, cond.field);
+        if (cond.operator === "equals" && String(eventVal).toLowerCase() !== String(cond.value).toLowerCase()) return false;
+        if (cond.operator === "contains" && !String(eventVal).toLowerCase().includes(String(cond.value).toLowerCase())) return false;
+      }
+      return true;
+    } catch { return true; }
+  }
+
+  private async executePlaybook(event: SecurityEvent, playbook: ResponsePlaybook) {
+    const orgId = event.organizationId!;
+    try {
+      const actions = playbook.actions ? JSON.parse(playbook.actions) : [];
+      const hasDestructive = actions.some((a: any) => {
+        const actionType = typeof a === "string" ? a : a.type;
+        return PLAYBOOK_DESTRUCTIVE_ACTIONS.includes(actionType);
+      });
+
+      let aiConfidence = 100;
+      if (hasDestructive) {
+        try {
+          const confResponse = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [
+              { role: "system", content: "You are a SOC analyst. Assess whether an automated response action is appropriate. Respond only with JSON." },
+              { role: "user", content: `Security event: ${event.eventType} - ${event.description}\nSeverity: ${event.severity}\nSource: ${event.sourceIp || event.source}\nPlaybook: ${playbook.name}\nActions: ${playbook.actions}\n\nShould these automated actions be executed? Respond with: {"confidence": <0-100>, "reasoning": "<brief explanation>"}` },
+            ],
+            temperature: 0.2,
+            max_tokens: 200,
+          });
+          const content = confResponse.choices[0]?.message?.content?.trim();
+          if (content) {
+            const match = content.match(/\{[\s\S]*\}/);
+            if (match) {
+              const parsed = JSON.parse(match[0]);
+              aiConfidence = Math.max(0, Math.min(100, Math.round(Number(parsed.confidence) || 0)));
+            }
+          }
+        } catch (err) {
+          console.error("AI confidence check failed, defaulting to low confidence:", err);
+          aiConfidence = 50;
+        }
+
+        if (aiConfidence < 70) {
+          await storage.createNotification({
+            organizationId: orgId,
+            userId: null,
+            title: `Playbook Pending Review: ${playbook.name}`,
+            message: `AI confidence ${aiConfidence}% is below threshold (70%) for auto-execution. Event: ${event.description.slice(0, 80)}`,
+            type: "warning",
+            actionUrl: "/playbooks",
+          });
+          this.broadcast({ type: "notification", orgId });
+          try {
+            await storage.createResponseAction({
+              organizationId: orgId,
+              actionType: "pending_review",
+              target: `playbook:${playbook.id}`,
+              status: "pending",
+              executedBy: "system/auto",
+              details: `AI confidence: ${aiConfidence}%. Blocked auto-execution for event: ${event.description.slice(0, 100)}`,
+              result: null,
+            });
+          } catch {}
+          return;
+        }
+      }
+
+      await storage.updateResponsePlaybook(playbook.id, orgId, { lastAutoRunAt: new Date() });
+
+      for (const rawAction of actions) {
+        const actionType = typeof rawAction === "string" ? rawAction : rawAction.type;
+        try {
+          await storage.createResponseAction({
+            organizationId: orgId,
+            actionType: actionType || "unknown",
+            target: `playbook:${playbook.id}`,
+            status: "completed",
+            executedBy: "system/auto",
+            details: `Auto-triggered by event: ${event.eventType} - ${event.description.slice(0, 100)} (AI confidence: ${aiConfidence}%)`,
+            result: `Executed action: ${actionType}`,
+          });
+        } catch {}
+      }
+
+      await storage.createNotification({
+        organizationId: orgId,
+        userId: null,
+        title: `Playbook Auto-Executed: ${playbook.name}`,
+        message: `${actions.length} action(s) executed for event: ${event.description.slice(0, 80)} (AI confidence: ${aiConfidence}%)`,
+        type: "action",
+        actionUrl: "/playbooks",
+      });
+      this.broadcast({ type: "playbook_executed", playbookName: playbook.name, orgId });
+    } catch (err) {
+      console.error("Playbook execution error:", err);
+    }
+  }
+
+  private async runAiTriage(event: SecurityEvent) {
+    try {
+      const result = await aiTriageEvent(event);
+      if (result) {
+        await storage.updateSecurityEventAiTriage(event.id, result);
+        this.broadcast({ type: "event_ai_triaged", eventId: event.id, ...result, orgId: event.organizationId });
+      }
+    } catch (err) {
+      console.error("Failed to store AI triage result:", err);
     }
   }
 

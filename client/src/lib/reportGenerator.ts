@@ -277,11 +277,126 @@ interface SecurityEvent {
   createdAt: string;
 }
 
-export function generateExecutiveSummaryPDF(
+interface AiSummaryResponse {
+  narrative: string;
+  riskFactors: string[];
+  recommendations: string[];
+  complianceRemediation: { controlId: string; aiRemediation: string }[];
+}
+
+async function fetchAiSummary(
+  stats: DashboardStats,
+  severityData: { name: string; value: number }[],
+  events: SecurityEvent[],
+  complianceGaps?: { controlId: string; controlName: string; priority: string; remediation: string }[]
+): Promise<AiSummaryResponse | null> {
+  try {
+    const res = await fetch("/api/reports/ai-summary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        stats,
+        severityBreakdown: severityData,
+        recentCriticalEvents: events
+          .filter(e => e.severity === "critical" || e.severity === "high")
+          .slice(0, 10)
+          .map(e => ({
+            severity: e.severity,
+            eventType: e.eventType,
+            description: e.description,
+            sourceIp: e.sourceIp,
+            createdAt: e.createdAt,
+          })),
+        complianceGaps,
+      }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function addAiInsightSection(doc: jsPDF, y: number, aiSummary: AiSummaryResponse): number {
+  y = checkPageBreak(doc, y, 80);
+  y = addSectionTitle(doc, "AI Analyst Insight", y);
+
+  const goldBarX = 14;
+  const contentX = 18;
+  const maxWidth = 174;
+
+  doc.setFillColor(...COLORS.goldTint);
+  const blockStartY = y - 4;
+
+  const narrativeLines = doc.splitTextToSize(aiSummary.narrative, maxWidth);
+  const narrativeHeight = narrativeLines.length * 4.5;
+
+  let riskHeight = 0;
+  let recsHeight = 0;
+  if (aiSummary.riskFactors.length > 0) {
+    riskHeight = 10 + aiSummary.riskFactors.length * 6;
+  }
+  if (aiSummary.recommendations.length > 0) {
+    recsHeight = 10 + aiSummary.recommendations.length * 6;
+  }
+
+  const totalHeight = narrativeHeight + riskHeight + recsHeight + 8;
+  doc.setFillColor(...COLORS.goldTint);
+  doc.roundedRect(goldBarX, blockStartY, 182, totalHeight, 1, 1, "F");
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(goldBarX, blockStartY, 2.5, totalHeight, "F");
+
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(8);
+  doc.setTextColor(...COLORS.text);
+  doc.text(narrativeLines, contentX + 2, y);
+  y += narrativeHeight + 4;
+
+  if (aiSummary.riskFactors.length > 0) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...COLORS.primaryDark);
+    doc.text("Key Risk Factors", contentX + 2, y);
+    y += 5;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...COLORS.text);
+    aiSummary.riskFactors.forEach((factor) => {
+      doc.text(`\u2022  ${factor}`, contentX + 4, y, { maxWidth: maxWidth - 6 });
+      y += 6;
+    });
+    y += 2;
+  }
+
+  if (aiSummary.recommendations.length > 0) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...COLORS.primaryDark);
+    doc.text("Recommendations for Leadership", contentX + 2, y);
+    y += 5;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...COLORS.text);
+    aiSummary.recommendations.forEach((rec, i) => {
+      doc.text(`${i + 1}. ${rec}`, contentX + 4, y, { maxWidth: maxWidth - 6 });
+      y += 6;
+    });
+  }
+
+  y += 6;
+  return y;
+}
+
+export async function generateExecutiveSummaryPDF(
   stats: DashboardStats,
   events: SecurityEvent[],
   severityData: { name: string; value: number }[]
 ) {
+  const aiSummary = await fetchAiSummary(stats, severityData, events);
+
   const doc = new jsPDF();
   addCoverPage(doc, "Executive Security Summary", "Real-time Security Posture Overview");
   addHeader(doc, "Executive Security Summary", "Real-time Security Posture Overview");
@@ -311,6 +426,10 @@ export function generateExecutiveSummaryPDF(
   doc.setTextColor(...COLORS.muted);
   doc.text(`Threat Score: ${stats.threatScore}/100`, 14, y);
   y += 12;
+
+  if (aiSummary && aiSummary.narrative) {
+    y = addAiInsightSection(doc, y, aiSummary);
+  }
 
   y = addSectionTitle(doc, "Key Metrics", y);
 
@@ -452,7 +571,25 @@ interface ComplianceAssessment {
   }[];
 }
 
-export function generateCompliancePDF(assessment: ComplianceAssessment) {
+export async function generateCompliancePDF(assessment: ComplianceAssessment) {
+  let aiSummary: AiSummaryResponse | null = null;
+  if (assessment.gaps && assessment.gaps.length > 0) {
+    const dummyStats: DashboardStats = {
+      totalEvents: 0, criticalAlerts: 0, activeIncidents: 0, threatScore: 0,
+      eventTrend: 0, incidentTrend: 0, assetCount: 0, quarantineCount: 0,
+      honeypotActivity: 0, blockedIps: 0, activeRules: 0,
+    };
+    aiSummary = await fetchAiSummary(
+      dummyStats, [], [],
+      assessment.gaps.map(g => ({
+        controlId: g.control.id,
+        controlName: g.control.name,
+        priority: g.priority,
+        remediation: g.control.remediation || "",
+      }))
+    );
+  }
+
   const doc = new jsPDF();
   addCoverPage(doc, "Compliance Assessment Report", `${assessment.frameworkFullName} v${assessment.version}`);
   addHeader(doc, "Compliance Assessment Report", `${assessment.frameworkFullName} v${assessment.version}`);
@@ -573,6 +710,41 @@ export function generateCompliancePDF(assessment: ComplianceAssessment) {
     });
 
     y = (doc as any).lastAutoTable.finalY + 12;
+
+    if (aiSummary && aiSummary.complianceRemediation && aiSummary.complianceRemediation.length > 0) {
+      y = checkPageBreak(doc, y, 60);
+      y = addSectionTitle(doc, "AI Remediation Suggestions", y);
+
+      const blockStartY = y - 4;
+      let blockHeight = 4;
+      const remItems = aiSummary.complianceRemediation;
+      const tempLines: { controlId: string; lines: string[] }[] = [];
+      remItems.forEach(item => {
+        const lines = doc.splitTextToSize(item.aiRemediation, 160);
+        tempLines.push({ controlId: item.controlId, lines });
+        blockHeight += 6 + lines.length * 4;
+      });
+      blockHeight += 4;
+
+      doc.setFillColor(...COLORS.goldTint);
+      doc.roundedRect(14, blockStartY, 182, blockHeight, 1, 1, "F");
+      doc.setFillColor(...COLORS.primary);
+      doc.rect(14, blockStartY, 2.5, blockHeight, "F");
+
+      tempLines.forEach(item => {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.setTextColor(...COLORS.primaryDark);
+        doc.text(item.controlId, 20, y);
+        y += 4;
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(7.5);
+        doc.setTextColor(...COLORS.text);
+        doc.text(item.lines, 20, y);
+        y += item.lines.length * 4 + 2;
+      });
+      y += 6;
+    }
   }
 
   y = checkPageBreak(doc, y, 40);

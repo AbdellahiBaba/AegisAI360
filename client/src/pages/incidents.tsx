@@ -8,14 +8,21 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Clock, User, ShieldBan, Loader2, Play, FileDown, Download } from "lucide-react";
+import {
+  Plus, Clock, User, Loader2, Play, FileDown, Download,
+  MessageSquare, ArrowRight, Settings, ChevronRight,
+  Send, AlertTriangle,
+} from "lucide-react";
 import { generateIncidentReportPDF } from "@/lib/reportGenerator";
 import { exportToCsv } from "@/lib/csvExport";
 import { useToast } from "@/hooks/use-toast";
-import type { Incident, ResponsePlaybook } from "@shared/schema";
+import type { Incident, ResponsePlaybook, IncidentNote, SecurityEvent } from "@shared/schema";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const severityClasses: Record<string, string> = {
@@ -39,6 +46,168 @@ function formatDate(dateStr: string) {
   });
 }
 
+function formatDateFull(dateStr: string) {
+  return new Date(dateStr).toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+}
+
+function NoteIcon({ noteType }: { noteType: string }) {
+  switch (noteType) {
+    case "status_change":
+      return <ArrowRight className="w-3.5 h-3.5 text-blue-500" />;
+    case "action":
+      return <Play className="w-3.5 h-3.5 text-orange-500" />;
+    case "system":
+      return <Settings className="w-3.5 h-3.5 text-muted-foreground" />;
+    default:
+      return <MessageSquare className="w-3.5 h-3.5 text-foreground" />;
+  }
+}
+
+function IncidentTimeline({ incidentId }: { incidentId: number }) {
+  const [commentText, setCommentText] = useState("");
+  const { toast } = useToast();
+
+  const { data: notes, isLoading } = useQuery<IncidentNote[]>({
+    queryKey: ["/api/incidents", incidentId, "notes"],
+    queryFn: async () => {
+      const res = await fetch(`/api/incidents/${incidentId}/notes`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch notes");
+      return res.json();
+    },
+  });
+
+  const addNote = useMutation({
+    mutationFn: async (content: string) => {
+      const res = await apiRequest("POST", `/api/incidents/${incidentId}/notes`, { content });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/incidents", incidentId, "notes"] });
+      setCommentText("");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to add note", description: err.message, variant: "destructive" });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3 py-4">
+        {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-medium">Timeline</h3>
+
+      {(!notes || notes.length === 0) ? (
+        <p className="text-xs text-muted-foreground py-4 text-center">No timeline entries yet</p>
+      ) : (
+        <div className="space-y-0">
+          {notes.map((note, idx) => (
+            <div key={note.id} className="flex gap-3 relative" data-testid={`timeline-entry-${note.id}`}>
+              <div className="flex flex-col items-center">
+                <div className="flex items-center justify-center w-7 h-7 rounded-full bg-muted flex-shrink-0">
+                  <NoteIcon noteType={note.noteType} />
+                </div>
+                {idx < notes.length - 1 && (
+                  <div className="w-px flex-1 bg-border min-h-[16px]" />
+                )}
+              </div>
+              <div className="pb-4 flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-medium">{note.userName || "System"}</span>
+                  <Badge variant="outline" className="text-[9px] capitalize">{note.noteType.replace("_", " ")}</Badge>
+                  <span className="text-[10px] text-muted-foreground">{formatDateFull(note.createdAt as unknown as string)}</span>
+                </div>
+                {note.noteType === "status_change" ? (
+                  <div className="mt-1 flex items-center gap-1.5 text-xs">
+                    {(() => {
+                      const match = note.content.match(/from "(.+)" to "(.+)"/);
+                      if (match) {
+                        return (
+                          <>
+                            <Badge className={`${statusClasses[match[1]] || "bg-muted text-muted-foreground"} text-[9px] uppercase`}>{match[1]}</Badge>
+                            <ArrowRight className="w-3 h-3 text-muted-foreground" />
+                            <Badge className={`${statusClasses[match[2]] || "bg-muted text-muted-foreground"} text-[9px] uppercase`}>{match[2]}</Badge>
+                          </>
+                        );
+                      }
+                      return <span className="text-muted-foreground">{note.content}</span>;
+                    })()}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-1">{note.content}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <Input
+          placeholder="Add a comment..."
+          value={commentText}
+          onChange={(e) => setCommentText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && commentText.trim() && !addNote.isPending) {
+              addNote.mutate(commentText.trim());
+            }
+          }}
+          className="flex-1"
+          data-testid={`input-comment-${incidentId}`}
+        />
+        <Button
+          size="icon"
+          onClick={() => {
+            if (commentText.trim()) addNote.mutate(commentText.trim());
+          }}
+          disabled={!commentText.trim() || addNote.isPending}
+          data-testid={`button-send-comment-${incidentId}`}
+        >
+          {addNote.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function LinkedEvents({ incident }: { incident: Incident }) {
+  const { data: events } = useQuery<SecurityEvent[]>({
+    queryKey: ["/api/security-events"],
+  });
+
+  const linkedEvents = events?.filter(e => {
+    if (!e.description || !incident.title) return false;
+    const titleWords = incident.title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    const descLower = e.description.toLowerCase();
+    return titleWords.some(w => descLower.includes(w));
+  }).slice(0, 5);
+
+  if (!linkedEvents || linkedEvents.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-medium">Related Security Events</h3>
+      <div className="space-y-1.5">
+        {linkedEvents.map(evt => (
+          <div key={evt.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50 text-xs" data-testid={`linked-event-${evt.id}`}>
+            <AlertTriangle className="w-3 h-3 flex-shrink-0 text-muted-foreground" />
+            <span className="flex-1 truncate">{evt.description}</span>
+            <Badge className={`${severityClasses[evt.severity]} text-[9px] uppercase`}>{evt.severity}</Badge>
+            <span className="text-muted-foreground text-[10px] flex-shrink-0">{formatDate(evt.createdAt as unknown as string)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Incidents() {
   useDocumentTitle("Incidents");
   const { t } = useTranslation();
@@ -47,6 +216,7 @@ export default function Incidents() {
   const [description, setDescription] = useState("");
   const [severity, setSeverity] = useState("medium");
   const [assignee, setAssignee] = useState("");
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const { toast } = useToast();
 
   const { data: incidents, isLoading } = useQuery<Incident[]>({
@@ -58,7 +228,7 @@ export default function Incidents() {
   });
 
   const executePlaybook = useMutation({
-    mutationFn: async ({ playbookId, context }: { playbookId: number; context: Record<string, any> }) => {
+    mutationFn: async ({ playbookId, incidentId, context }: { playbookId: number; incidentId: number; context: Record<string, any> }) => {
       const res = await apiRequest("POST", "/api/response/execute-playbook", { playbookId, context });
       return res.json();
     },
@@ -90,9 +260,26 @@ export default function Incidents() {
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
       await apiRequest("PATCH", `/api/incidents/${id}`, { status });
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/incidents", variables.id, "notes"] });
       toast({ title: t("incidents.incidentUpdated") });
+      if (selectedIncident && selectedIncident.id === variables.id) {
+        setSelectedIncident({ ...selectedIncident, status: variables.status });
+      }
+    },
+  });
+
+  const updateAssignee = useMutation({
+    mutationFn: async ({ id, assignee }: { id: number; assignee: string }) => {
+      await apiRequest("PATCH", `/api/incidents/${id}`, { assignee });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/incidents", variables.id, "notes"] });
+      if (selectedIncident && selectedIncident.id === variables.id) {
+        setSelectedIncident({ ...selectedIncident, assignee: variables.assignee });
+      }
     },
   });
 
@@ -217,17 +404,23 @@ export default function Incidents() {
           {incidents?.map((incident) => {
             const nextStatus = getNextStatus(incident.status);
             return (
-              <Card key={incident.id} data-testid={`card-incident-${incident.id}`}>
+              <Card
+                key={incident.id}
+                className="hover-elevate cursor-pointer"
+                data-testid={`card-incident-${incident.id}`}
+                onClick={() => setSelectedIncident(incident)}
+              >
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-sm font-medium leading-snug">{incident.title}</CardTitle>
-                    <div className="flex gap-1.5 flex-shrink-0 flex-wrap">
+                    <div className="flex gap-1.5 flex-shrink-0 flex-wrap items-center">
                       <Badge className={`${severityClasses[incident.severity]} text-[9px] uppercase`}>
                         {incident.severity}
                       </Badge>
                       <Badge className={`${statusClasses[incident.status]} text-[9px] uppercase`}>
                         {incident.status}
                       </Badge>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </div>
                   </div>
                 </CardHeader>
@@ -245,7 +438,7 @@ export default function Incidents() {
                       </div>
                     )}
                   </div>
-                  <div className="flex gap-2 flex-wrap">
+                  <div className="flex gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
                     {nextStatus && (
                       <Button
                         size="sm"
@@ -260,7 +453,7 @@ export default function Incidents() {
                     {playbooks && playbooks.filter(p => p.enabled).length > 0 && incident.status !== "closed" && incident.status !== "resolved" && (
                       <Select onValueChange={(pbId) => {
                         if (window.confirm(t("incidents.executePlaybookConfirm"))) {
-                          executePlaybook.mutate({ playbookId: parseInt(pbId), context: {} });
+                          executePlaybook.mutate({ playbookId: parseInt(pbId), incidentId: incident.id, context: {} });
                         }
                       }}>
                         <SelectTrigger className="h-8 w-full sm:w-[160px] text-xs" data-testid={`select-playbook-${incident.id}`}>
@@ -281,6 +474,91 @@ export default function Incidents() {
           })}
         </div>
       )}
+
+      <Sheet open={!!selectedIncident} onOpenChange={(open) => { if (!open) setSelectedIncident(null); }}>
+        <SheetContent className="w-full sm:max-w-lg p-0 flex flex-col">
+          {selectedIncident && (
+            <>
+              <SheetHeader className="p-4 pb-0">
+                <SheetTitle className="text-base leading-snug pr-6">{selectedIncident.title}</SheetTitle>
+              </SheetHeader>
+              <ScrollArea className="flex-1">
+                <div className="p-4 space-y-4">
+                  <div className="flex gap-1.5 flex-wrap">
+                    <Badge className={`${severityClasses[selectedIncident.severity]} text-[9px] uppercase`}>
+                      {selectedIncident.severity}
+                    </Badge>
+                    <Badge className={`${statusClasses[selectedIncident.status]} text-[9px] uppercase`}>
+                      {selectedIncident.status}
+                    </Badge>
+                  </div>
+
+                  <p className="text-sm text-muted-foreground" data-testid="text-incident-description">{selectedIncident.description}</p>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Created</span>
+                      <p className="font-medium">{formatDateFull(selectedIncident.createdAt as unknown as string)}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Updated</span>
+                      <p className="font-medium">{formatDateFull(selectedIncident.updatedAt as unknown as string)}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Assignee</span>
+                      <p className="font-medium">{selectedIncident.assignee || "Unassigned"}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">ID</span>
+                      <p className="font-medium">INC-{selectedIncident.id}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 flex-wrap">
+                    {(() => {
+                      const nextStatus = getNextStatus(selectedIncident.status);
+                      if (!nextStatus) return null;
+                      return (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => updateStatus.mutate({ id: selectedIncident.id, status: nextStatus })}
+                          disabled={updateStatus.isPending}
+                          data-testid="button-advance-detail"
+                        >
+                          <ArrowRight className="w-3 h-3 me-1" />
+                          {t("incidents.moveTo", { status: nextStatus })}
+                        </Button>
+                      );
+                    })()}
+                    <Select
+                      value={selectedIncident.status}
+                      onValueChange={(status) => updateStatus.mutate({ id: selectedIncident.id, status })}
+                    >
+                      <SelectTrigger className="w-[140px]" data-testid="select-status-detail">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statusOrder.map(s => (
+                          <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  <LinkedEvents incident={selectedIncident} />
+
+                  <Separator />
+
+                  <IncidentTimeline incidentId={selectedIncident.id} />
+                </div>
+              </ScrollArea>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

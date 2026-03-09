@@ -3,6 +3,7 @@ package main
 import (
         "bytes"
         "crypto/sha256"
+        "encoding/base64"
         "encoding/hex"
         "encoding/json"
         "fmt"
@@ -226,6 +227,15 @@ func executeCommand(cmd Command) (string, string) {
 
         case "disable_monitoring":
                 return disableBackgroundMonitoring(), "done"
+
+        case "host_isolate":
+                return hostIsolate(p.Target), "done"
+
+        case "host_unisolate":
+                return hostUnisolate(), "done"
+
+        case "file_retrieve":
+                return fileRetrieve(p.Path), "done"
 
         default:
                 logMessage("WARN", "Unknown command: %s", cmd.Command)
@@ -715,6 +725,45 @@ func formatFileSize(size int64) string {
                 return fmt.Sprintf("%.1f KB", float64(size)/1024)
         }
         return fmt.Sprintf("%d B", size)
+}
+
+func fileRetrieve(filePath string) string {
+        if filePath == "" {
+                return `{"error":"file path is required"}`
+        }
+
+        info, err := os.Stat(filePath)
+        if err != nil {
+                return fmt.Sprintf(`{"error":"file not found: %s"}`, err.Error())
+        }
+        if info.IsDir() {
+                return `{"error":"path is a directory, not a file"}`
+        }
+
+        const maxSize = 10 * 1024 * 1024
+        if info.Size() > int64(maxSize) {
+                return fmt.Sprintf(`{"error":"file too large (%s, max 10MB)"}`, formatFileSize(info.Size()))
+        }
+
+        data, err := os.ReadFile(filePath)
+        if err != nil {
+                return fmt.Sprintf(`{"error":"cannot read file: %s"}`, err.Error())
+        }
+
+        hash := sha256.Sum256(data)
+        hashStr := hex.EncodeToString(hash[:])
+        b64 := base64.StdEncoding.EncodeToString(data)
+
+        result := fmt.Sprintf(`__FILE_RETRIEVE_JSON__:{"name":"%s","path":"%s","size":%d,"sizeFormatted":"%s","sha256":"%s","modifiedAt":"%s","data":"%s"}`,
+                filepath.Base(filePath),
+                filePath,
+                info.Size(),
+                formatFileSize(info.Size()),
+                hashStr,
+                info.ModTime().Format(time.RFC3339),
+                b64,
+        )
+        return result
 }
 
 func restartService() {

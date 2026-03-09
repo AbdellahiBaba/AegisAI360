@@ -53,6 +53,9 @@ export const securityEvents = pgTable("security_events", {
   techniqueId: text("technique_id"),
   tactic: text("tactic"),
   mitigated: boolean("mitigated").notNull().default(false),
+  aiThreatScore: integer("ai_threat_score"),
+  aiClassification: text("ai_classification"),
+  aiRecommendation: text("ai_recommendation"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 }, (table) => [
   index("idx_security_events_org_id").on(table.organizationId),
@@ -173,6 +176,10 @@ export const responsePlaybooks = pgTable("response_playbooks", {
   triggerConditions: text("trigger_conditions"),
   actions: text("actions"),
   enabled: boolean("enabled").notNull().default(true),
+  autoTriggerEnabled: boolean("auto_trigger_enabled").notNull().default(false),
+  triggerSeverity: text("trigger_severity").notNull().default("critical"),
+  cooldownMinutes: integer("cooldown_minutes").notNull().default(30),
+  lastAutoRunAt: timestamp("last_auto_run_at"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -458,6 +465,7 @@ export const agents = pgTable("agents", {
   cpuUsage: integer("cpu_usage"),
   ramUsage: integer("ram_usage"),
   telemetry: jsonb("telemetry"),
+  isIsolated: boolean("is_isolated").notNull().default(false),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 }, (table) => [
   index("idx_agents_org_id").on(table.organizationId),
@@ -709,3 +717,64 @@ export const loginHistory = pgTable("login_history", {
 export const insertLoginHistorySchema = createInsertSchema(loginHistory).omit({ id: true, createdAt: true });
 export type InsertLoginHistory = z.infer<typeof insertLoginHistorySchema>;
 export type LoginHistory = typeof loginHistory.$inferSelect;
+
+export const incidentNotes = pgTable("incident_notes", {
+  id: serial("id").primaryKey(),
+  incidentId: integer("incident_id").notNull().references(() => incidents.id, { onDelete: "cascade" }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  userId: varchar("user_id"),
+  userName: text("user_name"),
+  content: text("content").notNull(),
+  noteType: text("note_type").notNull().default("comment"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_incident_notes_incident_id").on(table.incidentId),
+]);
+
+export const insertIncidentNoteSchema = createInsertSchema(incidentNotes).omit({ id: true, createdAt: true });
+export type InsertIncidentNote = z.infer<typeof insertIncidentNoteSchema>;
+export type IncidentNote = typeof incidentNotes.$inferSelect;
+
+export const threatHuntingQueries = pgTable("threat_hunting_queries", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  query: jsonb("query").notNull(),
+  createdBy: varchar("created_by"),
+  lastRunAt: timestamp("last_run_at"),
+  resultCount: integer("result_count"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_threat_hunting_org_id").on(table.organizationId),
+]);
+
+export const insertThreatHuntingQuerySchema = createInsertSchema(threatHuntingQueries).omit({ id: true, createdAt: true, lastRunAt: true, resultCount: true });
+export type InsertThreatHuntingQuery = z.infer<typeof insertThreatHuntingQuerySchema>;
+export type ThreatHuntingQuery = typeof threatHuntingQueries.$inferSelect;
+
+export const vulnerabilities = pgTable("vulnerabilities", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  cveId: text("cve_id"),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  severity: text("severity").notNull(),
+  cvssScore: text("cvss_score"),
+  affectedAssets: text("affected_assets").array(),
+  status: text("status").notNull().default("open"),
+  assignee: text("assignee"),
+  remediationNotes: text("remediation_notes"),
+  source: text("source").notNull().default("scan"),
+  slaDeadline: timestamp("sla_deadline"),
+  discoveredAt: timestamp("discovered_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  remediatedAt: timestamp("remediated_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_vulnerabilities_org_id").on(table.organizationId),
+  index("idx_vulnerabilities_status").on(table.status),
+]);
+
+export const insertVulnerabilitySchema = createInsertSchema(vulnerabilities).omit({ id: true, createdAt: true, discoveredAt: true, remediatedAt: true });
+export type InsertVulnerability = z.infer<typeof insertVulnerabilitySchema>;
+export type Vulnerability = typeof vulnerabilities.$inferSelect;

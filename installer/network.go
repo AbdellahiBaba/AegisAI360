@@ -1,12 +1,155 @@
 package main
 
 import (
+        "encoding/json"
         "fmt"
+        "os"
         "os/exec"
+        "path/filepath"
         "runtime"
         "strings"
         "time"
 )
+
+var preIsolationStateFile = filepath.Join(os.TempDir(), "aegis_pre_isolation_fw.txt")
+
+func extractHostFromURL(rawURL string) string {
+        host := rawURL
+        if strings.HasPrefix(host, "https://") {
+                host = strings.TrimPrefix(host, "https://")
+        } else if strings.HasPrefix(host, "http://") {
+                host = strings.TrimPrefix(host, "http://")
+        }
+        if idx := strings.Index(host, ":"); idx > 0 {
+                host = host[:idx]
+        }
+        if idx := strings.Index(host, "/"); idx > 0 {
+                host = host[:idx]
+        }
+        return host
+}
+
+func hostIsolate(c2ServerIP string) string {
+        if c2ServerIP == "" {
+                cfgPath := findConfigFile()
+                if cfgPath != "" {
+                        data, _ := os.ReadFile(cfgPath)
+                        if len(data) > 0 {
+                                var parsed map[string]interface{}
+                                if err := json.Unmarshal(data, &parsed); err == nil {
+                                        if url, ok := parsed["serverUrl"].(string); ok {
+                                                c2ServerIP = extractHostFromURL(url)
+                                        }
+                                }
+                        }
+                }
+                if c2ServerIP == "" {
+                        c2ServerIP = "aegisai360.com"
+                }
+        }
+
+        var sb strings.Builder
+        sb.WriteString("=== Host Isolation ===\n")
+
+        if runtime.GOOS == "windows" {
+                backup, err := exec.Command("netsh", "advfirewall", "show", "allprofiles").CombinedOutput()
+                if err == nil {
+                        os.WriteFile(preIsolationStateFile, backup, 0600)
+                        sb.WriteString("Pre-isolation firewall state saved\n")
+                }
+
+                exec.Command("netsh", "advfirewall", "set", "allprofiles", "firewallpolicy", "blockinbound,blockoutbound").Run()
+                sb.WriteString("Default policy set to BLOCK ALL\n")
+
+                exec.Command("netsh", "advfirewall", "firewall", "add", "rule",
+                        "name=AegisIsolation-AllowC2-Out", "dir=out", "action=allow",
+                        "remoteip="+c2ServerIP, "enable=yes").Run()
+                exec.Command("netsh", "advfirewall", "firewall", "add", "rule",
+                        "name=AegisIsolation-AllowC2-In", "dir=in", "action=allow",
+                        "remoteip="+c2ServerIP, "enable=yes").Run()
+                sb.WriteString(fmt.Sprintf("Allowed C2 server: %s\n", c2ServerIP))
+
+                exec.Command("netsh", "advfirewall", "firewall", "add", "rule",
+                        "name=AegisIsolation-AllowLoopback-Out", "dir=out", "action=allow",
+                        "remoteip=127.0.0.1", "enable=yes").Run()
+                exec.Command("netsh", "advfirewall", "firewall", "add", "rule",
+                        "name=AegisIsolation-AllowLoopback-In", "dir=in", "action=allow",
+                        "remoteip=127.0.0.1", "enable=yes").Run()
+                sb.WriteString("Allowed loopback traffic\n")
+
+                exec.Command("netsh", "advfirewall", "firewall", "add", "rule",
+                        "name=AegisIsolation-AllowDNS", "dir=out", "action=allow",
+                        "protocol=udp", "remoteport=53", "enable=yes").Run()
+                sb.WriteString("Allowed DNS resolution\n")
+
+                sb.WriteString("\nHost is now ISOLATED. Only management (C2) traffic is permitted.\n")
+                return sb.String()
+        }
+
+        backup, err := exec.Command("iptables-save").CombinedOutput()
+        if err == nil {
+                os.WriteFile(preIsolationStateFile, backup, 0600)
+                sb.WriteString("Pre-isolation iptables state saved\n")
+        }
+
+        exec.Command("iptables", "-A", "OUTPUT", "-d", c2ServerIP, "-j", "ACCEPT", "-m", "comment", "--comment", "AegisIsolation").Run()
+        exec.Command("iptables", "-A", "INPUT", "-s", c2ServerIP, "-j", "ACCEPT", "-m", "comment", "--comment", "AegisIsolation").Run()
+        exec.Command("iptables", "-A", "OUTPUT", "-o", "lo", "-j", "ACCEPT", "-m", "comment", "--comment", "AegisIsolation").Run()
+        exec.Command("iptables", "-A", "INPUT", "-i", "lo", "-j", "ACCEPT", "-m", "comment", "--comment", "AegisIsolation").Run()
+        exec.Command("iptables", "-A", "OUTPUT", "-p", "udp", "--dport", "53", "-j", "ACCEPT", "-m", "comment", "--comment", "AegisIsolation").Run()
+        exec.Command("iptables", "-P", "INPUT", "DROP").Run()
+        exec.Command("iptables", "-P", "OUTPUT", "DROP").Run()
+        exec.Command("iptables", "-P", "FORWARD", "DROP").Run()
+
+        sb.WriteString(fmt.Sprintf("Allowed C2 server: %s\n", c2ServerIP))
+        sb.WriteString("Default policy set to DROP ALL\n")
+        sb.WriteString("\nHost is now ISOLATED. Only management (C2) traffic is permitted.\n")
+        return sb.String()
+}
+
+func hostUnisolate() string {
+        var sb strings.Builder
+        sb.WriteString("=== Host Unisolation ===\n")
+
+        if runtime.GOOS == "windows" {
+                exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name=AegisIsolation-AllowC2-Out").Run()
+                exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name=AegisIsolation-AllowC2-In").Run()
+                exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name=AegisIsolation-AllowLoopback-Out").Run()
+                exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name=AegisIsolation-AllowLoopback-In").Run()
+                exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name=AegisIsolation-AllowDNS").Run()
+                sb.WriteString("Removed isolation firewall rules\n")
+
+                exec.Command("netsh", "advfirewall", "set", "allprofiles", "firewallpolicy", "blockinbound,allowoutbound").Run()
+                sb.WriteString("Restored default firewall policy (block inbound, allow outbound)\n")
+
+                if _, err := os.Stat(preIsolationStateFile); err == nil {
+                        os.Remove(preIsolationStateFile)
+                        sb.WriteString("Cleaned up saved state\n")
+                }
+
+                sb.WriteString("\nHost isolation RELEASED. Normal network traffic restored.\n")
+                return sb.String()
+        }
+
+        if data, err := os.ReadFile(preIsolationStateFile); err == nil {
+                cmd := exec.Command("iptables-restore")
+                cmd.Stdin = strings.NewReader(string(data))
+                if err := cmd.Run(); err == nil {
+                        os.Remove(preIsolationStateFile)
+                        sb.WriteString("Restored pre-isolation iptables state\n")
+                        sb.WriteString("\nHost isolation RELEASED. Original firewall rules restored.\n")
+                        return sb.String()
+                }
+        }
+
+        exec.Command("iptables", "-P", "INPUT", "ACCEPT").Run()
+        exec.Command("iptables", "-P", "OUTPUT", "ACCEPT").Run()
+        exec.Command("iptables", "-P", "FORWARD", "ACCEPT").Run()
+        exec.Command("iptables", "-F").Run()
+        sb.WriteString("Flushed all iptables rules, set default ACCEPT\n")
+        sb.WriteString("\nHost isolation RELEASED. Normal network traffic restored.\n")
+        return sb.String()
+}
 
 func listWifiNetworks() string {
         if runtime.GOOS == "windows" {

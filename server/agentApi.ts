@@ -160,6 +160,19 @@ export function createAgentRouter(): Router {
           ],
         },
         {
+          name: "Host Isolation",
+          commands: [
+            { command: "host_isolate", description: "Isolate host - block all traffic except management (C2)", params: [{ name: "target", type: "string", required: false, description: "C2 server IP to allow (auto-detected if empty)" }] },
+            { command: "host_unisolate", description: "Release host isolation - restore normal network traffic", params: [] },
+          ],
+        },
+        {
+          name: "File Retrieval",
+          commands: [
+            { command: "file_retrieve", description: "Retrieve a file from the endpoint (max 10MB)", params: [{ name: "path", type: "string", required: true, description: "Full path to the file" }] },
+          ],
+        },
+        {
           name: "Terminal",
           commands: [
             { command: "enable_monitoring", description: "Enable background monitoring (process, file, network)", params: [] },
@@ -688,6 +701,68 @@ export function createAgentRouter(): Router {
       res.json(commands);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch commands" });
+    }
+  });
+
+  router.post("/:id/isolate", requireAuth, async (req, res) => {
+    try {
+      const agentId = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const agent = await storage.getAgentById(agentId);
+      if (!agent || agent.organizationId !== orgId) return res.status(404).json({ error: "Agent not found" });
+
+      const cmd = await storage.createCommand({ agentId, command: "host_isolate", params: null, status: "pending" });
+      await storage.updateAgent(agentId, { isIsolated: true });
+      await storage.incrementUsage(orgId, "commandsExecuted");
+      res.status(201).json({ commandId: cmd.id, status: "isolating" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to isolate host" });
+    }
+  });
+
+  router.post("/:id/unisolate", requireAuth, async (req, res) => {
+    try {
+      const agentId = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const agent = await storage.getAgentById(agentId);
+      if (!agent || agent.organizationId !== orgId) return res.status(404).json({ error: "Agent not found" });
+
+      const cmd = await storage.createCommand({ agentId, command: "host_unisolate", params: null, status: "pending" });
+      await storage.updateAgent(agentId, { isIsolated: false });
+      await storage.incrementUsage(orgId, "commandsExecuted");
+      res.status(201).json({ commandId: cmd.id, status: "releasing" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to release isolation" });
+    }
+  });
+
+  router.get("/:id/files/:commandId/download", requireAuth, async (req, res) => {
+    try {
+      const agentId = parseInt(req.params.id);
+      const commandId = parseInt(req.params.commandId);
+      const orgId = getOrgId(req);
+      const agent = await storage.getAgentById(agentId);
+      if (!agent || agent.organizationId !== orgId) return res.status(404).json({ error: "Agent not found" });
+
+      const commands = await storage.getCommandsByAgent(agentId);
+      const cmd = commands.find((c: any) => c.id === commandId && c.command === "file_retrieve");
+      if (!cmd || !cmd.result) return res.status(404).json({ error: "File not found" });
+
+      const jsonIdx = cmd.result.indexOf("__FILE_RETRIEVE_JSON__:");
+      if (jsonIdx === -1) return res.status(404).json({ error: "No file data in result" });
+      const jsonStr = cmd.result.substring(jsonIdx + "__FILE_RETRIEVE_JSON__:".length);
+
+      const fileData = JSON.parse(jsonStr);
+      if (fileData.error) return res.status(400).json({ error: fileData.error });
+
+      const safeName = String(fileData.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const buffer = Buffer.from(fileData.data, "base64");
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+      res.setHeader("Content-Length", buffer.length.toString());
+      res.send(buffer);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to download file" });
     }
   });
 

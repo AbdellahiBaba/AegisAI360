@@ -44,7 +44,7 @@ import { scanLink } from "./services/linkScanner";
 import { startRecoveryOperation, getOperation, getAllOperations } from "./services/websiteRecovery";
 import { db } from "./db";
 import * as schema from "@shared/schema";
-import { and, eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, sql, gte, inArray } from "drizzle-orm";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -257,6 +257,181 @@ export async function registerRoutes(
   app.use("/api/network", requireAuth);
   app.use("/api/protection", requireAuth);
   app.use("/api/password", requireAuth);
+  app.use("/api/threat-hunting", requireAuth);
+
+  app.get("/api/threat-hunting/queries", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const queries = await storage.getThreatHuntingQueries(orgId);
+      res.json(queries);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch threat hunting queries" });
+    }
+  });
+
+  app.post("/api/threat-hunting/queries", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const userId = getUserId(req);
+      const { name, description, query } = z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+        query: z.object({
+          timeRange: z.string().optional(),
+          eventTypes: z.array(z.string()).optional(),
+          severities: z.array(z.string()).optional(),
+          sourceIps: z.array(z.string()).optional(),
+          destIps: z.array(z.string()).optional(),
+          keywords: z.string().optional(),
+          tactics: z.array(z.string()).optional(),
+          techniques: z.array(z.string()).optional(),
+        }),
+      }).parse(req.body);
+      const created = await storage.createThreatHuntingQuery({
+        organizationId: orgId,
+        name,
+        description: description || null,
+        query,
+        createdBy: userId,
+      });
+      res.status(201).json(created);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create threat hunting query" });
+    }
+  });
+
+  app.delete("/api/threat-hunting/queries/:id", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const deleted = await storage.deleteThreatHuntingQuery(parseInt(req.params.id), orgId);
+      if (!deleted) return res.status(404).json({ error: "Query not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete threat hunting query" });
+    }
+  });
+
+  app.post("/api/threat-hunting/search", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const filters = z.object({
+        timeRange: z.string().optional(),
+        eventTypes: z.array(z.string()).optional(),
+        severities: z.array(z.string()).optional(),
+        sourceIps: z.array(z.string()).optional(),
+        destIps: z.array(z.string()).optional(),
+        keywords: z.string().optional(),
+        tactics: z.array(z.string()).optional(),
+        techniques: z.array(z.string()).optional(),
+      }).parse(req.body);
+
+      let conditions: any[] = [eq(schema.securityEvents.organizationId, orgId)];
+
+      if (filters.timeRange) {
+        const now = new Date();
+        let startDate: Date;
+        switch (filters.timeRange) {
+          case "1h": startDate = new Date(now.getTime() - 60 * 60 * 1000); break;
+          case "6h": startDate = new Date(now.getTime() - 6 * 60 * 60 * 1000); break;
+          case "24h": startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000); break;
+          case "7d": startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+          case "30d": startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); break;
+          default: startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        }
+        conditions.push(gte(schema.securityEvents.createdAt, startDate));
+      }
+
+      if (filters.eventTypes && filters.eventTypes.length > 0) {
+        conditions.push(inArray(schema.securityEvents.eventType, filters.eventTypes));
+      }
+      if (filters.severities && filters.severities.length > 0) {
+        conditions.push(inArray(schema.securityEvents.severity, filters.severities));
+      }
+      if (filters.sourceIps && filters.sourceIps.length > 0) {
+        conditions.push(inArray(schema.securityEvents.sourceIp, filters.sourceIps));
+      }
+      if (filters.destIps && filters.destIps.length > 0) {
+        conditions.push(inArray(schema.securityEvents.destinationIp, filters.destIps));
+      }
+      if (filters.tactics && filters.tactics.length > 0) {
+        conditions.push(inArray(schema.securityEvents.tactic, filters.tactics));
+      }
+      if (filters.techniques && filters.techniques.length > 0) {
+        conditions.push(inArray(schema.securityEvents.techniqueId, filters.techniques));
+      }
+
+      let query = db.select().from(schema.securityEvents)
+        .where(and(...conditions))
+        .orderBy(desc(schema.securityEvents.createdAt))
+        .limit(500);
+
+      let events = await query;
+
+      if (filters.keywords && filters.keywords.trim()) {
+        const kw = filters.keywords.toLowerCase();
+        events = events.filter(e =>
+          e.description?.toLowerCase().includes(kw) ||
+          e.source?.toLowerCase().includes(kw) ||
+          e.rawData?.toLowerCase().includes(kw) ||
+          e.eventType?.toLowerCase().includes(kw)
+        );
+      }
+
+      const timelineBuckets: Record<string, number> = {};
+      events.forEach(e => {
+        const hour = new Date(e.createdAt).toISOString().slice(0, 13) + ":00";
+        timelineBuckets[hour] = (timelineBuckets[hour] || 0) + 1;
+      });
+      const timeline = Object.entries(timelineBuckets)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([time, count]) => ({ time, count }));
+
+      res.json({ events, timeline, total: events.length });
+    } catch (error) {
+      console.error("Threat hunting search error:", error);
+      res.status(500).json({ error: "Failed to execute threat hunting search" });
+    }
+  });
+
+  app.post("/api/threat-hunting/nl-search", async (req, res) => {
+    try {
+      const { query: nlQuery } = z.object({ query: z.string().min(1) }).parse(req.body);
+
+      try {
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: `You are a cybersecurity threat hunting assistant. Convert natural language queries into structured filter objects for searching security events. Return ONLY a valid JSON object with these optional fields:
+- timeRange: "1h"|"6h"|"24h"|"7d"|"30d"
+- eventTypes: string[] (e.g. ["brute_force","malware","intrusion","port_scan","ddos","data_exfiltration","privilege_escalation","lateral_movement","phishing","ransomware"])
+- severities: string[] (e.g. ["critical","high","medium","low","info"])
+- sourceIps: string[] (IP addresses mentioned)
+- destIps: string[] (destination IPs mentioned)
+- keywords: string (search terms)
+- tactics: string[] (MITRE ATT&CK tactics like "initial-access","execution","persistence","privilege-escalation","defense-evasion","credential-access","discovery","lateral-movement","collection","exfiltration","command-and-control","impact")
+- techniques: string[] (MITRE ATT&CK technique IDs like "T1078","T1059")
+
+Only include fields that are relevant to the query. Return raw JSON only.`
+            },
+            { role: "user", content: nlQuery }
+          ],
+          max_tokens: 300,
+          temperature: 0.1,
+        });
+
+        const content = completion.choices[0]?.message?.content?.trim() || "{}";
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        const filters = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+        res.json({ filters });
+      } catch {
+        res.json({ filters: { keywords: nlQuery } });
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to parse natural language query" });
+    }
+  });
 
   app.post("/api/support/tickets", async (req, res) => {
     try {
@@ -1015,6 +1190,71 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/security-events/:id/retriage", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const events = await storage.getSecurityEvents(orgId);
+      const event = events.find(e => e.id === id);
+      if (!event) return res.status(404).json({ error: "Event not found" });
+
+      const prompt = `Analyze this security event and provide a triage assessment.
+
+Event Details:
+- Type: ${event.eventType}
+- Severity: ${event.severity}
+- Source: ${event.source}
+- Source IP: ${event.sourceIp || "N/A"}
+- Destination IP: ${event.destinationIp || "N/A"}
+- Port: ${event.port || "N/A"}
+- Protocol: ${event.protocol || "N/A"}
+- Description: ${event.description}
+- MITRE Technique: ${event.techniqueId || "N/A"}
+- MITRE Tactic: ${event.tactic || "N/A"}
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "threatScore": <number 0-100>,
+  "classification": "<one of: credential_stuffing, reconnaissance, malware, exfiltration, lateral_movement, privilege_escalation, command_and_control, ransomware, phishing, insider_threat, policy_violation, brute_force, denial_of_service, web_attack, other>",
+  "recommendation": "<one of: escalate, monitor, dismiss>",
+  "reasoning": "<brief 1-2 sentence explanation>"
+}`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are a SOC analyst AI that triages security events. Respond only with valid JSON." },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.3,
+        max_tokens: 300,
+      });
+
+      const content = response.choices[0]?.message?.content?.trim();
+      if (!content) return res.status(500).json({ error: "AI returned empty response" });
+
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return res.status(500).json({ error: "AI returned invalid response" });
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      const score = Math.max(0, Math.min(100, Math.round(Number(parsed.threatScore) || 0)));
+      const classification = String(parsed.classification || "other");
+      const recAction = ["escalate", "monitor", "dismiss"].includes(parsed.recommendation) ? parsed.recommendation : "monitor";
+      const reasoning = parsed.reasoning ? ` | ${parsed.reasoning}` : "";
+
+      const updated = await storage.updateSecurityEventAiTriage(id, {
+        aiThreatScore: score,
+        aiClassification: classification,
+        aiRecommendation: `${recAction}${reasoning}`,
+      });
+
+      res.json({ event: updated });
+    } catch (error) {
+      console.error("Manual AI triage error:", error);
+      res.status(500).json({ error: "AI triage failed" });
+    }
+  });
+
   app.get("/api/incidents", async (req, res) => {
     try {
       const list = await storage.getIncidents(getOrgId(req));
@@ -1041,16 +1281,79 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       const orgId = getOrgId(req);
+      const user = req.user as User;
       const parsed = insertIncidentSchema.partial().extend({
         status: z.enum(["open", "investigating", "contained", "resolved", "closed"]).optional(),
       }).parse(req.body);
+
+      const existing = await storage.getIncidents(orgId);
+      const oldIncident = existing.find(inc => inc.id === id);
+
       const updated = await storage.updateIncident(id, orgId, parsed);
       if (!updated) return res.status(404).json({ error: "Incident not found" });
+
+      if (oldIncident && parsed.status && parsed.status !== oldIncident.status) {
+        await storage.createIncidentNote({
+          incidentId: id,
+          organizationId: orgId,
+          userId: user.id,
+          userName: user.username,
+          content: `Status changed from "${oldIncident.status}" to "${parsed.status}"`,
+          noteType: "status_change",
+        });
+      }
+
+      if (oldIncident && parsed.assignee !== undefined && parsed.assignee !== oldIncident.assignee) {
+        await storage.createIncidentNote({
+          incidentId: id,
+          organizationId: orgId,
+          userId: user.id,
+          userName: user.username,
+          content: `Assignee changed from "${oldIncident.assignee || 'unassigned'}" to "${parsed.assignee || 'unassigned'}"`,
+          noteType: "system",
+        });
+      }
+
       await storage.createAuditLog({ organizationId: orgId, userId: getUserId(req), action: "update_incident", targetType: "incident", targetId: String(id), details: JSON.stringify(parsed) });
       res.json(updated);
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
       res.status(500).json({ error: "Failed to update incident" });
+    }
+  });
+
+  app.get("/api/incidents/:id/notes", async (req, res) => {
+    try {
+      const incidentId = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const notes = await storage.getIncidentNotes(incidentId, orgId);
+      res.json(notes);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch incident notes" });
+    }
+  });
+
+  app.post("/api/incidents/:id/notes", async (req, res) => {
+    try {
+      const incidentId = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const user = req.user as User;
+      const allIncidents = await storage.getIncidents(orgId);
+      const incident = allIncidents.find(i => i.id === incidentId);
+      if (!incident) return res.status(404).json({ error: "Incident not found" });
+      const { content } = z.object({ content: z.string().min(1) }).parse(req.body);
+      const note = await storage.createIncidentNote({
+        incidentId,
+        organizationId: orgId,
+        userId: user.id,
+        userName: user.username,
+        content,
+        noteType: "comment",
+      });
+      res.status(201).json(note);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to create incident note" });
     }
   });
 
@@ -1242,13 +1545,30 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       const orgId = getOrgId(req);
-      const parsed = z.object({ enabled: z.boolean() }).parse(req.body);
+      const parsed = z.object({
+        enabled: z.boolean().optional(),
+        autoTriggerEnabled: z.boolean().optional(),
+        triggerSeverity: z.string().optional(),
+        cooldownMinutes: z.number().optional(),
+      }).parse(req.body);
       const updated = await storage.updateResponsePlaybook(id, orgId, parsed);
       if (!updated) return res.status(404).json({ error: "Playbook not found" });
       res.json(updated);
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
       res.status(500).json({ error: "Failed to update playbook" });
+    }
+  });
+
+  app.get("/api/playbooks/:id/history", async (req, res) => {
+    try {
+      const playbookId = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const actions = await storage.getResponseActions(orgId);
+      const history = actions.filter((a: any) => a.target === `playbook:${playbookId}`);
+      res.json(history.slice(0, 20));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch playbook history" });
     }
   });
 
@@ -2177,6 +2497,74 @@ export async function registerRoutes(
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Hash lookup failed" });
+    }
+  });
+
+  app.post("/api/threat-intel/enrich", requireAuth, async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { ip } = z.object({ ip: z.string().min(1) }).parse(req.body);
+      await storage.incrementUsage(orgId, "threatIntelQueries");
+
+      const abuseIpdbKey = await storage.getThreatIntelKey(orgId, "abuseipdb");
+      const otxKey = await storage.getThreatIntelKey(orgId, "otx");
+
+      const [abuseResult, otxResult] = await Promise.allSettled([
+        abuseIpdbLookup(ip, abuseIpdbKey?.apiKey),
+        otxLookup(ip, "ip", otxKey?.apiKey),
+      ]);
+
+      const abuseData = abuseResult.status === "fulfilled" ? abuseResult.value : { source: "AbuseIPDB", error: "Lookup failed" };
+      const otxData = otxResult.status === "fulfilled" ? otxResult.value : { source: "AlienVault OTX", error: "Lookup failed" };
+
+      const enrichment: any = {
+        ip,
+        abuseIpdb: abuseData,
+        otx: otxData,
+        summary: {
+          reputationScore: null,
+          abuseConfidence: null,
+          country: null,
+          countryCode: null,
+          isp: null,
+          domain: null,
+          totalReports: null,
+          lastReported: null,
+          threatTypes: [] as string[],
+          pulseCount: null,
+        },
+      };
+
+      if (abuseData?.data) {
+        const d = abuseData.data;
+        enrichment.summary.abuseConfidence = d.abuseConfidenceScore ?? null;
+        enrichment.summary.reputationScore = d.abuseConfidenceScore != null ? Math.max(0, 100 - d.abuseConfidenceScore) : null;
+        enrichment.summary.country = d.countryName ?? null;
+        enrichment.summary.countryCode = d.countryCode ?? null;
+        enrichment.summary.isp = d.isp ?? null;
+        enrichment.summary.domain = d.domain ?? null;
+        enrichment.summary.totalReports = d.totalReports ?? null;
+        enrichment.summary.lastReported = d.lastReportedAt ?? null;
+      }
+
+      if (otxData?.data) {
+        enrichment.summary.pulseCount = otxData.data.pulse_info?.count ?? null;
+        const pulses = otxData.data.pulse_info?.pulses ?? [];
+        const tags = new Set<string>();
+        for (const p of pulses.slice(0, 10)) {
+          if (p.tags) p.tags.forEach((t: string) => tags.add(t));
+        }
+        enrichment.summary.threatTypes = Array.from(tags).slice(0, 10);
+        if (!enrichment.summary.country && otxData.data.country_name) {
+          enrichment.summary.country = otxData.data.country_name;
+          enrichment.summary.countryCode = otxData.data.country_code ?? null;
+        }
+      }
+
+      res.json(enrichment);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Enrichment lookup failed" });
     }
   });
 
@@ -4695,6 +5083,187 @@ export async function registerRoutes(
       res.json(ops.map(o => ({ id: o.id, targetUrl: o.targetUrl, status: o.status, startedAt: o.startedAt, completedAt: o.completedAt, totalFindings: o.summary?.totalFindings || 0 })));
     } catch (error: any) {
       res.status(500).json({ error: "Failed to get operation history" });
+    }
+  });
+
+  app.use("/api/reports", requireAuth);
+
+  app.post("/api/reports/ai-summary", async (req, res) => {
+    try {
+      const body = z.object({
+        stats: z.object({
+          totalEvents: z.number(),
+          criticalAlerts: z.number(),
+          activeIncidents: z.number(),
+          threatScore: z.number(),
+          eventTrend: z.number().optional().default(0),
+          incidentTrend: z.number().optional().default(0),
+          assetCount: z.number().optional().default(0),
+          quarantineCount: z.number().optional().default(0),
+          honeypotActivity: z.number().optional().default(0),
+          blockedIps: z.number().optional().default(0),
+          activeRules: z.number().optional().default(0),
+        }),
+        severityBreakdown: z.array(z.object({ name: z.string(), value: z.number() })),
+        recentCriticalEvents: z.array(z.object({
+          severity: z.string(),
+          eventType: z.string(),
+          description: z.string(),
+          sourceIp: z.string().nullable().optional(),
+          createdAt: z.string(),
+        })).optional().default([]),
+        complianceGaps: z.array(z.object({
+          controlId: z.string(),
+          controlName: z.string(),
+          priority: z.string(),
+          remediation: z.string().optional().default(""),
+        })).optional(),
+      }).parse(req.body);
+
+      const eventsText = body.recentCriticalEvents.slice(0, 10).map(e =>
+        `- [${e.severity.toUpperCase()}] ${e.eventType}: ${e.description} (from ${e.sourceIp || "unknown"} at ${e.createdAt})`
+      ).join("\n");
+
+      const sevText = body.severityBreakdown.map(s => `${s.name}: ${s.value}`).join(", ");
+
+      const prompt = `You are a senior cybersecurity analyst writing an executive security briefing for C-level leadership.
+
+Current dashboard metrics:
+- Total security events (24h): ${body.stats.totalEvents}
+- Critical alerts: ${body.stats.criticalAlerts}
+- Active incidents: ${body.stats.activeIncidents}
+- Overall threat score: ${body.stats.threatScore}/100
+- Monitored assets: ${body.stats.assetCount}
+- Blocked IPs: ${body.stats.blockedIps}
+- Quarantined items: ${body.stats.quarantineCount}
+
+Severity distribution: ${sevText}
+
+Recent critical/high events:
+${eventsText || "No critical events in the reporting period."}
+
+Write a JSON response with these fields:
+1. "narrative": A 2-3 paragraph executive narrative explaining the current threat landscape, written in professional tone for non-technical leadership. Include what the data means for the organization.
+2. "riskFactors": An array of 3-5 key risk factors driving the current threat posture, each as a short sentence.
+3. "recommendations": An array of 3-5 actionable recommendations for leadership, each as a concise action item.
+${body.complianceGaps && body.complianceGaps.length > 0 ? `
+4. "complianceRemediation": Given these compliance gaps:
+${body.complianceGaps.map(g => `- [${g.priority}] ${g.controlId} ${g.controlName}: ${g.remediation}`).join("\n")}
+Provide an array of objects with "controlId" and "aiRemediation" (a specific, actionable remediation plan for each gap).` : ""}
+
+Respond ONLY with valid JSON, no markdown.`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are a cybersecurity executive briefing writer. Always respond with valid JSON only." },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 1500,
+      });
+
+      const raw = completion.choices[0]?.message?.content?.trim() || "{}";
+      let parsed: any;
+      try {
+        const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/i, "");
+        parsed = JSON.parse(cleaned);
+      } catch {
+        parsed = { narrative: raw, riskFactors: [], recommendations: [] };
+      }
+
+      res.json({
+        narrative: parsed.narrative || "",
+        riskFactors: parsed.riskFactors || [],
+        recommendations: parsed.recommendations || [],
+        complianceRemediation: parsed.complianceRemediation || [],
+      });
+    } catch (error: any) {
+      console.error("AI summary generation error:", error);
+      res.status(500).json({ error: "Failed to generate AI summary" });
+    }
+  });
+
+  app.use("/api/vulnerabilities", requireAuth);
+
+  app.get("/api/vulnerabilities", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const vulns = await storage.getVulnerabilities(orgId);
+      res.json(vulns);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch vulnerabilities" });
+    }
+  });
+
+  app.get("/api/vulnerabilities/stats", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const stats = await storage.getVulnerabilityStats(orgId);
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch vulnerability stats" });
+    }
+  });
+
+  app.post("/api/vulnerabilities", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const data = z.object({
+        cveId: z.string().optional().nullable(),
+        title: z.string().min(1),
+        description: z.string().min(1),
+        severity: z.enum(["critical", "high", "medium", "low"]),
+        cvssScore: z.string().optional().nullable(),
+        affectedAssets: z.array(z.string()).optional().nullable(),
+        status: z.enum(["open", "in_progress", "remediated", "accepted"]).optional().default("open"),
+        assignee: z.string().optional().nullable(),
+        remediationNotes: z.string().optional().nullable(),
+        source: z.enum(["scan", "manual", "agent"]).optional().default("manual"),
+        slaDeadline: z.string().optional().nullable(),
+      }).parse(req.body);
+
+      const vuln = await storage.createVulnerability({
+        organizationId: orgId,
+        ...data,
+        slaDeadline: data.slaDeadline ? new Date(data.slaDeadline) : null,
+      });
+      res.status(201).json(vuln);
+    } catch (error: any) {
+      if (error?.name === "ZodError") {
+        return res.status(400).json({ error: "Invalid vulnerability data" });
+      }
+      res.status(500).json({ error: "Failed to create vulnerability" });
+    }
+  });
+
+  app.patch("/api/vulnerabilities/:id", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const id = parseInt(req.params.id);
+      const data = z.object({
+        status: z.enum(["open", "in_progress", "remediated", "accepted"]).optional(),
+        assignee: z.string().optional().nullable(),
+        remediationNotes: z.string().optional().nullable(),
+        slaDeadline: z.string().optional().nullable(),
+      }).parse(req.body);
+
+      const updateData: any = { ...data };
+      if (data.slaDeadline !== undefined) {
+        updateData.slaDeadline = data.slaDeadline ? new Date(data.slaDeadline) : null;
+      }
+      if (data.status === "remediated") {
+        updateData.remediatedAt = new Date();
+      }
+
+      const updated = await storage.updateVulnerability(id, orgId, updateData);
+      if (!updated) return res.status(404).json({ error: "Vulnerability not found" });
+      res.json(updated);
+    } catch (error: any) {
+      if (error?.name === "ZodError") {
+        return res.status(400).json({ error: "Invalid data" });
+      }
+      res.status(500).json({ error: "Failed to update vulnerability" });
     }
   });
 

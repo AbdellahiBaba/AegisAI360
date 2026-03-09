@@ -71,6 +71,8 @@ import RemoteControlPage from "@/pages/remote-control";
 import RemoteTarget from "@/pages/remote-target";
 import LinkScannerPage from "@/pages/link-scanner";
 import WebsiteRecoveryPage from "@/pages/website-recovery";
+import VulnerabilityTracking from "@/pages/vulnerability-tracking";
+import ThreatHuntingPage from "@/pages/threat-hunting";
 import { PwaInstallBanner } from "@/components/pwa-install-banner";
 
 function AppRouter() {
@@ -120,6 +122,8 @@ function AppRouter() {
       <Route path="/remote-control" component={RemoteControlPage} />
       <Route path="/link-scanner" component={LinkScannerPage} />
       <Route path="/website-recovery" component={WebsiteRecoveryPage} />
+      <Route path="/threat-hunting" component={ThreatHuntingPage} />
+      <Route path="/vulnerability-tracking" component={VulnerabilityTracking} />
       <Route component={NotFound} />
     </Switch>
   );

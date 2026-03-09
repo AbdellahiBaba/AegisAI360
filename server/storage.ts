@@ -6,6 +6,8 @@ import {
   plans, deviceTokens, agents, agentCommands, terminalAuditLogs, usageTracking,
   packetCaptures, arpAlerts, bandwidthLogs,
   notificationChannels, scheduledScans, sessionsMetadata, threatIntelKeys,
+  incidentNotes,
+  threatHuntingQueries,
   type User, type InsertUser,
   type Organization, type InsertOrganization,
   type SecurityEvent, type InsertSecurityEvent,
@@ -53,6 +55,10 @@ import {
   type ScheduledReport, type InsertScheduledReport,
   loginHistory,
   type LoginHistory, type InsertLoginHistory,
+  type IncidentNote, type InsertIncidentNote,
+  type ThreatHuntingQuery, type InsertThreatHuntingQuery,
+  vulnerabilities,
+  type Vulnerability, type InsertVulnerability,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, gte, count, lt, ne, inArray } from "drizzle-orm";
@@ -76,6 +82,7 @@ export interface IStorage {
   bulkUpdateSecurityEventStatus(ids: number[], orgId: number, status: string): Promise<number>;
   bulkDeleteSecurityEvents(ids: number[], orgId: number): Promise<number>;
   mitigateEventsByIp(orgId: number, ip: string): Promise<number>;
+  updateSecurityEventAiTriage(id: number, data: { aiThreatScore: number; aiClassification: string; aiRecommendation: string }): Promise<SecurityEvent | undefined>;
 
   getIncidents(orgId: number): Promise<Incident[]>;
   createIncident(incident: InsertIncident): Promise<Incident>;
@@ -116,7 +123,7 @@ export interface IStorage {
 
   getResponsePlaybooks(orgId: number): Promise<ResponsePlaybook[]>;
   createResponsePlaybook(playbook: InsertResponsePlaybook): Promise<ResponsePlaybook>;
-  updateResponsePlaybook(id: number, orgId: number, data: Partial<{ enabled: boolean }>): Promise<ResponsePlaybook | undefined>;
+  updateResponsePlaybook(id: number, orgId: number, data: Partial<{ enabled: boolean; autoTriggerEnabled: boolean; triggerSeverity: string; cooldownMinutes: number; lastAutoRunAt: Date }>): Promise<ResponsePlaybook | undefined>;
 
   getOrganizationUsers(orgId: number): Promise<Omit<User, "password">[]>;
   updateUserRole(userId: string, orgId: number, role: string): Promise<Omit<User, "password"> | undefined>;
@@ -207,6 +214,7 @@ export interface IStorage {
   getAgentsByOrg(orgId: number): Promise<Agent[]>;
   updateAgentHeartbeat(id: number, data: { lastSeen: Date; cpuUsage?: number; ramUsage?: number; ip?: string; telemetry?: any }): Promise<Agent | undefined>;
   updateAgentStatus(id: number, status: string): Promise<void>;
+  updateAgent(id: number, data: Partial<{ isIsolated: boolean }>): Promise<void>;
 
   createCommand(cmd: InsertAgentCommand): Promise<AgentCommand>;
   getCommandById(id: number): Promise<AgentCommand | undefined>;
@@ -284,6 +292,20 @@ export interface IStorage {
   deleteOrganizationUser(userId: string, orgId: number): Promise<boolean>;
   updateUserOnboarding(userId: string, completed: boolean): Promise<void>;
   updateUserDashboardLayout(userId: string, layout: any): Promise<void>;
+
+  getIncidentNotes(incidentId: number, orgId: number): Promise<IncidentNote[]>;
+  createIncidentNote(note: InsertIncidentNote): Promise<IncidentNote>;
+
+  getThreatHuntingQueries(orgId: number): Promise<ThreatHuntingQuery[]>;
+  createThreatHuntingQuery(query: InsertThreatHuntingQuery): Promise<ThreatHuntingQuery>;
+  deleteThreatHuntingQuery(id: number, orgId: number): Promise<boolean>;
+  updateThreatHuntingQuery(id: number, orgId: number, data: Partial<{ lastRunAt: Date; resultCount: number }>): Promise<ThreatHuntingQuery | undefined>;
+
+  getVulnerabilities(orgId: number): Promise<Vulnerability[]>;
+  getVulnerabilityById(id: number, orgId: number): Promise<Vulnerability | undefined>;
+  createVulnerability(vuln: InsertVulnerability): Promise<Vulnerability>;
+  updateVulnerability(id: number, orgId: number, data: Partial<Vulnerability>): Promise<Vulnerability | undefined>;
+  getVulnerabilityStats(orgId: number): Promise<{ total: number; criticalOpen: number; pastSla: number; remediated: number; open: number; inProgress: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -404,6 +426,14 @@ export class DatabaseStorage implements IStorage {
         ne(securityEvents.status, "resolved"),
       )).returning();
     return result.length;
+  }
+
+  async updateSecurityEventAiTriage(id: number, data: { aiThreatScore: number; aiClassification: string; aiRecommendation: string }): Promise<SecurityEvent | undefined> {
+    const [updated] = await db.update(securityEvents)
+      .set({ aiThreatScore: data.aiThreatScore, aiClassification: data.aiClassification, aiRecommendation: data.aiRecommendation })
+      .where(eq(securityEvents.id, id))
+      .returning();
+    return updated;
   }
 
   async getIncidents(orgId: number): Promise<Incident[]> {
@@ -558,7 +588,7 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateResponsePlaybook(id: number, orgId: number, data: Partial<{ enabled: boolean }>): Promise<ResponsePlaybook | undefined> {
+  async updateResponsePlaybook(id: number, orgId: number, data: Partial<{ enabled: boolean; autoTriggerEnabled: boolean; triggerSeverity: string; cooldownMinutes: number; lastAutoRunAt: Date }>): Promise<ResponsePlaybook | undefined> {
     const [updated] = await db.update(responsePlaybooks).set(data)
       .where(and(eq(responsePlaybooks.id, id), eq(responsePlaybooks.organizationId, orgId)))
       .returning();
@@ -990,6 +1020,10 @@ export class DatabaseStorage implements IStorage {
     await db.update(agents).set({ status }).where(eq(agents.id, id));
   }
 
+  async updateAgent(id: number, data: Partial<{ isIsolated: boolean }>): Promise<void> {
+    await db.update(agents).set(data).where(eq(agents.id, id));
+  }
+
   async createCommand(cmd: InsertAgentCommand): Promise<AgentCommand> {
     const [created] = await db.insert(agentCommands).values(cmd).returning();
     return created;
@@ -1307,6 +1341,76 @@ export class DatabaseStorage implements IStorage {
 
   async updateUserDashboardLayout(userId: string, layout: any): Promise<void> {
     await db.update(users).set({ dashboardLayout: layout }).where(eq(users.id, userId));
+  }
+
+  async getIncidentNotes(incidentId: number, orgId: number): Promise<IncidentNote[]> {
+    return db.select().from(incidentNotes)
+      .where(and(eq(incidentNotes.incidentId, incidentId), eq(incidentNotes.organizationId, orgId)))
+      .orderBy(incidentNotes.createdAt);
+  }
+
+  async createIncidentNote(note: InsertIncidentNote): Promise<IncidentNote> {
+    const [created] = await db.insert(incidentNotes).values(note).returning();
+    return created;
+  }
+
+  async getVulnerabilities(orgId: number): Promise<Vulnerability[]> {
+    return db.select().from(vulnerabilities)
+      .where(eq(vulnerabilities.organizationId, orgId))
+      .orderBy(desc(vulnerabilities.createdAt))
+      .limit(500);
+  }
+
+  async getVulnerabilityById(id: number, orgId: number): Promise<Vulnerability | undefined> {
+    const [vuln] = await db.select().from(vulnerabilities)
+      .where(and(eq(vulnerabilities.id, id), eq(vulnerabilities.organizationId, orgId)));
+    return vuln || undefined;
+  }
+
+  async createVulnerability(vuln: InsertVulnerability): Promise<Vulnerability> {
+    const [created] = await db.insert(vulnerabilities).values(vuln).returning();
+    return created;
+  }
+
+  async updateVulnerability(id: number, orgId: number, data: Partial<Vulnerability>): Promise<Vulnerability | undefined> {
+    const [updated] = await db.update(vulnerabilities).set(data)
+      .where(and(eq(vulnerabilities.id, id), eq(vulnerabilities.organizationId, orgId)))
+      .returning();
+    return updated;
+  }
+
+  async getThreatHuntingQueries(orgId: number): Promise<ThreatHuntingQuery[]> {
+    return db.select().from(threatHuntingQueries)
+      .where(eq(threatHuntingQueries.organizationId, orgId))
+      .orderBy(desc(threatHuntingQueries.createdAt));
+  }
+
+  async createThreatHuntingQuery(query: InsertThreatHuntingQuery): Promise<ThreatHuntingQuery> {
+    const [created] = await db.insert(threatHuntingQueries).values(query).returning();
+    return created;
+  }
+
+  async deleteThreatHuntingQuery(id: number, orgId: number): Promise<boolean> {
+    const result = await db.delete(threatHuntingQueries).where(and(eq(threatHuntingQueries.id, id), eq(threatHuntingQueries.organizationId, orgId)));
+    return (result as any).rowCount > 0;
+  }
+
+  async updateThreatHuntingQuery(id: number, orgId: number, data: Partial<{ lastRunAt: Date; resultCount: number }>): Promise<ThreatHuntingQuery | undefined> {
+    const [updated] = await db.update(threatHuntingQueries).set(data).where(and(eq(threatHuntingQueries.id, id), eq(threatHuntingQueries.organizationId, orgId))).returning();
+    return updated;
+  }
+
+  async getVulnerabilityStats(orgId: number): Promise<{ total: number; criticalOpen: number; pastSla: number; remediated: number; open: number; inProgress: number }> {
+    const all = await db.select().from(vulnerabilities).where(eq(vulnerabilities.organizationId, orgId));
+    const now = new Date();
+    return {
+      total: all.length,
+      criticalOpen: all.filter(v => v.severity === "critical" && v.status !== "remediated" && v.status !== "accepted").length,
+      pastSla: all.filter(v => v.slaDeadline && new Date(v.slaDeadline) < now && v.status !== "remediated" && v.status !== "accepted").length,
+      remediated: all.filter(v => v.status === "remediated").length,
+      open: all.filter(v => v.status === "open").length,
+      inProgress: all.filter(v => v.status === "in_progress").length,
+    };
   }
 }
 

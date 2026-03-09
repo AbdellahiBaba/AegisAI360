@@ -9,7 +9,7 @@ import {
   Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar, LifeBuoy, Server, Key,
   Monitor, Download, Terminal, Activity, ScanSearch, Smartphone, Eye, ShieldCheck,
   Mail, KeyRound, ShieldBan, FileSearch, CalendarClock, Zap, ChevronDown, Gamepad2,
-  Sun, Moon, Globe, RotateCcw,
+  Sun, Moon, Globe, RotateCcw, Crosshair,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -88,6 +88,7 @@ export function AppSidebar() {
     { title: t("sidebar.cveDatabase"), testId: "cve-database", url: "/cve-database", icon: FileSearch },
     { title: t("sidebar.emailAnalyzer"), testId: "email-analyzer", url: "/email-analyzer", icon: Mail },
     { title: t("sidebar.linkScanner"), testId: "link-scanner", url: "/link-scanner", icon: Globe },
+    { title: "Vuln Tracking", testId: "vulnerability-tracking", url: "/vulnerability-tracking", icon: Bug },
   ];
 
   const monitorItems: NavItem[] = [
@@ -125,6 +126,7 @@ export function AppSidebar() {
 
   const intelItems: NavItem[] = [
     { title: t("sidebar.threatIntel"), testId: "threat-intel", url: "/threat-intel", icon: Database },
+    { title: "Threat Hunting", testId: "threat-hunting", url: "/threat-hunting", icon: Crosshair },
     { title: t("sidebar.networkMap"), testId: "network-map", url: "/network-map", icon: Network },
     { title: t("sidebar.forensicTimeline"), testId: "forensic-timeline", url: "/forensics", icon: Clock },
     { title: t("sidebar.darkWebMonitor"), testId: "dark-web-monitor", url: "/dark-web-monitor", icon: Eye },

@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Monitor, Cpu, MemoryStick, Wifi, WifiOff, Terminal, Send, RefreshCw, Clock, Activity, ArrowDown, ArrowUp, HardDrive, Globe, Server, Layers, Info, FileSearch, AlertTriangle, FileText, Shield, Download } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Loader2, Monitor, Cpu, MemoryStick, Wifi, WifiOff, Terminal, Send, RefreshCw, Clock, Activity, ArrowDown, ArrowUp, HardDrive, Globe, Server, Layers, Info, FileSearch, AlertTriangle, FileText, Shield, Download, ShieldAlert, ShieldOff, File, Hash } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToCsv } from "@/lib/csvExport";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -515,6 +516,10 @@ export default function Endpoints() {
     refetchInterval: 10000,
   });
 
+  const [isolateDialogOpen, setIsolateDialogOpen] = useState(false);
+  const [fileRetrievePath, setFileRetrievePath] = useState("");
+  const [fileRetrieveDialogOpen, setFileRetrieveDialogOpen] = useState(false);
+
   const sendCommandMutation = useMutation({
     mutationFn: async (data: { agentId: number; command: string; params?: string }) => {
       const res = await apiRequest("POST", "/api/agent/send-command", data);
@@ -526,6 +531,57 @@ export default function Endpoints() {
     },
     onError: () => {
       toast({ title: t("endpoints.commandSendFailed"), variant: "destructive" });
+    },
+  });
+
+  const isolateMutation = useMutation({
+    mutationFn: async (agentId: number) => {
+      const res = await apiRequest("POST", `/api/agent/${agentId}/isolate`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Host isolation initiated" });
+      setIsolateDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/agent/list"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent", selectedAgent] });
+    },
+    onError: () => {
+      toast({ title: "Failed to isolate host", variant: "destructive" });
+    },
+  });
+
+  const unisolateMutation = useMutation({
+    mutationFn: async (agentId: number) => {
+      const res = await apiRequest("POST", `/api/agent/${agentId}/unisolate`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Host isolation released" });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent/list"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent", selectedAgent] });
+    },
+    onError: () => {
+      toast({ title: "Failed to release isolation", variant: "destructive" });
+    },
+  });
+
+  const fileRetrieveMutation = useMutation({
+    mutationFn: async (data: { agentId: number; path: string }) => {
+      const res = await apiRequest("POST", "/api/agent/send-command", {
+        agentId: data.agentId,
+        command: "file_retrieve",
+        params: JSON.stringify({ path: data.path }),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "File retrieval requested" });
+      setFileRetrieveDialogOpen(false);
+      setFileRetrievePath("");
+      queryClient.invalidateQueries({ queryKey: ["/api/agent", selectedAgent, "commands"] });
+    },
+    onError: () => {
+      toast({ title: "Failed to request file", variant: "destructive" });
     },
   });
 
@@ -618,6 +674,12 @@ export default function Endpoints() {
                 <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground flex-wrap">
                   <span>{agent.ip || "No IP"}</span>
                   <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{timeSince(agent.lastSeen)}</span>
+                  {agent.isIsolated && (
+                    <Badge variant="destructive" className="text-xs" data-testid={`badge-isolated-${agent.id}`}>
+                      <ShieldAlert className="w-3 h-3 me-1" />
+                      ISOLATED
+                    </Badge>
+                  )}
                   {agent.telemetry?.runMode && (
                     <Badge variant="outline" className="text-xs" data-testid={`badge-runmode-${agent.id}`}>
                       {agent.telemetry.runMode === "service" ? t("endpoints.runModeService") : agent.telemetry.runMode === "tray" ? t("endpoints.runModeTray") : t("endpoints.runModeTerminal")}
@@ -656,10 +718,88 @@ export default function Endpoints() {
                         <FileSearch className="w-4 h-4 me-1" />
                         {t("endpoints.fileScan")}
                       </Button>
+                      <Dialog open={fileRetrieveDialogOpen} onOpenChange={setFileRetrieveDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button size="sm" variant="outline" disabled={agentDetail.status !== "online"} data-testid="button-file-retrieve">
+                            <File className="w-4 h-4 me-1" />
+                            Retrieve File
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Retrieve File from Endpoint</DialogTitle>
+                            <DialogDescription>Enter the full path to the file you want to retrieve (max 10MB).</DialogDescription>
+                          </DialogHeader>
+                          <Input
+                            placeholder="C:\Users\admin\Documents\file.txt"
+                            value={fileRetrievePath}
+                            onChange={(e) => setFileRetrievePath(e.target.value)}
+                            data-testid="input-file-retrieve-path"
+                          />
+                          <DialogFooter>
+                            <Button
+                              disabled={!fileRetrievePath.trim() || fileRetrieveMutation.isPending}
+                              onClick={() => fileRetrieveMutation.mutate({ agentId: selectedAgent!, path: fileRetrievePath })}
+                              data-testid="button-submit-file-retrieve"
+                            >
+                              {fileRetrieveMutation.isPending && <Loader2 className="w-4 h-4 me-1 animate-spin" />}
+                              Retrieve
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
                       <Button size="sm" variant="outline" onClick={() => navigate(`/endpoints/${selectedAgent}/terminal`)} data-testid="button-open-terminal">
                         <Terminal className="w-4 h-4 me-1" />
                         {t("endpoints.terminal")}
                       </Button>
+                      {agentDetail.isIsolated ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-green-500 text-green-600 hover:bg-green-50"
+                          disabled={unisolateMutation.isPending}
+                          onClick={() => unisolateMutation.mutate(selectedAgent!)}
+                          data-testid="button-unisolate"
+                        >
+                          {unisolateMutation.isPending ? <Loader2 className="w-4 h-4 me-1 animate-spin" /> : <ShieldOff className="w-4 h-4 me-1" />}
+                          Release Isolation
+                        </Button>
+                      ) : (
+                        <Dialog open={isolateDialogOpen} onOpenChange={setIsolateDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button size="sm" variant="destructive" disabled={agentDetail.status !== "online"} data-testid="button-isolate">
+                              <ShieldAlert className="w-4 h-4 me-1" />
+                              Isolate Host
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Isolate Host</DialogTitle>
+                              <DialogDescription>
+                                This will block ALL network traffic on this endpoint except management communication. The host will be completely cut off from the network. Are you sure?
+                              </DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter>
+                              <Button variant="outline" onClick={() => setIsolateDialogOpen(false)} data-testid="button-cancel-isolate">Cancel</Button>
+                              <Button
+                                variant="destructive"
+                                disabled={isolateMutation.isPending}
+                                onClick={() => isolateMutation.mutate(selectedAgent!)}
+                                data-testid="button-confirm-isolate"
+                              >
+                                {isolateMutation.isPending && <Loader2 className="w-4 h-4 me-1 animate-spin" />}
+                                Confirm Isolation
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      )}
+                      {agentDetail.isIsolated && (
+                        <Badge variant="destructive" data-testid="badge-detail-isolated">
+                          <ShieldAlert className="w-3 h-3 me-1" />
+                          ISOLATED
+                        </Badge>
+                      )}
                       <Badge className={agentDetail.status === "online" ? "bg-green-600" : "bg-red-600"}>
                         {agentDetail.status === "online" ? <Wifi className="w-3 h-3 me-1" /> : <WifiOff className="w-3 h-3 me-1" />}
                         {agentDetail.status}
@@ -682,6 +822,7 @@ export default function Endpoints() {
                   <TabsTrigger value="overview" data-testid="tab-overview">{t("endpoints.tabSystemInfo")}</TabsTrigger>
                   <TabsTrigger value="commands" data-testid="tab-commands">{t("endpoints.tabCommands")}</TabsTrigger>
                   <TabsTrigger value="file-scans" data-testid="tab-file-scans">{t("endpoints.tabFileScans")}</TabsTrigger>
+                  <TabsTrigger value="retrieved-files" data-testid="tab-retrieved-files">Retrieved Files</TabsTrigger>
                   <TabsTrigger value="bandwidth" data-testid="tab-bandwidth">{t("endpoints.tabBandwidth")}</TabsTrigger>
                 </TabsList>
 
@@ -760,6 +901,95 @@ export default function Endpoints() {
 
                 <TabsContent value="file-scans" className="mt-4">
                   <FileScanResults commands={commands} />
+                </TabsContent>
+
+                <TabsContent value="retrieved-files" className="mt-4">
+                  <Card data-testid="card-retrieved-files">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <File className="w-4 h-4" />
+                        Retrieved Files
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {(() => {
+                        const fileCommands = (commands || []).filter((c: any) => c.command === "file_retrieve");
+                        if (fileCommands.length === 0) return <p className="text-sm text-muted-foreground text-center py-4">No files retrieved yet. Use the "Retrieve File" button to fetch files from this endpoint.</p>;
+                        return (
+                          <div className="space-y-2">
+                            {fileCommands.map((cmd: any) => {
+                              const isPending = cmd.status === "pending";
+                              const isDone = cmd.status === "done";
+                              let fileInfo: any = null;
+                              if (isDone && cmd.result) {
+                                const idx = cmd.result.indexOf("__FILE_RETRIEVE_JSON__:");
+                                const match = idx !== -1 ? [null, cmd.result.substring(idx + "__FILE_RETRIEVE_JSON__:".length)] : null;
+                                if (match) {
+                                  try { fileInfo = JSON.parse(match[1]); } catch {}
+                                }
+                              }
+                              const hasError = fileInfo?.error;
+                              return (
+                                <div key={cmd.id} className="flex items-center justify-between gap-3 p-3 bg-muted/30 rounded" data-testid={`row-retrieved-file-${cmd.id}`}>
+                                  <div className="min-w-0 flex-1">
+                                    {isPending && (
+                                      <div className="flex items-center gap-2 text-sm">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span className="text-muted-foreground">Retrieving file...</span>
+                                        {cmd.params && <span className="font-mono text-xs truncate">{JSON.parse(cmd.params).path}</span>}
+                                      </div>
+                                    )}
+                                    {hasError && (
+                                      <div className="flex items-center gap-2 text-sm text-destructive">
+                                        <AlertTriangle className="w-4 h-4" />
+                                        <span>{fileInfo.error}</span>
+                                      </div>
+                                    )}
+                                    {fileInfo && !hasError && (
+                                      <div className="space-y-1">
+                                        <p className="font-medium text-sm flex items-center gap-2">
+                                          <FileText className="w-4 h-4" />
+                                          {fileInfo.name}
+                                        </p>
+                                        <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                                          <span>Size: {fileInfo.sizeFormatted}</span>
+                                          <span className="flex items-center gap-1"><Hash className="w-3 h-3" />SHA256: {fileInfo.sha256?.substring(0, 16)}...</span>
+                                          <span>Modified: {new Date(fileInfo.modifiedAt).toLocaleString()}</span>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {cmd.status === "failed" && (
+                                      <div className="flex items-center gap-2 text-sm text-destructive">
+                                        <AlertTriangle className="w-4 h-4" />
+                                        <span>Failed to retrieve file</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <Badge variant={isDone ? (hasError ? "destructive" : "default") : cmd.status === "failed" ? "destructive" : "secondary"}>
+                                      {isPending && <Loader2 className="w-3 h-3 me-1 animate-spin" />}
+                                      {cmd.status}
+                                    </Badge>
+                                    {fileInfo && !hasError && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => window.open(`/api/agent/${selectedAgent}/files/${cmd.id}/download`, "_blank")}
+                                        data-testid={`button-download-file-${cmd.id}`}
+                                      >
+                                        <Download className="w-4 h-4 me-1" />
+                                        Download
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </CardContent>
+                  </Card>
                 </TabsContent>
 
                 <TabsContent value="bandwidth" className="mt-4">

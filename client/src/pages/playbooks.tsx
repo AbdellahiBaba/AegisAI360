@@ -7,12 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useForm } from "react-hook-form";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { BookOpen, Plus, Zap, Play, AlertTriangle, CheckCircle } from "lucide-react";
+import { BookOpen, Plus, Zap, AlertTriangle, Clock, Bot, History, FlaskConical, Loader2 } from "lucide-react";
 import type { ResponsePlaybook } from "@shared/schema";
 import { useState } from "react";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -22,7 +24,13 @@ export default function Playbooks() {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [historyPlaybook, setHistoryPlaybook] = useState<ResponsePlaybook | null>(null);
   const { data: playbooks, isLoading } = useQuery<ResponsePlaybook[]>({ queryKey: ["/api/playbooks"] });
+
+  const { data: historyData } = useQuery<any[]>({
+    queryKey: ["/api/playbooks", historyPlaybook?.id, "history"],
+    enabled: !!historyPlaybook,
+  });
 
   const form = useForm({
     defaultValues: { name: "", description: "", triggerConditions: "", actions: "", enabled: true },
@@ -42,8 +50,8 @@ export default function Playbooks() {
   });
 
   const toggleMutation = useMutation({
-    mutationFn: async ({ id, enabled }: { id: number; enabled: boolean }) => {
-      const res = await apiRequest("PATCH", `/api/playbooks/${id}`, { enabled });
+    mutationFn: async ({ id, ...data }: { id: number; enabled?: boolean; autoTriggerEnabled?: boolean; triggerSeverity?: string; cooldownMinutes?: number }) => {
+      const res = await apiRequest("PATCH", `/api/playbooks/${id}`, data);
       return res.json();
     },
     onSuccess: () => {
@@ -52,7 +60,7 @@ export default function Playbooks() {
   });
 
   const enabledCount = playbooks?.filter((p) => p.enabled).length || 0;
-  const disabledCount = playbooks?.filter((p) => !p.enabled).length || 0;
+  const autoCount = playbooks?.filter((p) => p.autoTriggerEnabled).length || 0;
 
   if (isLoading) {
     return (
@@ -99,7 +107,7 @@ export default function Playbooks() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card><CardContent className="p-4">
           <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("playbooks.totalPlaybooks")}</span>
           <p className="text-2xl font-bold font-mono mt-1" data-testid="stat-total-playbooks">{playbooks?.length || 0}</p>
@@ -109,8 +117,12 @@ export default function Playbooks() {
           <p className="text-2xl font-bold font-mono text-status-online mt-1" data-testid="stat-active-playbooks">{enabledCount}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">Auto-Trigger</span>
+          <p className="text-2xl font-bold font-mono text-amber-500 mt-1" data-testid="stat-auto-playbooks">{autoCount}</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-4">
           <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("playbooks.disabled")}</span>
-          <p className="text-2xl font-bold font-mono text-muted-foreground mt-1" data-testid="stat-disabled-playbooks">{disabledCount}</p>
+          <p className="text-2xl font-bold font-mono text-muted-foreground mt-1" data-testid="stat-disabled-playbooks">{(playbooks?.length || 0) - enabledCount}</p>
         </CardContent></Card>
       </div>
 
@@ -135,9 +147,9 @@ export default function Playbooks() {
                 />
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               {playbook.triggerConditions && (
-                <div className="mb-2">
+                <div>
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{t("playbooks.triggerConditions")}</span>
                   <div className="mt-1 p-2 rounded bg-muted/50 font-mono text-[11px] text-foreground">
                     <AlertTriangle className="w-3 h-3 inline me-1 text-severity-medium" />
@@ -157,10 +169,121 @@ export default function Playbooks() {
                   </div>
                 </div>
               )}
+
+              <div className="border-t pt-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bot className="w-4 h-4 text-amber-500" />
+                    <span className="text-xs font-medium">Auto-Trigger</span>
+                  </div>
+                  <Switch
+                    checked={playbook.autoTriggerEnabled}
+                    onCheckedChange={(auto) => toggleMutation.mutate({ id: playbook.id, autoTriggerEnabled: auto })}
+                    disabled={!playbook.enabled}
+                    data-testid={`switch-auto-${playbook.id}`}
+                  />
+                </div>
+
+                {playbook.autoTriggerEnabled && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[10px] text-muted-foreground">Min Severity</span>
+                      <Select
+                        value={playbook.triggerSeverity || "critical"}
+                        onValueChange={(val) => toggleMutation.mutate({ id: playbook.id, triggerSeverity: val })}
+                      >
+                        <SelectTrigger className="h-7 text-xs mt-1" data-testid={`select-severity-${playbook.id}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">Low</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                          <SelectItem value="critical">Critical</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground">Cooldown (min)</span>
+                      <Input
+                        type="number"
+                        className="h-7 text-xs mt-1"
+                        value={playbook.cooldownMinutes || 30}
+                        onChange={(e) => toggleMutation.mutate({ id: playbook.id, cooldownMinutes: parseInt(e.target.value) || 30 })}
+                        data-testid={`input-cooldown-${playbook.id}`}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {playbook.lastAutoRunAt && (
+                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <Clock className="w-3 h-3" />
+                    Last auto-run: {new Date(playbook.lastAutoRunAt).toLocaleString()}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs h-7"
+                  onClick={() => setHistoryPlaybook(playbook)}
+                  data-testid={`button-history-${playbook.id}`}
+                >
+                  <History className="w-3 h-3 me-1" />
+                  History
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs h-7"
+                  onClick={() => toast({ title: `Test run for "${playbook.name}" simulated`, description: "No destructive actions were executed." })}
+                  data-testid={`button-test-${playbook.id}`}
+                >
+                  <FlaskConical className="w-3 h-3 me-1" />
+                  Test Run
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      <Sheet open={!!historyPlaybook} onOpenChange={(open) => !open && setHistoryPlaybook(null)}>
+        <SheetContent className="w-[400px] sm:w-[500px]">
+          <SheetHeader>
+            <SheetTitle>Execution History: {historyPlaybook?.name}</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 space-y-2 max-h-[calc(100vh-120px)] overflow-y-auto">
+            {!historyData?.length ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No execution history yet.</p>
+            ) : (
+              historyData.map((entry: any) => (
+                <Card key={entry.id} data-testid={`history-entry-${entry.id}`}>
+                  <CardContent className="p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Badge variant={entry.status === "completed" ? "default" : entry.status === "pending" ? "secondary" : "destructive"} className="text-[10px]">
+                        {entry.status}
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground">{new Date(entry.createdAt).toLocaleString()}</span>
+                    </div>
+                    <p className="text-xs font-medium">{entry.actionType?.replace(/_/g, " ")}</p>
+                    <p className="text-[10px] text-muted-foreground">{entry.details}</p>
+                    {entry.executedBy && (
+                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <Bot className="w-3 h-3" />
+                        {entry.executedBy}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
