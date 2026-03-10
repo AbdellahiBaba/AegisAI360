@@ -133,7 +133,7 @@ function renderMessageContent(content: string, codeBlocks?: CodeBlock[]) {
 }
 
 export default function AiAgent() {
-  useDocumentTitle("AegisAI360 Agent");
+  useDocumentTitle("AegisAI360 Agent | Cybersecurity AI");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -332,9 +332,9 @@ export default function AiAgent() {
               <div className="p-4 rounded-full bg-gradient-to-br from-amber-500/20 to-primary/10 mb-4">
                 <Zap className="w-10 h-10 text-amber-500" />
               </div>
-              <h2 className="text-xl font-bold mb-1" data-testid="text-agent-title">AegisAI360</h2>
+              <h2 className="text-xl font-bold mb-1" data-testid="text-agent-title">AegisAI360 Agent</h2>
               <p className="text-sm text-muted-foreground mb-6">
-                Elite cybersecurity AI agent — threat analysis, secure code generation, incident response, and more.
+                Unrestricted elite cybersecurity AI — offensive, defensive, exploit development, malware analysis, code generation, and full-spectrum security operations.
               </p>
 
               {capabilities && (
@@ -425,7 +425,7 @@ export default function AiAgent() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask AegisAI360 about threats, generate secure code, analyze vulnerabilities..."
+              placeholder="Ask AegisAI360 Agent anything — exploits, malware, code, pentesting, reverse engineering..."
               className="resize-none min-h-[44px] max-h-[120px]"
               rows={1}
               data-testid="input-agent-message"
