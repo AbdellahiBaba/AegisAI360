@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import OpenAI from "openai";
 import { chatStorage } from "./storage";
+import { compressChatHistory } from "../../aiCache";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -68,24 +69,22 @@ export function registerChatRoutes(app: Express): void {
       // Save user message
       await chatStorage.createMessage(conversationId, "user", content);
 
-      // Get conversation history for context
       const messages = await chatStorage.getMessagesByConversation(conversationId);
-      const chatMessages = messages.map((m) => ({
+      const rawMessages = messages.map((m) => ({
         role: m.role as "user" | "assistant",
         content: m.content,
       }));
+      const chatMessages = compressChatHistory(rawMessages, 10, 1500);
 
-      // Set up SSE
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
-      // Stream response from OpenAI
       const stream = await openai.chat.completions.create({
-        model: "gpt-5.1",
+        model: "gpt-4o-mini",
         messages: chatMessages,
         stream: true,
-        max_completion_tokens: 8192,
+        max_completion_tokens: 4096,
       });
 
       let fullResponse = "";

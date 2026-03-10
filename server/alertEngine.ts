@@ -2,6 +2,7 @@ import { storage } from "./storage";
 import type { SecurityEvent, AlertRule, ResponsePlaybook } from "@shared/schema";
 import { dispatchToChannels } from "./notificationService";
 import OpenAI from "openai";
+import { aiCacheKey, getCached, setCache } from "./aiCache";
 
 const DESTRUCTIVE_ACTIONS = ["block_source", "auto_quarantine", "auto_sinkhole"];
 const PLAYBOOK_DESTRUCTIVE_ACTIONS = ["isolate_host", "block_ip", "kill_process", "quarantine_file"];
@@ -37,39 +38,34 @@ async function aiTriageEvent(event: SecurityEvent): Promise<{ aiThreatScore: num
   if (!canMakeAiCall()) return null;
 
   try {
-    const prompt = `Analyze this security event and provide a triage assessment.
+    const prompt = `Triage: ${event.eventType}|${event.severity}|${event.source}|src:${event.sourceIp || "N/A"}|dst:${event.destinationIp || "N/A"}|port:${event.port || "N/A"}|${event.protocol || "N/A"}|${event.description}|${event.techniqueId || "N/A"}|${event.tactic || "N/A"}\nJSON: {"threatScore":<0-100>,"classification":"<credential_stuffing|reconnaissance|malware|exfiltration|lateral_movement|privilege_escalation|command_and_control|ransomware|phishing|insider_threat|policy_violation|brute_force|denial_of_service|web_attack|other>","recommendation":"<escalate|monitor|dismiss>","reasoning":"<1 sentence>"}`;
 
-Event Details:
-- Type: ${event.eventType}
-- Severity: ${event.severity}
-- Source: ${event.source}
-- Source IP: ${event.sourceIp || "N/A"}
-- Destination IP: ${event.destinationIp || "N/A"}
-- Port: ${event.port || "N/A"}
-- Protocol: ${event.protocol || "N/A"}
-- Description: ${event.description}
-- MITRE Technique: ${event.techniqueId || "N/A"}
-- MITRE Tactic: ${event.tactic || "N/A"}
-
-Respond ONLY with valid JSON in this exact format:
-{
-  "threatScore": <number 0-100>,
-  "classification": "<one of: credential_stuffing, reconnaissance, malware, exfiltration, lateral_movement, privilege_escalation, command_and_control, ransomware, phishing, insider_threat, policy_violation, brute_force, denial_of_service, web_attack, other>",
-  "recommendation": "<one of: escalate, monitor, dismiss>",
-  "reasoning": "<brief 1-2 sentence explanation>"
-}`;
+    const cKey = aiCacheKey("triage", event.eventType, event.severity, event.sourceIp || "", event.description.substring(0, 100));
+    const cached = getCached(cKey);
+    if (cached) {
+      const match = cached.match(/\{[\s\S]*\}/);
+      if (match) {
+        const p = JSON.parse(match[0]);
+        return {
+          aiThreatScore: Math.max(0, Math.min(100, Math.round(Number(p.threatScore) || 0))),
+          aiClassification: String(p.classification || "other"),
+          aiRecommendation: `${["escalate","monitor","dismiss"].includes(p.recommendation) ? p.recommendation : "monitor"}${p.reasoning ? ` | ${p.reasoning}` : ""}`,
+        };
+      }
+    }
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "You are a SOC analyst AI that triages security events. Respond only with valid JSON." },
+        { role: "system", content: "SOC triage AI. JSON only." },
         { role: "user", content: prompt },
       ],
       temperature: 0.3,
-      max_tokens: 300,
+      max_tokens: 200,
     });
 
     const content = response.choices[0]?.message?.content?.trim();
+    if (content) setCache(cKey, content);
     if (!content) return null;
 
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -175,18 +171,27 @@ export class AlertEngine {
       let aiConfidence = 100;
       if (hasDestructive) {
         try {
-          const confResponse = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-              { role: "system", content: "You are a SOC analyst. Assess whether an automated response action is appropriate. Respond only with JSON." },
-              { role: "user", content: `Security event: ${event.eventType} - ${event.description}\nSeverity: ${event.severity}\nSource: ${event.sourceIp || event.source}\nPlaybook: ${playbook.name}\nActions: ${playbook.actions}\n\nShould these automated actions be executed? Respond with: {"confidence": <0-100>, "reasoning": "<brief explanation>"}` },
-            ],
-            temperature: 0.2,
-            max_tokens: 200,
-          });
-          const content = confResponse.choices[0]?.message?.content?.trim();
-          if (content) {
-            const match = content.match(/\{[\s\S]*\}/);
+          const confPrompt = `Event:${event.eventType}|${event.severity}|${event.sourceIp || event.source}|${event.description.substring(0, 150)}\nPlaybook:${playbook.name}|Actions:${playbook.actions}\nExecute? {"confidence":<0-100>,"reasoning":"<brief>"}`;
+          const confCacheKey = aiCacheKey("playbook-conf", event.eventType, event.severity, playbook.name);
+          const confCached = getCached(confCacheKey);
+          let confContent: string | undefined;
+          if (confCached) {
+            confContent = confCached;
+          } else {
+            const confResponse = await openai.chat.completions.create({
+              model: "gpt-4o-mini",
+              messages: [
+                { role: "system", content: "SOC analyst. JSON only." },
+                { role: "user", content: confPrompt },
+              ],
+              temperature: 0.2,
+              max_tokens: 150,
+            });
+            confContent = confResponse.choices[0]?.message?.content?.trim();
+            if (confContent) setCache(confCacheKey, confContent);
+          }
+          if (confContent) {
+            const match = confContent.match(/\{[\s\S]*\}/);
             if (match) {
               const parsed = JSON.parse(match[0]);
               aiConfidence = Math.max(0, Math.min(100, Math.round(Number(parsed.confidence) || 0)));

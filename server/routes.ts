@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { storage } from "./storage";
 import OpenAI from "openai";
+import { aiCacheKey, getCached, setCache, compressChatHistory } from "./aiCache";
 import { chatStorage } from "./replit_integrations/chat/storage";
 import { z } from "zod";
 import { createHash, randomBytes } from "crypto";
@@ -52,22 +53,7 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-const SECURITY_SYSTEM_PROMPT = `You are AegisAI360, an advanced cybersecurity analyst assistant integrated into a Security Operations Center (SOC) dashboard. You provide expert analysis of security threats, malware behavior, network anomalies, and incident response recommendations.
-
-Your capabilities include:
-- Analyzing security events and log data
-- Identifying indicators of compromise (IOCs)
-- Providing MITRE ATT&CK technique mappings
-- Recommending defensive actions and containment strategies
-- Assessing threat severity and risk levels
-- Explaining attack patterns and threat actor tactics
-
-Guidelines:
-- Communicate clearly and professionally, suitable for security analysts and IT teams
-- When analyzing threats, provide severity assessment and recommended actions
-- Reference relevant MITRE ATT&CK techniques when applicable
-- Focus exclusively on defensive cybersecurity - never provide offensive guidance
-- Provide actionable, specific recommendations`;
+const SECURITY_SYSTEM_PROMPT = `You are AegisAI360, a SOC cybersecurity analyst assistant. Analyze security events, identify IOCs, map MITRE ATT&CK techniques, recommend defensive actions, assess threat severity, and explain attack patterns. Be clear, professional, and actionable. Reference ATT&CK techniques when applicable.`;
 
 function getOrgId(req: Request): number {
   const user = req.user as User;
@@ -401,30 +387,27 @@ export async function registerRoutes(
       const { query: nlQuery } = z.object({ query: z.string().min(1) }).parse(req.body);
 
       try {
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content: `You are a cybersecurity threat hunting assistant. Convert natural language queries into structured filter objects for searching security events. Return ONLY a valid JSON object with these optional fields:
-- timeRange: "1h"|"6h"|"24h"|"7d"|"30d"
-- eventTypes: string[] (e.g. ["brute_force","malware","intrusion","port_scan","ddos","data_exfiltration","privilege_escalation","lateral_movement","phishing","ransomware"])
-- severities: string[] (e.g. ["critical","high","medium","low","info"])
-- sourceIps: string[] (IP addresses mentioned)
-- destIps: string[] (destination IPs mentioned)
-- keywords: string (search terms)
-- tactics: string[] (MITRE ATT&CK tactics like "initial-access","execution","persistence","privilege-escalation","defense-evasion","credential-access","discovery","lateral-movement","collection","exfiltration","command-and-control","impact")
-- techniques: string[] (MITRE ATT&CK technique IDs like "T1078","T1059")
-
-Only include fields that are relevant to the query. Return raw JSON only.`
-            },
-            { role: "user", content: nlQuery }
-          ],
-          max_tokens: 300,
-          temperature: 0.1,
-        });
-
-        const content = completion.choices[0]?.message?.content?.trim() || "{}";
+        const nlCacheKey = aiCacheKey("nl-search", nlQuery);
+        const nlCached = getCached(nlCacheKey);
+        let content: string;
+        if (nlCached) {
+          content = nlCached;
+        } else {
+          const completion = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content: `Convert natural language to JSON filter for security events. Fields: timeRange("1h"|"6h"|"24h"|"7d"|"30d"), eventTypes[], severities[], sourceIps[], destIps[], keywords, tactics[], techniques[]. JSON only.`
+              },
+              { role: "user", content: nlQuery }
+            ],
+            max_tokens: 200,
+            temperature: 0.1,
+          });
+          content = completion.choices[0]?.message?.content?.trim() || "{}";
+          setCache(nlCacheKey, content);
+        }
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         const filters = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
         res.json({ filters });
@@ -1201,39 +1184,26 @@ Only include fields that are relevant to the query. Return raw JSON only.`
       const event = events.find(e => e.id === id);
       if (!event) return res.status(404).json({ error: "Event not found" });
 
-      const prompt = `Analyze this security event and provide a triage assessment.
+      const prompt = `Triage: ${event.eventType}|${event.severity}|${event.source}|src:${event.sourceIp || "N/A"}|dst:${event.destinationIp || "N/A"}|port:${event.port || "N/A"}|${event.protocol || "N/A"}|${event.description}|${event.techniqueId || "N/A"}|${event.tactic || "N/A"}\nJSON: {"threatScore":<0-100>,"classification":"<type>","recommendation":"<escalate|monitor|dismiss>","reasoning":"<1 sentence>"}`;
 
-Event Details:
-- Type: ${event.eventType}
-- Severity: ${event.severity}
-- Source: ${event.source}
-- Source IP: ${event.sourceIp || "N/A"}
-- Destination IP: ${event.destinationIp || "N/A"}
-- Port: ${event.port || "N/A"}
-- Protocol: ${event.protocol || "N/A"}
-- Description: ${event.description}
-- MITRE Technique: ${event.techniqueId || "N/A"}
-- MITRE Tactic: ${event.tactic || "N/A"}
-
-Respond ONLY with valid JSON in this exact format:
-{
-  "threatScore": <number 0-100>,
-  "classification": "<one of: credential_stuffing, reconnaissance, malware, exfiltration, lateral_movement, privilege_escalation, command_and_control, ransomware, phishing, insider_threat, policy_violation, brute_force, denial_of_service, web_attack, other>",
-  "recommendation": "<one of: escalate, monitor, dismiss>",
-  "reasoning": "<brief 1-2 sentence explanation>"
-}`;
-
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "You are a SOC analyst AI that triages security events. Respond only with valid JSON." },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 300,
-      });
-
-      const content = response.choices[0]?.message?.content?.trim();
+      const triageCacheKey = aiCacheKey("retriage", event.eventType, event.severity, event.sourceIp || "", event.description.substring(0, 100));
+      const triageCached = getCached(triageCacheKey);
+      let content: string | undefined;
+      if (triageCached) {
+        content = triageCached;
+      } else {
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: "SOC triage AI. JSON only." },
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.3,
+          max_tokens: 200,
+        });
+        content = response.choices[0]?.message?.content?.trim();
+        if (content) setCache(triageCacheKey, content);
+      }
       if (!content) return res.status(500).json({ error: "AI returned empty response" });
 
       const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -2648,12 +2618,14 @@ Respond ONLY with valid JSON in this exact format:
       await chatStorage.createMessage(conversationId, "user", content);
 
       const messages = await chatStorage.getMessagesByConversation(conversationId);
+      const rawMessages = messages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+      const compressed = compressChatHistory(rawMessages, 10, 1500);
       const chatMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
         { role: "system", content: SECURITY_SYSTEM_PROMPT },
-        ...messages.map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        })),
+        ...compressed,
       ];
 
       res.setHeader("Content-Type", "text/event-stream");
@@ -2664,7 +2636,7 @@ Respond ONLY with valid JSON in this exact format:
         model: "gpt-4o-mini",
         messages: chatMessages,
         stream: true,
-        max_completion_tokens: 8192,
+        max_completion_tokens: 4096,
       });
 
       let fullResponse = "";
@@ -5156,17 +5128,24 @@ Provide an array of objects with "controlId" and "aiRemediation" (a specific, ac
 
 Respond ONLY with valid JSON, no markdown.`;
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "You are a cybersecurity executive briefing writer. Always respond with valid JSON only." },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.7,
-        max_tokens: 1500,
-      });
-
-      const raw = completion.choices[0]?.message?.content?.trim() || "{}";
+      const summCacheKey = aiCacheKey("exec-summary", JSON.stringify(body.stats || {}).substring(0, 200));
+      const summCached = getCached(summCacheKey);
+      let raw: string;
+      if (summCached) {
+        raw = summCached;
+      } else {
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: "Cybersecurity executive briefing writer. JSON only." },
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.7,
+          max_tokens: 1200,
+        });
+        raw = completion.choices[0]?.message?.content?.trim() || "{}";
+        setCache(summCacheKey, raw);
+      }
       let parsed: any;
       try {
         const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/i, "");
