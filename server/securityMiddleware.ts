@@ -70,28 +70,73 @@ function addSecurityEvent(type: string, ip: string, path: string) {
 }
 
 const ipFailureTracker = new Map<string, { count: number; lastAttempt: number }>();
-const IP_BLOCK_THRESHOLD = 20;
+const IP_BLOCK_THRESHOLD = 50;
 const IP_BLOCK_WINDOW = 15 * 60 * 1000;
-const blockedIps = new Set<string>();
+const IP_BLOCK_DURATION = 30 * 60 * 1000;
+const blockedIps = new Map<string, number>();
+
+const EXEMPT_ROUTES = [
+  "/api/login",
+  "/api/register",
+  "/api/user",
+  "/api/logout",
+  "/api/billing",
+  "/api/plans",
+  "/api/agent",
+  "/api/ai",
+  "/api/threat-intel",
+  "/api/alerts",
+  "/api/forensics",
+  "/api/honeypot",
+  "/api/trojan",
+  "/api/payload",
+  "/api/network-traffic",
+  "/api/compliance",
+  "/api/pentest",
+  "/api/mobile-pentest",
+  "/api/vulnerability",
+  "/api/scan",
+  "/api/hash",
+  "/api/ssl",
+  "/api/email-security",
+  "/api/cve",
+  "/api/dark-web",
+  "/api/conversations",
+  "/api/conversations/",
+];
+
+function isExemptRoute(path: string): boolean {
+  return EXEMPT_ROUTES.some(r => path.startsWith(r));
+}
 
 export function intrusionDetectionMiddleware(req: Request, res: Response, next: NextFunction) {
   const ip = req.ip || req.socket.remoteAddress || "unknown";
+  const fullUrl = req.originalUrl || req.url;
 
-  if (blockedIps.has(ip)) {
-    return res.status(403).json({ error: "Access denied" });
+  const blockedAt = blockedIps.get(ip);
+  if (blockedAt) {
+    if (Date.now() - blockedAt > IP_BLOCK_DURATION) {
+      blockedIps.delete(ip);
+      ipFailureTracker.delete(ip);
+    } else {
+      return res.status(403).json({ error: "Access denied" });
+    }
+  }
+
+  if (isExemptRoute(fullUrl.replace(/\?.*$/, ""))) {
+    return next();
+  }
+
+  if ((req as any).user || (req as any).session?.passport?.user) {
+    return next();
   }
 
   let threatType: string | null = null;
 
-  const fullUrl = req.originalUrl || req.url;
   try {
     threatType = classifyThreat(decodeURIComponent(fullUrl), "url");
   } catch {
     threatType = classifyThreat(fullUrl, "url");
-  }
-
-  if (!threatType && req.body) {
-    threatType = scanValue(req.body);
   }
 
   if (!threatType) {
@@ -122,8 +167,8 @@ export function intrusionDetectionMiddleware(req: Request, res: Response, next: 
     ipFailureTracker.set(ip, tracker);
 
     if (tracker.count >= IP_BLOCK_THRESHOLD) {
-      blockedIps.add(ip);
-      console.log(`[SECURITY] Auto-blocked IP ${ip} after ${tracker.count} malicious requests`);
+      blockedIps.set(ip, now);
+      console.log(`[SECURITY] Auto-blocked IP ${ip} for ${IP_BLOCK_DURATION / 60000}min after ${tracker.count} malicious requests`);
     }
 
     console.log(`[SECURITY] ${attackName} from ${ip}: ${fullUrl}`);
@@ -139,6 +184,13 @@ export function trackRateLimitViolation(ip: string) {
 }
 
 export function getSecurityStats() {
+  const now = Date.now();
+  for (const [ip, blockedAt] of blockedIps) {
+    if (now - blockedAt > IP_BLOCK_DURATION) {
+      blockedIps.delete(ip);
+      ipFailureTracker.delete(ip);
+    }
+  }
   return {
     blockedAttacks: securityStats.blockedAttacks,
     rateLimitedIps: securityStats.rateLimitedIps.size,
