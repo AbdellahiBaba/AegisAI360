@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
-import { requireAuth } from "./auth";
+import { requireAuth, requirePlanFeature } from "./auth";
 import { storage } from "./storage";
 import {
   streamAgentChat,
@@ -26,12 +26,14 @@ async function verifyConversationOwnership(conversationId: number, orgId: number
   return conversations.some((c) => c.id === conversationId);
 }
 
+const agentPlanGate = requirePlanFeature("allowAegisAgent");
+
 export function registerAegisAgentRoutes(app: Express): void {
-  app.get("/api/aegis-agent/capabilities", requireAuth, (_req: Request, res: Response) => {
+  app.get("/api/aegis-agent/capabilities", requireAuth, agentPlanGate, (_req: Request, res: Response) => {
     res.json(AGENT_CAPABILITIES);
   });
 
-  app.get("/api/aegis-agent/conversations", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/aegis-agent/conversations", requireAuth, agentPlanGate, async (req: Request, res: Response) => {
     try {
       const conversations = await storage.getAgentConversations(getOrgId(req), getUserId(req));
       res.json(conversations);
@@ -40,7 +42,7 @@ export function registerAegisAgentRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/aegis-agent/conversations/:id", requireAuth, async (req: Request, res: Response) => {
+  app.delete("/api/aegis-agent/conversations/:id", requireAuth, agentPlanGate, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const orgId = getOrgId(req);
@@ -54,7 +56,7 @@ export function registerAegisAgentRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/aegis-agent/conversations/:id/messages", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/aegis-agent/conversations/:id/messages", requireAuth, agentPlanGate, async (req: Request, res: Response) => {
     try {
       const conversationId = parseInt(req.params.id);
       const orgId = getOrgId(req);
@@ -68,7 +70,7 @@ export function registerAegisAgentRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/aegis-agent/chat", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/aegis-agent/chat", requireAuth, agentPlanGate, async (req: Request, res: Response) => {
     try {
       const orgId = getOrgId(req);
       const userId = getUserId(req);
@@ -139,7 +141,7 @@ export function registerAegisAgentRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/aegis-agent/generate-code", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/aegis-agent/generate-code", requireAuth, agentPlanGate, async (req: Request, res: Response) => {
     try {
       const { task, language } = z.object({
         task: z.string().min(1).max(5000),
@@ -156,7 +158,7 @@ export function registerAegisAgentRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/aegis-agent/package-download", requireAuth, (req: Request, res: Response) => {
+  app.post("/api/aegis-agent/package-download", requireAuth, agentPlanGate, (req: Request, res: Response) => {
     try {
       const { code, filename } = z.object({
         code: z.string().min(1).max(1000000),

@@ -434,6 +434,7 @@ export const plans = pgTable("plans", {
   allowTerminalAccess: boolean("allow_terminal_access").notNull().default(false),
   allowThreatIntel: boolean("allow_threat_intel").notNull().default(false),
   allowAdvancedAnalytics: boolean("allow_advanced_analytics").notNull().default(false),
+  allowAegisAgent: boolean("allow_aegis_agent").notNull().default(false),
 });
 
 export const insertPlanSchema = createInsertSchema(plans).omit({ id: true });

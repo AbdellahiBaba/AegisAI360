@@ -10,7 +10,8 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { NotificationBell } from "@/components/notification-bell";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useTranslation } from "react-i18next";
-import { Loader2 } from "lucide-react";
+import { Loader2, Lock } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Alerts from "@/pages/alerts";
@@ -65,6 +66,7 @@ import EmailAnalyzerPage from "@/pages/email-analyzer";
 import CveDatabasePage from "@/pages/cve-database";
 import PasswordAuditorPage from "@/pages/password-auditor";
 import { CommandPalette } from "@/components/command-palette";
+import { usePlan } from "@/hooks/use-plan";
 import ScheduledScansPage from "@/pages/scheduled-scans";
 import ThreatSimulationPage from "@/pages/threat-simulation";
 import RemoteControlPage from "@/pages/remote-control";
@@ -76,6 +78,50 @@ import ThreatHuntingPage from "@/pages/threat-hunting";
 import AiAgent from "@/pages/ai-agent";
 import { PwaInstallBanner } from "@/components/pwa-install-banner";
 
+function PlanGate({ feature, children }: { feature: string; children: React.ReactNode }) {
+  const { hasFeature, isLoading } = usePlan();
+  const [, navigate] = useLocation();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!hasFeature(feature)) {
+    return (
+      <div className="flex items-center justify-center h-full p-8" data-testid="plan-gate-upgrade">
+        <div className="max-w-md text-center space-y-4">
+          <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+            <Lock className="w-6 h-6 text-primary" />
+          </div>
+          <h2 className="text-lg font-semibold">Feature Not Available</h2>
+          <p className="text-sm text-muted-foreground">
+            This feature requires a higher plan. Upgrade your subscription to access it.
+          </p>
+          <Button variant="default" size="sm" onClick={() => navigate("/billing")} data-testid="button-upgrade-plan">
+            Upgrade Plan
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+function gated(feature: string, Component: React.ComponentType) {
+  return function GatedRoute() {
+    return (
+      <PlanGate feature={feature}>
+        <Component />
+      </PlanGate>
+    );
+  };
+}
+
 function AppRouter() {
   return (
     <Switch>
@@ -83,15 +129,15 @@ function AppRouter() {
       <Route path="/protection-center" component={ProtectionCenter} />
       <Route path="/alerts" component={Alerts} />
       <Route path="/incidents" component={Incidents} />
-      <Route path="/threat-intel" component={ThreatIntel} />
-      <Route path="/ai-analysis" component={AiAnalysis} />
+      <Route path="/threat-intel" component={gated("allowThreatIntel", ThreatIntel)} />
+      <Route path="/ai-analysis" component={gated("allowThreatIntel", AiAnalysis)} />
       <Route path="/policies" component={Policies} />
-      <Route path="/network-map" component={NetworkMap} />
-      <Route path="/attack-map" component={AttackMap} />
-      <Route path="/forensics" component={Forensics} />
-      <Route path="/honeypot" component={Honeypot} />
+      <Route path="/network-map" component={gated("allowThreatIntel", NetworkMap)} />
+      <Route path="/attack-map" component={gated("allowThreatIntel", AttackMap)} />
+      <Route path="/forensics" component={gated("allowThreatIntel", Forensics)} />
+      <Route path="/honeypot" component={gated("allowThreatIntel", Honeypot)} />
       <Route path="/quarantine" component={Quarantine} />
-      <Route path="/playbooks" component={Playbooks} />
+      <Route path="/playbooks" component={gated("allowThreatIntel", Playbooks)} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/billing" component={Billing} />
       <Route path="/billing/success" component={BillingSuccess} />
@@ -101,31 +147,31 @@ function AppRouter() {
       <Route path="/scanner" component={ScannerPage} />
       <Route path="/hash-tools" component={HashToolsPage} />
       <Route path="/support" component={SupportPage} />
-      <Route path="/network-monitor" component={NetworkMonitorPage} />
+      <Route path="/network-monitor" component={gated("allowThreatIntel", NetworkMonitorPage)} />
       <Route path="/super-admin" component={SuperAdmin} />
       <Route path="/endpoints" component={Endpoints} />
       <Route path="/download-agent" component={DownloadAgent} />
       <Route path="/endpoints/:agentId/terminal" component={AgentTerminal} />
       <Route path="/docs/agent" component={DocsAgent} />
-      <Route path="/traffic-analysis" component={TrafficAnalysis} />
-      <Route path="/network-security" component={NetworkSecurityPage} />
-      <Route path="/trojan-analyzer" component={TrojanAnalyzerPage} />
-      <Route path="/mobile-pentest" component={MobilePentestPage} />
-      <Route path="/payload-generator" component={PayloadGeneratorPage} />
-      <Route path="/dark-web-monitor" component={DarkWebMonitor} />
-      <Route path="/compliance" component={CompliancePage} />
+      <Route path="/traffic-analysis" component={gated("allowThreatIntel", TrafficAnalysis)} />
+      <Route path="/network-security" component={gated("allowThreatIntel", NetworkSecurityPage)} />
+      <Route path="/trojan-analyzer" component={gated("allowThreatIntel", TrojanAnalyzerPage)} />
+      <Route path="/mobile-pentest" component={gated("allowThreatIntel", MobilePentestPage)} />
+      <Route path="/payload-generator" component={gated("allowThreatIntel", PayloadGeneratorPage)} />
+      <Route path="/dark-web-monitor" component={gated("allowThreatIntel", DarkWebMonitor)} />
+      <Route path="/compliance" component={gated("allowThreatIntel", CompliancePage)} />
       <Route path="/ssl-inspector" component={SslInspectorPage} />
       <Route path="/email-analyzer" component={EmailAnalyzerPage} />
       <Route path="/cve-database" component={CveDatabasePage} />
       <Route path="/password-auditor" component={PasswordAuditorPage} />
-      <Route path="/scheduled-scans" component={ScheduledScansPage} />
-      <Route path="/threat-simulation" component={ThreatSimulationPage} />
-      <Route path="/remote-control" component={RemoteControlPage} />
+      <Route path="/scheduled-scans" component={gated("allowThreatIntel", ScheduledScansPage)} />
+      <Route path="/threat-simulation" component={gated("allowThreatIntel", ThreatSimulationPage)} />
+      <Route path="/remote-control" component={gated("allowThreatIntel", RemoteControlPage)} />
       <Route path="/link-scanner" component={LinkScannerPage} />
-      <Route path="/website-recovery" component={WebsiteRecoveryPage} />
-      <Route path="/threat-hunting" component={ThreatHuntingPage} />
-      <Route path="/vulnerability-tracking" component={VulnerabilityTracking} />
-      <Route path="/ai-agent" component={AiAgent} />
+      <Route path="/website-recovery" component={gated("allowThreatIntel", WebsiteRecoveryPage)} />
+      <Route path="/threat-hunting" component={gated("allowThreatIntel", ThreatHuntingPage)} />
+      <Route path="/vulnerability-tracking" component={gated("allowThreatIntel", VulnerabilityTracking)} />
+      <Route path="/ai-agent" component={gated("allowAegisAgent", AiAgent)} />
       <Route component={NotFound} />
     </Switch>
   );

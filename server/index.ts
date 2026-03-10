@@ -246,6 +246,7 @@ app.use((req, res, next) => {
         allowTerminalAccess: false,
         allowThreatIntel: false,
         allowAdvancedAnalytics: false,
+        allowAegisAgent: false,
       });
       await storageInstance.createPlan({
         name: "professional",
@@ -261,6 +262,7 @@ app.use((req, res, next) => {
         allowTerminalAccess: true,
         allowThreatIntel: true,
         allowAdvancedAnalytics: false,
+        allowAegisAgent: false,
       });
       await storageInstance.createPlan({
         name: "enterprise",
@@ -276,6 +278,7 @@ app.use((req, res, next) => {
         allowTerminalAccess: true,
         allowThreatIntel: true,
         allowAdvancedAnalytics: true,
+        allowAegisAgent: true,
       });
       console.log("Plans seeded (starter, professional, enterprise)");
     }

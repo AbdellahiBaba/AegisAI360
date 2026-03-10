@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { usePlan } from "@/hooks/use-plan";
 import {
   ShieldAlert, AlertTriangle, Bug, Activity, ArrowUpRight, ArrowDownRight,
   Clock, Monitor, Lock, Radio, ShieldOff, Flame, Crosshair, Zap, CreditCard,
@@ -662,6 +663,7 @@ export default function Dashboard() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
+  const { hasFeature } = usePlan();
   const dashLayout = user?.dashboardLayout as DashboardLayout | null | undefined;
   const show = (id: WidgetId) => isWidgetVisible(dashLayout, id);
 
@@ -864,19 +866,34 @@ export default function Dashboard() {
         </>
       )}
 
-      {show("quick_actions") && <QuickActions />}
+      {show("quick_actions") && hasFeature("allowNetworkIsolation") && <QuickActions />}
 
-      {(show("event_trend") || show("severity_breakdown")) && (
+      {hasFeature("allowThreatIntel") ? (
         <>
-          <SectionHeading icon={BarChart3} title={t("dashboard.analytics", "Analytics")} subtitle={t("dashboard.analyticsSubtitle", "Trends & severity distribution")} />
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
-            {show("event_trend") && <EventTrendChart data={trendData || []} />}
-            {show("severity_breakdown") && <SeverityBreakdown data={severityData} />}
-          </div>
-        </>
-      )}
+          {(show("event_trend") || show("severity_breakdown")) && (
+            <>
+              <SectionHeading icon={BarChart3} title={t("dashboard.analytics", "Analytics")} subtitle={t("dashboard.analyticsSubtitle", "Trends & severity distribution")} />
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+                {show("event_trend") && <EventTrendChart data={trendData || []} />}
+                {show("severity_breakdown") && <SeverityBreakdown data={severityData} />}
+              </div>
+            </>
+          )}
 
-      {show("threat_map") && <ThreatMap />}
+          {show("threat_map") && <ThreatMap />}
+        </>
+      ) : (
+        <Card className="border-dashed border-primary/30 bg-primary/5" data-testid="card-upgrade-analytics">
+          <CardContent className="flex flex-col items-center justify-center py-8 gap-3">
+            <BarChart3 className="w-8 h-8 text-primary/50" />
+            <p className="text-sm font-medium text-muted-foreground text-center">Analytics, Threat Map, and Advanced Widgets are available on Professional and Enterprise plans</p>
+            <Button variant="outline" size="sm" onClick={() => navigate("/billing")} data-testid="button-upgrade-analytics">
+              <CreditCard className="w-4 h-4 mr-1" />
+              Upgrade Plan
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {(show("recent_alerts") || show("activity_feed")) && (
         <>
@@ -888,7 +905,7 @@ export default function Dashboard() {
         </>
       )}
 
-      {show("response_actions") && (
+      {show("response_actions") && hasFeature("allowThreatIntel") && (
         <>
           <SectionHeading icon={Zap} title={t("dashboard.response", "Response")} subtitle={t("dashboard.responseSubtitle", "Automated response actions")} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">

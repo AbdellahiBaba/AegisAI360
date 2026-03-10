@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { usePlan } from "@/hooks/use-plan";
 import { useTheme } from "@/components/theme-provider";
 import { useTranslation } from "react-i18next";
 import {
@@ -26,11 +27,14 @@ interface NavItem {
   testId: string;
   url: string;
   icon: React.ElementType;
+  requiredFeature?: string;
 }
 
 function NavGroup({ label, items, location, defaultOpen = true }: { label: string; items: NavItem[]; location: string; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   const hasActiveItem = items.some(item => location === item.url);
+
+  if (items.length === 0) return null;
 
   return (
     <Collapsible open={open || hasActiveItem} onOpenChange={setOpen}>
@@ -71,66 +75,67 @@ export function AppSidebar() {
   const { user, logoutMutation } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { t } = useTranslation();
+  const { hasFeature } = usePlan();
 
   const isSuperAdmin = user?.isSuperAdmin === true;
 
-  const commandItems: NavItem[] = [
+  const allCommandItems: NavItem[] = [
     { title: t("sidebar.protectionCenter"), testId: "protection-center", url: "/protection-center", icon: Shield },
     { title: t("sidebar.dashboard"), testId: "dashboard", url: "/", icon: LayoutDashboard },
-    { title: t("sidebar.aiAnalysis"), testId: "ai-analysis", url: "/ai-analysis", icon: Brain },
-    { title: t("sidebar.aiAgent"), testId: "ai-agent", url: "/ai-agent", icon: Zap },
+    { title: t("sidebar.aiAnalysis"), testId: "ai-analysis", url: "/ai-analysis", icon: Brain, requiredFeature: "allowThreatIntel" },
+    { title: t("sidebar.aiAgent"), testId: "ai-agent", url: "/ai-agent", icon: Zap, requiredFeature: "allowAegisAgent" },
   ];
 
-  const scanItems: NavItem[] = [
+  const allScanItems: NavItem[] = [
     { title: t("sidebar.scanner"), testId: "scanner", url: "/scanner", icon: Radar },
     { title: t("sidebar.sslInspector"), testId: "ssl-inspector", url: "/ssl-inspector", icon: ShieldBan },
     { title: t("sidebar.passwordAuditor"), testId: "password-auditor", url: "/password-auditor", icon: KeyRound },
-    { title: t("sidebar.scheduledScans"), testId: "scheduled-scans", url: "/scheduled-scans", icon: CalendarClock },
+    { title: t("sidebar.scheduledScans"), testId: "scheduled-scans", url: "/scheduled-scans", icon: CalendarClock, requiredFeature: "allowThreatIntel" },
     { title: t("sidebar.cveDatabase"), testId: "cve-database", url: "/cve-database", icon: FileSearch },
     { title: t("sidebar.emailAnalyzer"), testId: "email-analyzer", url: "/email-analyzer", icon: Mail },
     { title: t("sidebar.linkScanner"), testId: "link-scanner", url: "/link-scanner", icon: Globe },
-    { title: "Vuln Tracking", testId: "vulnerability-tracking", url: "/vulnerability-tracking", icon: Bug },
+    { title: "Vuln Tracking", testId: "vulnerability-tracking", url: "/vulnerability-tracking", icon: Bug, requiredFeature: "allowThreatIntel" },
   ];
 
-  const monitorItems: NavItem[] = [
+  const allMonitorItems: NavItem[] = [
     { title: t("sidebar.securityEvents"), testId: "security-events", url: "/alerts", icon: ShieldAlert },
-    { title: t("sidebar.attackHeatmap"), testId: "att&ck-heatmap", url: "/attack-map", icon: Target },
-    { title: t("sidebar.networkMonitor"), testId: "network-monitor", url: "/network-monitor", icon: Server },
-    { title: t("sidebar.honeypot"), testId: "honeypot", url: "/honeypot", icon: Radio },
+    { title: t("sidebar.attackHeatmap"), testId: "att&ck-heatmap", url: "/attack-map", icon: Target, requiredFeature: "allowThreatIntel" },
+    { title: t("sidebar.networkMonitor"), testId: "network-monitor", url: "/network-monitor", icon: Server, requiredFeature: "allowThreatIntel" },
+    { title: t("sidebar.honeypot"), testId: "honeypot", url: "/honeypot", icon: Radio, requiredFeature: "allowThreatIntel" },
     { title: t("sidebar.alertRules"), testId: "alert-rules", url: "/alert-rules", icon: Bell },
-    { title: t("sidebar.trafficAnalysis"), testId: "traffic-analysis", url: "/traffic-analysis", icon: Activity },
+    { title: t("sidebar.trafficAnalysis"), testId: "traffic-analysis", url: "/traffic-analysis", icon: Activity, requiredFeature: "allowThreatIntel" },
   ];
 
-  const offensiveItems: NavItem[] = [
-    { title: t("sidebar.payloadGenerator"), testId: "payload-generator", url: "/payload-generator", icon: Terminal },
-    { title: t("sidebar.trojanAnalyzer"), testId: "trojan-analyzer", url: "/trojan-analyzer", icon: Bug },
-    { title: t("sidebar.mobilePentest"), testId: "mobile-pentest", url: "/mobile-pentest", icon: Smartphone },
-    { title: t("sidebar.networkSecurity"), testId: "network-security", url: "/network-security", icon: ScanSearch },
-    { title: t("sidebar.threatSimulation"), testId: "threat-simulation", url: "/threat-simulation", icon: Zap },
-    { title: t("sidebar.remoteControl"), testId: "remote-control", url: "/remote-control", icon: Gamepad2 },
+  const allOffensiveItems: NavItem[] = [
+    { title: t("sidebar.payloadGenerator"), testId: "payload-generator", url: "/payload-generator", icon: Terminal, requiredFeature: "allowThreatIntel" },
+    { title: t("sidebar.trojanAnalyzer"), testId: "trojan-analyzer", url: "/trojan-analyzer", icon: Bug, requiredFeature: "allowThreatIntel" },
+    { title: t("sidebar.mobilePentest"), testId: "mobile-pentest", url: "/mobile-pentest", icon: Smartphone, requiredFeature: "allowThreatIntel" },
+    { title: t("sidebar.networkSecurity"), testId: "network-security", url: "/network-security", icon: ScanSearch, requiredFeature: "allowThreatIntel" },
+    { title: t("sidebar.threatSimulation"), testId: "threat-simulation", url: "/threat-simulation", icon: Zap, requiredFeature: "allowThreatIntel" },
+    { title: t("sidebar.remoteControl"), testId: "remote-control", url: "/remote-control", icon: Gamepad2, requiredFeature: "allowThreatIntel" },
   ];
 
-  const respondItems: NavItem[] = [
+  const allRespondItems: NavItem[] = [
     { title: t("sidebar.incidents"), testId: "incidents", url: "/incidents", icon: Bug },
     { title: t("sidebar.quarantine"), testId: "quarantine", url: "/quarantine", icon: Lock },
-    { title: t("sidebar.playbooks"), testId: "playbooks", url: "/playbooks", icon: BookOpen },
+    { title: t("sidebar.playbooks"), testId: "playbooks", url: "/playbooks", icon: BookOpen, requiredFeature: "allowThreatIntel" },
     { title: t("sidebar.firewall"), testId: "firewall", url: "/firewall", icon: Flame },
     { title: t("sidebar.policies"), testId: "policies", url: "/policies", icon: FileText },
-    { title: t("sidebar.compliance"), testId: "compliance", url: "/compliance", icon: ShieldCheck },
-    { title: "Website Recovery", testId: "website-recovery", url: "/website-recovery", icon: RotateCcw },
+    { title: t("sidebar.compliance"), testId: "compliance", url: "/compliance", icon: ShieldCheck, requiredFeature: "allowThreatIntel" },
+    { title: "Website Recovery", testId: "website-recovery", url: "/website-recovery", icon: RotateCcw, requiredFeature: "allowThreatIntel" },
   ];
 
-  const endpointItems: NavItem[] = [
+  const allEndpointItems: NavItem[] = [
     { title: t("sidebar.endpoints"), testId: "endpoints", url: "/endpoints", icon: Monitor },
     { title: t("sidebar.deployAgent"), testId: "download-agent", url: "/download-agent", icon: Download },
   ];
 
-  const intelItems: NavItem[] = [
-    { title: t("sidebar.threatIntel"), testId: "threat-intel", url: "/threat-intel", icon: Database },
-    { title: "Threat Hunting", testId: "threat-hunting", url: "/threat-hunting", icon: Crosshair },
-    { title: t("sidebar.networkMap"), testId: "network-map", url: "/network-map", icon: Network },
-    { title: t("sidebar.forensicTimeline"), testId: "forensic-timeline", url: "/forensics", icon: Clock },
-    { title: t("sidebar.darkWebMonitor"), testId: "dark-web-monitor", url: "/dark-web-monitor", icon: Eye },
+  const allIntelItems: NavItem[] = [
+    { title: t("sidebar.threatIntel"), testId: "threat-intel", url: "/threat-intel", icon: Database, requiredFeature: "allowThreatIntel" },
+    { title: "Threat Hunting", testId: "threat-hunting", url: "/threat-hunting", icon: Crosshair, requiredFeature: "allowThreatIntel" },
+    { title: t("sidebar.networkMap"), testId: "network-map", url: "/network-map", icon: Network, requiredFeature: "allowThreatIntel" },
+    { title: t("sidebar.forensicTimeline"), testId: "forensic-timeline", url: "/forensics", icon: Clock, requiredFeature: "allowThreatIntel" },
+    { title: t("sidebar.darkWebMonitor"), testId: "dark-web-monitor", url: "/dark-web-monitor", icon: Eye, requiredFeature: "allowThreatIntel" },
     { title: t("sidebar.hashTools"), testId: "hash-tools", url: "/hash-tools", icon: Key },
   ];
 
@@ -146,6 +151,17 @@ export function AppSidebar() {
     ...(isSuperAdmin ? [{ title: t("sidebar.superAdmin"), testId: "super-admin", url: "/super-admin", icon: Shield }] : []),
   ];
 
+  const filterItems = (items: NavItem[]) =>
+    items.filter((item) => !item.requiredFeature || hasFeature(item.requiredFeature));
+
+  const commandItems = filterItems(allCommandItems);
+  const scanItems = filterItems(allScanItems);
+  const monitorItems = filterItems(allMonitorItems);
+  const offensiveItems = filterItems(allOffensiveItems);
+  const respondItems = filterItems(allRespondItems);
+  const endpointItems = filterItems(allEndpointItems);
+  const intelItems = filterItems(allIntelItems);
+
   return (
     <Sidebar>
       <SidebarHeader className="p-3 border-b border-border/50">
@@ -160,10 +176,10 @@ export function AppSidebar() {
         <NavGroup label={t("sidebar.command")} items={commandItems} location={location} />
         <NavGroup label={t("sidebar.scanAssess")} items={scanItems} location={location} />
         <NavGroup label={t("sidebar.monitor")} items={monitorItems} location={location} />
-        <NavGroup label={t("sidebar.offensiveTools")} items={offensiveItems} location={location} defaultOpen={false} />
+        {offensiveItems.length > 0 && <NavGroup label={t("sidebar.offensiveTools")} items={offensiveItems} location={location} defaultOpen={false} />}
         <NavGroup label={t("sidebar.respond")} items={respondItems} location={location} />
         <NavGroup label={t("sidebar.endpointsGroup")} items={endpointItems} location={location} />
-        <NavGroup label={t("sidebar.intel")} items={intelItems} location={location} />
+        {intelItems.length > 0 && <NavGroup label={t("sidebar.intel")} items={intelItems} location={location} />}
         <NavGroup label={t("sidebar.admin")} items={fullAdminItems} location={location} defaultOpen={false} />
       </SidebarContent>
 
