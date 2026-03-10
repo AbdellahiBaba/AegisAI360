@@ -778,3 +778,33 @@ export const vulnerabilities = pgTable("vulnerabilities", {
 export const insertVulnerabilitySchema = createInsertSchema(vulnerabilities).omit({ id: true, createdAt: true, discoveredAt: true, remediatedAt: true });
 export type InsertVulnerability = z.infer<typeof insertVulnerabilitySchema>;
 export type Vulnerability = typeof vulnerabilities.$inferSelect;
+
+export const agentConversations = pgTable("agent_conversations", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  userId: text("user_id").notNull(),
+  title: text("title").notNull(),
+  mode: text("mode").notNull().default("chat"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_agent_conv_org_user").on(table.organizationId, table.userId),
+]);
+
+export const insertAgentConversationSchema = createInsertSchema(agentConversations).omit({ id: true, createdAt: true });
+export type InsertAgentConversation = z.infer<typeof insertAgentConversationSchema>;
+export type AgentConversation = typeof agentConversations.$inferSelect;
+
+export const agentMessages = pgTable("agent_messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull().references(() => agentConversations.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  codeBlocks: jsonb("code_blocks"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_agent_msg_conv").on(table.conversationId),
+]);
+
+export const insertAgentMessageSchema = createInsertSchema(agentMessages).omit({ id: true, createdAt: true });
+export type InsertAgentMessage = z.infer<typeof insertAgentMessageSchema>;
+export type AgentMessage = typeof agentMessages.$inferSelect;

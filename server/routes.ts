@@ -42,6 +42,7 @@ import { searchCves, getCveDetail, getRecentCves } from "./cveDatabase";
 import { inspectSSL } from "./sslInspector";
 import { scanLink } from "./services/linkScanner";
 import { startRecoveryOperation, getOperation, getAllOperations } from "./services/websiteRecovery";
+import { registerAegisAgentRoutes } from "./aegisAgentRoutes";
 import { db } from "./db";
 import * as schema from "@shared/schema";
 import { and, eq, desc, sql, gte, inArray } from "drizzle-orm";
@@ -230,6 +231,8 @@ export async function registerRoutes(
   app.use("/api/admin", createSuperAdminRouter());
   app.use("/api/threat-feeds", createThreatFeedsRouter());
   app.use("/api/agent", createAgentRouter());
+
+  registerAegisAgentRoutes(app);
 
   app.use("/api/dashboard", requireAuth);
   app.use("/api/security-events", requireAuth);

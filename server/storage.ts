@@ -8,6 +8,8 @@ import {
   notificationChannels, scheduledScans, sessionsMetadata, threatIntelKeys,
   incidentNotes,
   threatHuntingQueries,
+  agentConversations,
+  agentMessages,
   type User, type InsertUser,
   type Organization, type InsertOrganization,
   type SecurityEvent, type InsertSecurityEvent,
@@ -57,6 +59,8 @@ import {
   type LoginHistory, type InsertLoginHistory,
   type IncidentNote, type InsertIncidentNote,
   type ThreatHuntingQuery, type InsertThreatHuntingQuery,
+  type AgentConversation, type InsertAgentConversation,
+  type AgentMessage, type InsertAgentMessage,
   vulnerabilities,
   type Vulnerability, type InsertVulnerability,
 } from "@shared/schema";
@@ -306,6 +310,12 @@ export interface IStorage {
   createVulnerability(vuln: InsertVulnerability): Promise<Vulnerability>;
   updateVulnerability(id: number, orgId: number, data: Partial<Vulnerability>): Promise<Vulnerability | undefined>;
   getVulnerabilityStats(orgId: number): Promise<{ total: number; criticalOpen: number; pastSla: number; remediated: number; open: number; inProgress: number }>;
+
+  getAgentConversations(orgId: number, userId: string): Promise<AgentConversation[]>;
+  createAgentConversation(conv: InsertAgentConversation): Promise<AgentConversation>;
+  deleteAgentConversation(id: number, orgId: number): Promise<boolean>;
+  getAgentMessages(conversationId: number): Promise<AgentMessage[]>;
+  createAgentMessage(msg: InsertAgentMessage): Promise<AgentMessage>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1411,6 +1421,33 @@ export class DatabaseStorage implements IStorage {
       open: all.filter(v => v.status === "open").length,
       inProgress: all.filter(v => v.status === "in_progress").length,
     };
+  }
+
+  async getAgentConversations(orgId: number, userId: string): Promise<AgentConversation[]> {
+    return db.select().from(agentConversations)
+      .where(and(eq(agentConversations.organizationId, orgId), eq(agentConversations.userId, userId)))
+      .orderBy(desc(agentConversations.createdAt));
+  }
+
+  async createAgentConversation(conv: InsertAgentConversation): Promise<AgentConversation> {
+    const [created] = await db.insert(agentConversations).values(conv).returning();
+    return created;
+  }
+
+  async deleteAgentConversation(id: number, orgId: number): Promise<boolean> {
+    const result = await db.delete(agentConversations).where(and(eq(agentConversations.id, id), eq(agentConversations.organizationId, orgId)));
+    return (result as any).rowCount > 0;
+  }
+
+  async getAgentMessages(conversationId: number): Promise<AgentMessage[]> {
+    return db.select().from(agentMessages)
+      .where(eq(agentMessages.conversationId, conversationId))
+      .orderBy(agentMessages.createdAt);
+  }
+
+  async createAgentMessage(msg: InsertAgentMessage): Promise<AgentMessage> {
+    const [created] = await db.insert(agentMessages).values(msg).returning();
+    return created;
   }
 }
 

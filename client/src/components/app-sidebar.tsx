@@ -78,6 +78,7 @@ export function AppSidebar() {
     { title: t("sidebar.protectionCenter"), testId: "protection-center", url: "/protection-center", icon: Shield },
     { title: t("sidebar.dashboard"), testId: "dashboard", url: "/", icon: LayoutDashboard },
     { title: t("sidebar.aiAnalysis"), testId: "ai-analysis", url: "/ai-analysis", icon: Brain },
+    { title: t("sidebar.aiAgent"), testId: "ai-agent", url: "/ai-agent", icon: Zap },
   ];
 
   const scanItems: NavItem[] = [

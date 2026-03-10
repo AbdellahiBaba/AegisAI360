@@ -122,7 +122,8 @@
     "endpoints": "Endpoints",
     "deployAgent": "Deploy Agent",
     "darkWebMonitor": "Dark Web Monitor",
-    "agentDocs": "Agent Docs"
+    "agentDocs": "Agent Docs",
+    "aiAgent": "AI Agent"
   },
   "protectionCenter": {
     "level_protected": "Protected",

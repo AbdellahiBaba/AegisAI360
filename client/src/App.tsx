@@ -73,6 +73,7 @@ import LinkScannerPage from "@/pages/link-scanner";
 import WebsiteRecoveryPage from "@/pages/website-recovery";
 import VulnerabilityTracking from "@/pages/vulnerability-tracking";
 import ThreatHuntingPage from "@/pages/threat-hunting";
+import AiAgent from "@/pages/ai-agent";
 import { PwaInstallBanner } from "@/components/pwa-install-banner";
 
 function AppRouter() {
@@ -124,6 +125,7 @@ function AppRouter() {
       <Route path="/website-recovery" component={WebsiteRecoveryPage} />
       <Route path="/threat-hunting" component={ThreatHuntingPage} />
       <Route path="/vulnerability-tracking" component={VulnerabilityTracking} />
+      <Route path="/ai-agent" component={AiAgent} />
       <Route component={NotFound} />
     </Switch>
   );
