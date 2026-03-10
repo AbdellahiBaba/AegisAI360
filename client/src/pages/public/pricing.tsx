@@ -12,22 +12,26 @@ const plans = [
     priceKey: "pricingStarterPrice",
     descKey: "pricingStarterDesc",
     features: [
-      { textKey: "pricing.s5users", included: true },
-      { textKey: "pricing.sEventMon", included: true },
-      { textKey: "pricing.sBasicAlerts", included: true },
-      { textKey: "pricing.sEmailNotif", included: true },
-      { textKey: "pricing.s7dayRet", included: true },
-      { textKey: "pricing.sVulnScan", included: true },
-      { textKey: "pricing.sHashTools", included: true },
-      { textKey: "pricing.sCommunity", included: true },
-      { textKey: "pricing.sAiThreat", included: false },
-      { textKey: "pricing.sAutoDefense", included: false },
-      { textKey: "pricing.sMitre", included: false },
-      { textKey: "pricing.sThreatIntel", included: false },
-      { textKey: "pricing.sEndpointAgent", included: false },
-      { textKey: "pricing.sDarkWeb", included: false },
-      { textKey: "pricing.sCompDash", included: false },
-      { textKey: "pricing.sThreatSim", included: false },
+      { text: "5 endpoint agents", included: true },
+      { text: "1,000 logs/day", included: true },
+      { text: "50 commands/day", included: true },
+      { text: "10 threat intel queries/day", included: true },
+      { text: "File scanning", included: true },
+      { text: "Agent downloads", included: true },
+      { text: "Security event monitoring", included: true },
+      { text: "Basic alert rules", included: true },
+      { text: "Email notifications", included: true },
+      { text: "7-day event retention", included: true },
+      { text: "Vulnerability scanner", included: true },
+      { text: "Hash tools & password analyzer", included: true },
+      { text: "Community support", included: true },
+      { text: "AI threat analysis", included: false },
+      { text: "Automated defense playbooks", included: false },
+      { text: "MITRE ATT&CK heatmap", included: false },
+      { text: "Threat intelligence feeds", included: false },
+      { text: "Dark web monitoring", included: false },
+      { text: "Compliance dashboard", included: false },
+      { text: "Threat simulation", included: false },
     ],
   },
   {
@@ -36,26 +40,33 @@ const plans = [
     descKey: "pricingProDesc",
     popular: true,
     features: [
-      { textKey: "pricing.p25users", included: true },
-      { textKey: "pricing.sEventMon", included: true },
-      { textKey: "pricing.pAdvAlerts", included: true },
-      { textKey: "pricing.pEmailWebhook", included: true },
-      { textKey: "pricing.p30dayRet", included: true },
-      { textKey: "pricing.pVulnOwasp", included: true },
-      { textKey: "pricing.sHashTools", included: true },
-      { textKey: "pricing.pPriority", included: true },
-      { textKey: "pricing.sAiThreat", included: true },
-      { textKey: "pricing.sAutoDefense", included: true },
-      { textKey: "pricing.sMitre", included: true },
-      { textKey: "pricing.sThreatIntel", included: true },
-      { textKey: "pricing.pEndpoint10", included: true },
-      { textKey: "pricing.pSslInsp", included: true },
-      { textKey: "pricing.pEmailAnalyzer", included: true },
-      { textKey: "pricing.pMobilePentest", included: true },
-      { textKey: "pricing.sDarkWeb", included: false },
-      { textKey: "pricing.sCompDash", included: false },
-      { textKey: "pricing.sThreatSim", included: false },
-      { textKey: "pricing.pTrojanIoc", included: false },
+      { text: "25 endpoint agents", included: true },
+      { text: "10,000 logs/day", included: true },
+      { text: "200 commands/day", included: true },
+      { text: "100 threat intel queries/day", included: true },
+      { text: "File scanning", included: true },
+      { text: "Agent downloads", included: true },
+      { text: "Threat intelligence APIs", included: true },
+      { text: "Network isolation", included: true },
+      { text: "Process management", included: true },
+      { text: "Remote terminal access", included: true },
+      { text: "Advanced alert rules", included: true },
+      { text: "Email & webhook notifications", included: true },
+      { text: "30-day event retention", included: true },
+      { text: "Vulnerability scanner + OWASP mapping", included: true },
+      { text: "Hash tools & password analyzer", included: true },
+      { text: "AI threat analysis", included: true },
+      { text: "Automated defense playbooks", included: true },
+      { text: "MITRE ATT&CK heatmap", included: true },
+      { text: "Threat intelligence feeds", included: true },
+      { text: "SSL/TLS inspector", included: true },
+      { text: "Email security analyzer", included: true },
+      { text: "Mobile penetration testing", included: true },
+      { text: "Priority support", included: true },
+      { text: "Dark web monitoring", included: false },
+      { text: "Compliance dashboard", included: false },
+      { text: "Threat simulation", included: false },
+      { text: "Trojan analyzer with IOC extraction", included: false },
     ],
   },
   {
@@ -63,54 +74,75 @@ const plans = [
     priceKey: "pricingEnterprisePrice",
     descKey: "pricingEnterpriseDesc",
     features: [
-      { textKey: "pricing.eUnlimitedUsers", included: true },
-      { textKey: "pricing.sEventMon", included: true },
-      { textKey: "pricing.eCustomAlerts", included: true },
-      { textKey: "pricing.eAllNotif", included: true },
-      { textKey: "pricing.e1yrRet", included: true },
-      { textKey: "pricing.eFullVuln", included: true },
-      { textKey: "pricing.sHashTools", included: true },
-      { textKey: "pricing.eDedicated", included: true },
-      { textKey: "pricing.eFullAi", included: true },
-      { textKey: "pricing.eCustomPlaybooks", included: true },
-      { textKey: "pricing.sMitre", included: true },
-      { textKey: "pricing.ePremiumIntel", included: true },
-      { textKey: "pricing.eUnlimitedAgents", included: true },
-      { textKey: "pricing.pSslInsp", included: true },
-      { textKey: "pricing.pEmailAnalyzer", included: true },
-      { textKey: "pricing.pMobilePentest", included: true },
-      { textKey: "pricing.sDarkWeb", included: true },
-      { textKey: "pricing.eCompDash5", included: true },
-      { textKey: "pricing.eThreatSimEngine", included: true },
-      { textKey: "pricing.eTrojanFull", included: true },
-      { textKey: "pricing.ePayloadGen", included: true },
-      { textKey: "pricing.eHoneypot", included: true },
-      { textKey: "pricing.eNetTraffic", included: true },
-      { textKey: "pricing.eCveAccess", included: true },
-      { textKey: "pricing.eOnPrem", included: true },
+      { text: "100 endpoint agents", included: true },
+      { text: "100,000 logs/day", included: true },
+      { text: "1,000 commands/day", included: true },
+      { text: "500 threat intel queries/day", included: true },
+      { text: "File scanning", included: true },
+      { text: "Agent downloads", included: true },
+      { text: "Threat intelligence APIs", included: true },
+      { text: "Network isolation", included: true },
+      { text: "Process management", included: true },
+      { text: "Remote terminal access", included: true },
+      { text: "Advanced analytics & AI", included: true },
+      { text: "AegisAI360 Agent", included: true },
+      { text: "Custom alert rules & workflows", included: true },
+      { text: "All notification channels", included: true },
+      { text: "1-year event retention", included: true },
+      { text: "Full vulnerability scanner suite", included: true },
+      { text: "Hash tools & password analyzer", included: true },
+      { text: "Full AI threat analysis", included: true },
+      { text: "Custom automated playbooks", included: true },
+      { text: "MITRE ATT&CK heatmap", included: true },
+      { text: "Premium threat intelligence", included: true },
+      { text: "SSL/TLS inspector", included: true },
+      { text: "Email security analyzer", included: true },
+      { text: "Mobile penetration testing", included: true },
+      { text: "Dark web monitoring", included: true },
+      { text: "Compliance dashboard (NIST, ISO, PCI, HIPAA, SOC 2)", included: true },
+      { text: "Threat simulation engine", included: true },
+      { text: "Trojan analyzer with IOC extraction & MITRE heatmap", included: true },
+      { text: "Payload generator", included: true },
+      { text: "Honeypot deployment", included: true },
+      { text: "Network traffic analysis", included: true },
+      { text: "CVE database access", included: true },
+      { text: "Dedicated support + SLA", included: true },
+      { text: "On-premise deployment option", included: true },
     ],
   },
 ];
 
 const featureComparison = [
-  { featureKey: "pricing.compUsers", starterKey: "pricing.val5", proKey: "pricing.val25", enterpriseKey: "pricing.valUnlimited" },
-  { featureKey: "pricing.compRetention", starterKey: "pricing.val7days", proKey: "pricing.val30days", enterpriseKey: "pricing.val1year" },
-  { featureKey: "pricing.compAgents", starterKey: "pricing.valNa", proKey: "pricing.val10", enterpriseKey: "pricing.valUnlimited" },
-  { featureKey: "pricing.compAi", starterKey: "pricing.valNa", proKey: "pricing.valIncluded", enterpriseKey: "pricing.valFull" },
-  { featureKey: "pricing.compAutoDefense", starterKey: "pricing.valNa", proKey: "pricing.valIncluded", enterpriseKey: "pricing.valCustom" },
-  { featureKey: "pricing.compMitre", starterKey: "pricing.valNa", proKey: "pricing.valIncluded", enterpriseKey: "pricing.valIncluded" },
-  { featureKey: "pricing.compIntel", starterKey: "pricing.valNa", proKey: "pricing.valBasic", enterpriseKey: "pricing.valPremium" },
-  { featureKey: "pricing.compVuln", starterKey: "pricing.valBasic", proKey: "pricing.valOwaspMapped", enterpriseKey: "pricing.valFullSuite" },
-  { featureKey: "pricing.compSsl", starterKey: "pricing.valNa", proKey: "pricing.valIncluded", enterpriseKey: "pricing.valIncluded" },
-  { featureKey: "pricing.compEmail", starterKey: "pricing.valNa", proKey: "pricing.valIncluded", enterpriseKey: "pricing.valIncluded" },
-  { featureKey: "pricing.compMobile", starterKey: "pricing.valNa", proKey: "pricing.valIncluded", enterpriseKey: "pricing.valIncluded" },
-  { featureKey: "pricing.compDarkWeb", starterKey: "pricing.valNa", proKey: "pricing.valNa", enterpriseKey: "pricing.valIncluded" },
-  { featureKey: "pricing.compCompliance", starterKey: "pricing.valNa", proKey: "pricing.valNa", enterpriseKey: "pricing.val5Frameworks" },
-  { featureKey: "pricing.compThreatSim", starterKey: "pricing.valNa", proKey: "pricing.valNa", enterpriseKey: "pricing.valIncluded" },
-  { featureKey: "pricing.compTrojan", starterKey: "pricing.valNa", proKey: "pricing.valNa", enterpriseKey: "pricing.valFull" },
-  { featureKey: "pricing.compHoneypot", starterKey: "pricing.valNa", proKey: "pricing.valNa", enterpriseKey: "pricing.valIncluded" },
-  { featureKey: "pricing.compPayload", starterKey: "pricing.valNa", proKey: "pricing.valNa", enterpriseKey: "pricing.valIncluded" },
-  { featureKey: "pricing.compSupport", starterKey: "pricing.valCommunity", proKey: "pricing.valPriority", enterpriseKey: "pricing.valDedicatedSla" },
+  { feature: "Endpoint agents", starter: "5", pro: "25", enterprise: "100" },
+  { feature: "Logs/day", starter: "1,000", pro: "10,000", enterprise: "100,000" },
+  { feature: "Commands/day", starter: "50", pro: "200", enterprise: "1,000" },
+  { feature: "Threat intel queries/day", starter: "10", pro: "100", enterprise: "500" },
+  { feature: "Event retention", starter: "7 days", pro: "30 days", enterprise: "1 year" },
+  { feature: "File scanning", starter: "Included", pro: "Included", enterprise: "Included" },
+  { feature: "Agent downloads", starter: "Included", pro: "Included", enterprise: "Included" },
+  { feature: "Vulnerability scanner", starter: "Basic", pro: "OWASP mapped", enterprise: "Full suite" },
+  { feature: "Hash tools & password analyzer", starter: "Included", pro: "Included", enterprise: "Included" },
+  { feature: "AI threat analysis", starter: "--", pro: "Included", enterprise: "Full" },
+  { feature: "Automated defense playbooks", starter: "--", pro: "Included", enterprise: "Custom" },
+  { feature: "MITRE ATT&CK heatmap", starter: "--", pro: "Included", enterprise: "Included" },
+  { feature: "Threat intelligence feeds", starter: "--", pro: "Basic", enterprise: "Premium" },
+  { feature: "Network isolation", starter: "--", pro: "Included", enterprise: "Included" },
+  { feature: "Process management", starter: "--", pro: "Included", enterprise: "Included" },
+  { feature: "Remote terminal access", starter: "--", pro: "Included", enterprise: "Included" },
+  { feature: "SSL/TLS inspector", starter: "--", pro: "Included", enterprise: "Included" },
+  { feature: "Email security analyzer", starter: "--", pro: "Included", enterprise: "Included" },
+  { feature: "Mobile penetration testing", starter: "--", pro: "Included", enterprise: "Included" },
+  { feature: "AegisAI360 Agent", starter: "--", pro: "--", enterprise: "Included" },
+  { feature: "Advanced analytics & AI", starter: "--", pro: "--", enterprise: "Included" },
+  { feature: "Dark web monitoring", starter: "--", pro: "--", enterprise: "Included" },
+  { feature: "Compliance dashboard", starter: "--", pro: "--", enterprise: "5 frameworks" },
+  { feature: "Threat simulation engine", starter: "--", pro: "--", enterprise: "Included" },
+  { feature: "Trojan analyzer + IOC extraction", starter: "--", pro: "--", enterprise: "Full" },
+  { feature: "Honeypot deployment", starter: "--", pro: "--", enterprise: "Included" },
+  { feature: "Payload generator", starter: "--", pro: "--", enterprise: "Included" },
+  { feature: "Network traffic analysis", starter: "--", pro: "--", enterprise: "Included" },
+  { feature: "CVE database access", starter: "--", pro: "--", enterprise: "Included" },
+  { feature: "Support", starter: "Community", pro: "Priority", enterprise: "Dedicated + SLA" },
 ];
 
 export default function PricingPage() {
@@ -153,14 +185,14 @@ export default function PricingPage() {
                 <p className="text-xs text-muted-foreground leading-relaxed mb-6">{t(`public.${plan.descKey}`)}</p>
                 <ul className="flex flex-col gap-2 mb-8 flex-1">
                   {plan.features.map((f) => (
-                    <li key={f.textKey} className="flex items-start gap-2 text-xs">
+                    <li key={f.text} className="flex items-start gap-2 text-xs">
                       {f.included ? (
                         <Check className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
                       ) : (
                         <X className="w-3.5 h-3.5 text-muted-foreground/40 mt-0.5 shrink-0" />
                       )}
                       <span className={f.included ? "text-muted-foreground" : "text-muted-foreground/40"}>
-                        {t(f.textKey)}
+                        {f.text}
                       </span>
                     </li>
                   ))}
@@ -191,19 +223,19 @@ export default function PricingPage() {
             <table className="w-full min-w-[600px] text-xs" data-testid="table-feature-comparison">
               <thead>
                 <tr className="border-b border-border/50">
-                  <th className="text-start py-3 px-4 font-semibold tracking-wider uppercase text-muted-foreground">{t("pricing.colFeature")}</th>
-                  <th className="text-center py-3 px-4 font-semibold tracking-wider uppercase text-muted-foreground">{t("pricing.colStarter")}</th>
-                  <th className="text-center py-3 px-4 font-semibold tracking-wider uppercase text-primary">{t("pricing.colProfessional")}</th>
-                  <th className="text-center py-3 px-4 font-semibold tracking-wider uppercase text-muted-foreground">{t("pricing.colEnterprise")}</th>
+                  <th className="text-start py-3 px-4 font-semibold tracking-wider uppercase text-muted-foreground">Feature</th>
+                  <th className="text-center py-3 px-4 font-semibold tracking-wider uppercase text-muted-foreground">Starter</th>
+                  <th className="text-center py-3 px-4 font-semibold tracking-wider uppercase text-primary">Professional</th>
+                  <th className="text-center py-3 px-4 font-semibold tracking-wider uppercase text-muted-foreground">Enterprise</th>
                 </tr>
               </thead>
               <tbody>
                 {featureComparison.map((row, idx) => (
-                  <tr key={row.featureKey} className={idx % 2 === 0 ? "bg-muted/20" : ""}>
-                    <td className="py-2.5 px-4 font-medium">{t(row.featureKey)}</td>
-                    <td className="py-2.5 px-4 text-center text-muted-foreground">{t(row.starterKey)}</td>
-                    <td className="py-2.5 px-4 text-center">{t(row.proKey)}</td>
-                    <td className="py-2.5 px-4 text-center">{t(row.enterpriseKey)}</td>
+                  <tr key={row.feature} className={idx % 2 === 0 ? "bg-muted/20" : ""}>
+                    <td className="py-2.5 px-4 font-medium">{row.feature}</td>
+                    <td className={`py-2.5 px-4 text-center ${row.starter === "--" ? "text-muted-foreground/40" : "text-muted-foreground"}`}>{row.starter}</td>
+                    <td className={`py-2.5 px-4 text-center ${row.pro === "--" ? "text-muted-foreground/40" : ""}`}>{row.pro}</td>
+                    <td className={`py-2.5 px-4 text-center ${row.enterprise === "--" ? "text-muted-foreground/40" : ""}`}>{row.enterprise}</td>
                   </tr>
                 ))}
               </tbody>

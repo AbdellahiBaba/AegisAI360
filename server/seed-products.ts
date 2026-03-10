@@ -16,7 +16,7 @@ async function createProducts() {
   });
   await stripe.prices.create({
     product: starter.id,
-    unit_amount: 900,
+    unit_amount: 2900,
     currency: 'usd',
     recurring: { interval: 'month' },
   });
@@ -29,7 +29,7 @@ async function createProducts() {
   });
   await stripe.prices.create({
     product: professional.id,
-    unit_amount: 2900,
+    unit_amount: 9900,
     currency: 'usd',
     recurring: { interval: 'month' },
   });
@@ -42,7 +42,7 @@ async function createProducts() {
   });
   await stripe.prices.create({
     product: enterprise.id,
-    unit_amount: 7900,
+    unit_amount: 29900,
     currency: 'usd',
     recurring: { interval: 'month' },
   });

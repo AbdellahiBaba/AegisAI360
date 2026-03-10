@@ -47,7 +47,7 @@ export default function ChoosePlan() {
   const planColors: Record<string, string> = { starter: "border-blue-500/30", professional: "border-purple-500/30 ring-2 ring-purple-500/20", enterprise: "border-amber-500/30" };
 
   const getFeatureList = (plan: any) => {
-    const features = [];
+    const features: string[] = [];
     features.push(`${plan.maxAgents} endpoint agents`);
     features.push(`${plan.maxLogsPerDay.toLocaleString()} logs/day`);
     features.push(`${plan.maxCommandsPerDay} commands/day`);
@@ -59,6 +59,15 @@ export default function ChoosePlan() {
     if (plan.allowProcessKill) features.push("Process management");
     if (plan.allowTerminalAccess) features.push("Remote terminal access");
     if (plan.allowAdvancedAnalytics) features.push("Advanced analytics & AI");
+    if (plan.allowAegisAgent) features.push("AegisAI360 Agent");
+
+    if (plan.name === "starter") {
+      features.push("Security event monitoring", "Basic alert rules", "Email notifications", "7-day event retention", "Vulnerability scanner", "Hash tools & password analyzer", "Community support");
+    } else if (plan.name === "professional") {
+      features.push("Advanced alert rules", "Email & webhook notifications", "30-day event retention", "Vulnerability scanner + OWASP mapping", "Hash tools & password analyzer", "AI threat analysis", "Automated defense playbooks", "MITRE ATT&CK heatmap", "Threat intelligence feeds", "SSL/TLS inspector", "Email security analyzer", "Mobile penetration testing", "Priority support");
+    } else if (plan.name === "enterprise") {
+      features.push("Custom alert rules & workflows", "All notification channels", "1-year event retention", "Full vulnerability scanner suite", "Hash tools & password analyzer", "Full AI threat analysis", "Custom automated playbooks", "MITRE ATT&CK heatmap", "Premium threat intelligence", "SSL/TLS inspector", "Email security analyzer", "Mobile penetration testing", "Dark web monitoring", "Compliance dashboard (NIST, ISO, PCI, HIPAA, SOC 2)", "Threat simulation engine", "Trojan analyzer with IOC extraction & MITRE heatmap", "Payload generator", "Honeypot deployment", "Network traffic analysis", "CVE database access", "Dedicated support + SLA", "On-premise deployment option");
+    }
     return features;
   };
 
