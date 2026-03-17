@@ -480,6 +480,31 @@ function pushTraffic(log: string[], lines: string[]) {
   if (log.length > 3000) log.splice(0, log.length - 3000);
 }
 
+// ─── Response Decoder — strips encoding to expose actual data ───────────────
+function decodeResponseClues(body: string): string {
+  let decoded = body;
+  // URL decode (double-encoded too)
+  try { decoded = decodeURIComponent(decoded.replace(/\+/g, " ")); } catch {}
+  try { decoded = decodeURIComponent(decoded); } catch {}
+  // HTML entity decode
+  decoded = decoded
+    .replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/&nbsp;/gi, " ")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
+  // Try base64 decode on any 20+ char base64-looking substring
+  decoded = decoded.replace(/[A-Za-z0-9+/]{20,}={0,2}/g, (match) => {
+    try {
+      const buf = Buffer.from(match, "base64");
+      const str = buf.toString("utf8");
+      // Only replace if the decoded value is printable ASCII
+      if (/^[\x20-\x7e\n\r\t]+$/.test(str) && str.length > 0) return `[b64:${str}]`;
+    } catch {}
+    return match;
+  });
+  return decoded.slice(0, 1200);
+}
+
 // ─── HTTP Request Engine ────────────────────────────────────────────────────
 function sendRequest(
   config: ScriptInjectionConfig,
@@ -489,6 +514,7 @@ function sendRequest(
   cb: (code: number, body: string, rt: number, err?: string) => void,
   jsonMode = false,
   rawBody?: string,
+  timeoutMs = 12000,
 ) {
   const isHttps = config.port === 443;
   const mod: typeof http | typeof https = isHttps ? https : http;
