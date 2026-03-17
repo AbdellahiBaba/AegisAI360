@@ -16,7 +16,7 @@ const CRASH_TECHNIQUES = [
 ];
 const SQLI_TECHNIQUES = ["all", "error-based", "union", "boolean-blind", "time-based"];
 const AUTH_TECHNIQUES = ["all", "default-creds", "sqli-bypass", "lockout-bypass", "rate-limit-check"];
-const INJECT_TECHNIQUES = ["all", "xss-reflected", "xss-headers", "ssti", "cmdi", "html-injection", "prototype-pollution", "csti", "css-injection", "log-injection", "ldap-injection", "xpath-injection", "nosql-injection"];
+const INJECT_TECHNIQUES = ["all", "xss-reflected", "polyglot", "xss-headers", "ssti", "cmdi", "html-injection", "prototype-pollution", "csti", "css-injection", "log-injection", "ldap-injection", "xpath-injection", "nosql-injection", "open-redirect", "host-header", "xxe", "graphql"];
 const FTP_TECHNIQUES = ["all", "banner-grab", "anonymous-login", "default-creds", "path-traversal", "command-injection", "site-commands", "pasv-flood", "bounce-attack", "directory-listing", "connection-flood"];
 const PROTOCOL_TECHNIQUES = ["all", "ssh", "smtp", "snmp", "redis", "mongodb", "telnet", "rdp", "mysql", "smb", "memcached", "ldap", "vnc"];
 const STRESS_TECHNIQUES = ["http-flood", "post-flood", "mixed-flood", "slowloris", "tls-flood", "pipeline-flood", "conn-exhaust", "cache-buster", "redirect-exhaust", "combined"];
@@ -144,7 +144,7 @@ router.delete("/auth/stop/:id", (req: Request, res: Response) => {
 });
 
 router.post("/inject/start", (req: Request, res: Response) => {
-  const { target, port, path, method, paramName, technique } = req.body;
+  const { target, port, path, method, paramName, technique, jsonMode } = req.body;
   if (!target) return res.status(400).json({ error: "target required" });
   if (!paramName) return res.status(400).json({ error: "paramName required" });
   if (!INJECT_TECHNIQUES.includes(technique)) return res.status(400).json({ error: `technique must be one of: ${INJECT_TECHNIQUES.join(", ")}` });
@@ -156,6 +156,7 @@ router.post("/inject/start", (req: Request, res: Response) => {
       method: method === "POST" ? "POST" : "GET",
       paramName: String(paramName).trim(),
       technique: String(technique),
+      jsonMode: Boolean(jsonMode),
     });
     return res.json({ jobId: job.id, startTime: job.startTime });
   } catch (e: any) {
@@ -173,7 +174,8 @@ router.get("/inject/status/:id", (req: Request, res: Response) => {
     totalResults: job.results.length,
     summary: job.summary,
     config: { target: job.config.target, paramName: job.config.paramName, technique: job.config.technique },
-    trafficLog: (job.trafficLog ?? []).slice(-300),
+    trafficLog: (job.trafficLog ?? []).slice(-400),
+    learning: job.learning,
   });
 });
 

