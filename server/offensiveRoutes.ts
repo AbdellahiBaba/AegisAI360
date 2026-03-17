@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { startCrashTest, getCrashJob, stopCrashTest } from "./webCrashEngine";
 import { startSQLiScan, getSQLiJob, stopSQLiScan } from "./sqlInjectionEngine";
 import { startAuthTest, getAuthJob, stopAuthTest } from "./authTesterEngine";
+import { startInjectionScan, getInjectionJob, stopInjectionScan } from "./scriptInjectionEngine";
 
 const router = Router();
 
