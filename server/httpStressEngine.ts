@@ -12,6 +12,36 @@ export interface StressConfig {
   concurrency: number;
   duration: number;
   useHttps: boolean;
+  rampMode?: boolean;
+  rampStartConcurrency?: number;
+  rampStepPct?: number;
+  rampStepSecs?: number;
+}
+
+export interface LatencyBucket {
+  p50: number;
+  p75: number;
+  p95: number;
+  p99: number;
+  min: number;
+  max: number;
+}
+
+export interface RampSnapshot {
+  concurrency: number;
+  rps: number;
+  avgLatencyMs: number;
+  errorRatePct: number;
+  elapsedSecs: number;
+}
+
+export interface ResilienceReport {
+  maxSustainableRps: number;
+  breakingPointRps: number;
+  breakingPointConcurrency: number;
+  breakingPointErrorRate: number;
+  p95AtBreaking: number;
+  snapshots: RampSnapshot[];
 }
 
 export interface StressMetrics {
@@ -27,12 +57,15 @@ export interface StressMetrics {
   statusCodes: Record<string, number>;
   latencySum: number;
   latencyCount: number;
+  latencySamples: number[];
+  latencyBucket: LatencyBucket;
   tlsHandshakes: number;
   connectionsOpen: number;
   peakRps: number;
   rpsWindow: number[];
   windowStart: number;
   windowCount: number;
+  currentConcurrency: number;
 }
 
 export interface StressJob {
@@ -45,6 +78,8 @@ export interface StressJob {
   intervals: NodeJS.Timeout[];
   sockets: (net.Socket | tls.TLSSocket)[];
   log: string[];
+  rampSnapshots: RampSnapshot[];
+  resilienceReport?: ResilienceReport;
 }
 
 const jobs = new Map<string, StressJob>();
@@ -67,15 +102,31 @@ function randUA() { return UA_LIST[Math.floor(Math.random() * UA_LIST.length)]; 
 function randPath(base: string) { return base + "?_=" + randomBytes(6).toString("hex") + "&t=" + Date.now(); }
 function randBody() { return randomBytes(Math.floor(Math.random() * 4096 + 512)); }
 
-function initMetrics(): StressMetrics {
+function calcLatencyBucket(samples: number[]): LatencyBucket {
+  if (!samples.length) return { p50: 0, p75: 0, p95: 0, p99: 0, min: 0, max: 0 };
+  const sorted = [...samples].sort((a, b) => a - b);
+  const pct = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p / 100))];
+  return { p50: pct(50), p75: pct(75), p95: pct(95), p99: pct(99), min: sorted[0], max: sorted[sorted.length - 1] };
+}
+
+function initMetrics(concurrency = 0): StressMetrics {
   return {
     requestsSent: 0, requestsSuccess: 0, requestsFailed: 0,
     bytesOut: 0, bytesIn: 0,
     errorsConnRefused: 0, errorsTimeout: 0, errorsReset: 0, errorsOther: 0,
-    statusCodes: {}, latencySum: 0, latencyCount: 0,
+    statusCodes: {}, latencySum: 0, latencyCount: 0, latencySamples: [],
+    latencyBucket: { p50: 0, p75: 0, p95: 0, p99: 0, min: 0, max: 0 },
     tlsHandshakes: 0, connectionsOpen: 0,
     peakRps: 0, rpsWindow: [], windowStart: Date.now(), windowCount: 0,
+    currentConcurrency: concurrency,
   };
+}
+
+function recordLatency(m: StressMetrics, startMs: number) {
+  const lat = Date.now() - startMs;
+  m.latencySum += lat;
+  m.latencyCount++;
+  if (m.latencySamples.length < 2000) m.latencySamples.push(lat);
 }
 
 function trackRps(m: StressMetrics) {
@@ -130,8 +181,7 @@ function runHttpFlood(job: StressJob) {
       res.on("end", () => {
         metrics.requestsSuccess++;
         metrics.bytesIn += bytes;
-        metrics.latencySum += Date.now() - start;
-        metrics.latencyCount++;
+        recordLatency(metrics, start);
         recordStatus(metrics, res.statusCode ?? 0);
         if (job.active) fire();
       });
@@ -173,8 +223,7 @@ function runPostFlood(job: StressJob) {
       res.on("end", () => {
         metrics.requestsSuccess++;
         metrics.bytesIn += bytes;
-        metrics.latencySum += Date.now() - start;
-        metrics.latencyCount++;
+        recordLatency(metrics, start);
         recordStatus(metrics, res.statusCode ?? 0);
         if (job.active) fire();
       });
@@ -219,8 +268,7 @@ function runMixedFlood(job: StressJob) {
       res.on("end", () => {
         metrics.requestsSuccess++;
         metrics.bytesIn += bytes;
-        metrics.latencySum += Date.now() - start;
-        metrics.latencyCount++;
+        recordLatency(metrics, start);
         recordStatus(metrics, res.statusCode ?? 0);
         if (job.active) fire();
       });
@@ -451,8 +499,7 @@ function runCacheBuster(job: StressJob) {
       res.on("end", () => {
         metrics.requestsSuccess++;
         metrics.bytesIn += bytes;
-        metrics.latencySum += Date.now() - start;
-        metrics.latencyCount++;
+        recordLatency(metrics, start);
         recordStatus(metrics, res.statusCode ?? 0);
         if (job.active) fire();
       });
@@ -485,8 +532,7 @@ function runRedirectExhaust(job: StressJob) {
       res.on("end", () => {
         metrics.requestsSuccess++;
         metrics.bytesIn += bytes;
-        metrics.latencySum += Date.now() - start;
-        metrics.latencyCount++;
+        recordLatency(metrics, start);
         recordStatus(metrics, res.statusCode ?? 0);
         if ((res.statusCode ?? 0) >= 300 && (res.statusCode ?? 0) < 400 && res.headers.location) {
           followRedirects(res.headers.location as string, depth + 1);
@@ -520,16 +566,34 @@ function runCombined(job: StressJob) {
   sub(quarter, job.config.useHttps ? runTlsFlood : runPipelineFlood);
 }
 
+function buildResilienceReport(snapshots: RampSnapshot[]): ResilienceReport {
+  if (!snapshots.length) return { maxSustainableRps: 0, breakingPointRps: 0, breakingPointConcurrency: 0, breakingPointErrorRate: 0, p95AtBreaking: 0, snapshots: [] };
+  const BREAK_THRESHOLD = 20; // error rate % that defines breaking point
+  const breaking = snapshots.find((s) => s.errorRatePct >= BREAK_THRESHOLD);
+  const lastGood = breaking ? snapshots[snapshots.indexOf(breaking) - 1] : snapshots[snapshots.length - 1];
+  const maxRps = Math.max(...snapshots.map((s) => s.rps));
+  return {
+    maxSustainableRps: lastGood?.rps ?? maxRps,
+    breakingPointRps: breaking?.rps ?? 0,
+    breakingPointConcurrency: breaking?.concurrency ?? 0,
+    breakingPointErrorRate: breaking?.errorRatePct ?? 0,
+    p95AtBreaking: breaking?.avgLatencyMs ?? 0,
+    snapshots,
+  };
+}
+
 export function startStressTest(config: StressConfig): StressJob {
   const id = makeId();
   const now = Date.now();
+  const startConcurrency = config.rampMode ? (config.rampStartConcurrency ?? 2) : config.concurrency;
   const job: StressJob = {
-    id, config,
+    id, config: { ...config, concurrency: startConcurrency },
     startTime: now,
     endTime: now + config.duration * 1000,
     active: true,
-    metrics: initMetrics(),
+    metrics: initMetrics(startConcurrency),
     intervals: [], sockets: [], log: [],
+    rampSnapshots: [],
   };
   jobs.set(id, job);
 
@@ -549,7 +613,61 @@ export function startStressTest(config: StressConfig): StressJob {
   const runner = RUNNERS[config.technique] ?? runHttpFlood;
   runner(job);
 
-  const stopTimer = setTimeout(() => stopStressTest(id), config.duration * 1000 + 200);
+  // ─── Ramp Mode — increases concurrency every N seconds ──────────────────
+  if (config.rampMode) {
+    const stepSecs = Math.max(5, config.rampStepSecs ?? 10);
+    const stepPct = Math.max(10, config.rampStepPct ?? 25);
+    const maxConcurrency = config.concurrency;
+
+    const rampTick = setInterval(() => {
+      if (!job.active) { clearInterval(rampTick); return; }
+      const elapsed = Math.floor((Date.now() - job.startTime) / 1000);
+      const m = job.metrics;
+      const errorRate = m.requestsSent > 0 ? (m.requestsFailed / m.requestsSent) * 100 : 0;
+      const avgLat = m.latencyCount > 0 ? Math.round(m.latencySum / m.latencyCount) : 0;
+      const curRps = m.rpsWindow.length > 0 ? m.rpsWindow[m.rpsWindow.length - 1] : 0;
+
+      // Take snapshot
+      job.rampSnapshots.push({
+        concurrency: job.config.concurrency,
+        rps: curRps,
+        avgLatencyMs: avgLat,
+        errorRatePct: Math.round(errorRate * 10) / 10,
+        elapsedSecs: elapsed,
+      });
+
+      // Ramp up unless at max
+      if (job.config.concurrency < maxConcurrency) {
+        const next = Math.min(maxConcurrency, Math.ceil(job.config.concurrency * (1 + stepPct / 100)));
+        const added = next - job.config.concurrency;
+        job.config.concurrency = next;
+        job.metrics.currentConcurrency = next;
+        // Spawn additional workers for the new concurrency
+        const subJob = { ...job, config: { ...job.config, concurrency: added } };
+        runner(subJob as StressJob);
+        job.log.push(`[RAMP] Concurrency → ${next} (added ${added} workers) | cur RPS: ${curRps} | error rate: ${errorRate.toFixed(1)}%`);
+      }
+    }, stepSecs * 1000);
+    job.intervals.push(rampTick);
+  }
+
+  // ─── Periodic latency bucket update ─────────────────────────────────────
+  const bucketTick = setInterval(() => {
+    if (!job.active) { clearInterval(bucketTick); return; }
+    if (job.metrics.latencySamples.length > 0) {
+      job.metrics.latencyBucket = calcLatencyBucket(job.metrics.latencySamples);
+    }
+  }, 2000);
+  job.intervals.push(bucketTick);
+
+  const stopTimer = setTimeout(() => {
+    if (job.rampSnapshots.length > 0) {
+      job.resilienceReport = buildResilienceReport(job.rampSnapshots);
+    } else if (job.metrics.latencySamples.length > 0) {
+      job.metrics.latencyBucket = calcLatencyBucket(job.metrics.latencySamples);
+    }
+    stopStressTest(id);
+  }, config.duration * 1000 + 200);
   job.intervals.push(stopTimer as unknown as NodeJS.Timeout);
 
   return job;

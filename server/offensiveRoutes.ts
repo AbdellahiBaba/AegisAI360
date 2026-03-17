@@ -268,7 +268,7 @@ router.delete("/inject/stop/:id", (req: Request, res: Response) => {
 });
 
 router.post("/stress/start", (req: Request, res: Response) => {
-  const { target, port, path, technique, concurrency, duration, useHttps } = req.body;
+  const { target, port, path, technique, concurrency, duration, useHttps, rampMode, rampStartConcurrency, rampStepPct, rampStepSecs } = req.body;
   if (!target) return res.status(400).json({ error: "target required" });
   if (!STRESS_TECHNIQUES.includes(technique)) return res.status(400).json({ error: `technique must be one of: ${STRESS_TECHNIQUES.join(", ")}` });
   try {
@@ -277,9 +277,13 @@ router.post("/stress/start", (req: Request, res: Response) => {
       port: Math.min(65535, Math.max(1, parseInt(port) || (useHttps ? 443 : 80))),
       path: String(path || "/").trim(),
       technique: String(technique),
-      concurrency: Math.min(128, Math.max(1, parseInt(concurrency) || 16)),
+      concurrency: Math.min(256, Math.max(1, parseInt(concurrency) || 16)),
       duration: Math.min(600, Math.max(5, parseInt(duration) || 60)),
       useHttps: !!useHttps,
+      rampMode: !!rampMode,
+      rampStartConcurrency: Math.min(32, Math.max(1, parseInt(rampStartConcurrency) || 2)),
+      rampStepPct: Math.min(100, Math.max(10, parseInt(rampStepPct) || 25)),
+      rampStepSecs: Math.min(60, Math.max(5, parseInt(rampStepSecs) || 10)),
     });
     return res.json({ jobId: job.id, startTime: job.startTime, endTime: job.endTime });
   } catch (e: any) {
@@ -296,8 +300,10 @@ router.get("/stress/status/:id", (req: Request, res: Response) => {
     durationSecs: job.config.duration,
     progressPct: Math.min(100, Math.floor((elapsed / job.config.duration) * 100)),
     metrics: job.metrics,
-    config: { target: job.config.target, technique: job.config.technique, concurrency: job.config.concurrency, useHttps: job.config.useHttps },
+    config: { target: job.config.target, technique: job.config.technique, concurrency: job.config.concurrency, useHttps: job.config.useHttps, rampMode: job.config.rampMode },
     trafficLog: (job.log ?? []).slice(-300),
+    rampSnapshots: job.rampSnapshots ?? [],
+    resilienceReport: job.resilienceReport ?? null,
   });
 });
 
