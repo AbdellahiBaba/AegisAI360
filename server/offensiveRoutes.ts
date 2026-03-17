@@ -3,6 +3,7 @@ import { startCrashTest, getCrashJob, stopCrashTest } from "./webCrashEngine";
 import { startSQLiScan, getSQLiJob, stopSQLiScan } from "./sqlInjectionEngine";
 import { startAuthTest, getAuthJob, stopAuthTest } from "./authTesterEngine";
 import { startInjectionScan, getInjectionJob, stopInjectionScan } from "./scriptInjectionEngine";
+import { startStressTest, getStressJob, stopStressTest } from "./httpStressEngine";
 
 const router = Router();
 
@@ -14,6 +15,7 @@ const CRASH_TECHNIQUES = [
 const SQLI_TECHNIQUES = ["all", "error-based", "union", "boolean-blind", "time-based"];
 const AUTH_TECHNIQUES = ["all", "default-creds", "sqli-bypass", "lockout-bypass", "rate-limit-check"];
 const INJECT_TECHNIQUES = ["all", "xss-reflected", "xss-headers", "ssti", "cmdi", "html-injection"];
+const STRESS_TECHNIQUES = ["http-flood", "post-flood", "mixed-flood", "slowloris", "tls-flood", "pipeline-flood", "conn-exhaust", "cache-buster", "redirect-exhaust", "combined"];
 
 router.post("/crash/start", (req: Request, res: Response) => {
   const { target, port, path, technique, threads, duration } = req.body;
@@ -169,6 +171,44 @@ router.get("/inject/status/:id", (req: Request, res: Response) => {
 
 router.delete("/inject/stop/:id", (req: Request, res: Response) => {
   const ok = stopInjectionScan(req.params.id);
+  return ok ? res.json({ success: true }) : res.status(404).json({ error: "Not found" });
+});
+
+router.post("/stress/start", (req: Request, res: Response) => {
+  const { target, port, path, technique, concurrency, duration, useHttps } = req.body;
+  if (!target) return res.status(400).json({ error: "target required" });
+  if (!STRESS_TECHNIQUES.includes(technique)) return res.status(400).json({ error: `technique must be one of: ${STRESS_TECHNIQUES.join(", ")}` });
+  try {
+    const job = startStressTest({
+      target: String(target).trim(),
+      port: Math.min(65535, Math.max(1, parseInt(port) || (useHttps ? 443 : 80))),
+      path: String(path || "/").trim(),
+      technique: String(technique),
+      concurrency: Math.min(128, Math.max(1, parseInt(concurrency) || 16)),
+      duration: Math.min(600, Math.max(5, parseInt(duration) || 60)),
+      useHttps: !!useHttps,
+    });
+    return res.json({ jobId: job.id, startTime: job.startTime, endTime: job.endTime });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+router.get("/stress/status/:id", (req: Request, res: Response) => {
+  const job = getStressJob(req.params.id);
+  if (!job) return res.status(404).json({ error: "Job not found or completed" });
+  const elapsed = Math.floor((Date.now() - job.startTime) / 1000);
+  return res.json({
+    jobId: job.id, active: job.active, elapsed,
+    durationSecs: job.config.duration,
+    progressPct: Math.min(100, Math.floor((elapsed / job.config.duration) * 100)),
+    metrics: job.metrics,
+    config: { target: job.config.target, technique: job.config.technique, concurrency: job.config.concurrency, useHttps: job.config.useHttps },
+  });
+});
+
+router.delete("/stress/stop/:id", (req: Request, res: Response) => {
+  const ok = stopStressTest(req.params.id);
   return ok ? res.json({ success: true }) : res.status(404).json({ error: "Not found" });
 });
 

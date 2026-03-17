@@ -120,6 +120,7 @@ export function AppSidebar() {
     { title: "SQLi Tester", testId: "sqli-tester", url: "/sqli-tester", icon: Database, requiredFeature: "allowThreatIntel" },
     { title: "Auth Security Tester", testId: "auth-tester", url: "/auth-tester", icon: KeyRound, requiredFeature: "allowThreatIntel" },
     { title: "Script Injector", testId: "script-injector", url: "/script-injector", icon: Code, requiredFeature: "allowThreatIntel" },
+    { title: "HTTP Stress Tester", testId: "http-stress-tester", url: "/http-stress-tester", icon: Flame, requiredFeature: "allowThreatIntel" },
   ];
 
   const allRespondItems: NavItem[] = [

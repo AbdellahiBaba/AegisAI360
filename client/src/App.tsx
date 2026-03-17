@@ -83,6 +83,7 @@ import WebCrashTesterPage from "@/pages/web-crash-tester";
 import SQLiTesterPage from "@/pages/sqli-tester";
 import AuthTesterPage from "@/pages/auth-tester";
 import ScriptInjectorPage from "@/pages/script-injector";
+import HttpStressTesterPage from "@/pages/http-stress-tester";
 import { PwaInstallBanner } from "@/components/pwa-install-banner";
 
 function PlanGate({ feature, children }: { feature: string; children: React.ReactNode }) {
@@ -186,6 +187,7 @@ function AppRouter() {
       <Route path="/sqli-tester" component={gated("allowThreatIntel", SQLiTesterPage)} />
       <Route path="/auth-tester" component={gated("allowThreatIntel", AuthTesterPage)} />
       <Route path="/script-injector" component={gated("allowThreatIntel", ScriptInjectorPage)} />
+      <Route path="/http-stress-tester" component={gated("allowThreatIntel", HttpStressTesterPage)} />
       <Route component={NotFound} />
     </Switch>
   );
