@@ -82,6 +82,7 @@ import PacketCrafterPage from "@/pages/packet-crafter";
 import WebCrashTesterPage from "@/pages/web-crash-tester";
 import SQLiTesterPage from "@/pages/sqli-tester";
 import AuthTesterPage from "@/pages/auth-tester";
+import ScriptInjectorPage from "@/pages/script-injector";
 import { PwaInstallBanner } from "@/components/pwa-install-banner";
 
 function PlanGate({ feature, children }: { feature: string; children: React.ReactNode }) {
@@ -184,6 +185,7 @@ function AppRouter() {
       <Route path="/web-crash-tester" component={gated("allowThreatIntel", WebCrashTesterPage)} />
       <Route path="/sqli-tester" component={gated("allowThreatIntel", SQLiTesterPage)} />
       <Route path="/auth-tester" component={gated("allowThreatIntel", AuthTesterPage)} />
+      <Route path="/script-injector" component={gated("allowThreatIntel", ScriptInjectorPage)} />
       <Route component={NotFound} />
     </Switch>
   );
