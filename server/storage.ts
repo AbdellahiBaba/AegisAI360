@@ -186,6 +186,8 @@ export interface IStorage {
   getScanResults(orgId: number): Promise<ScanResult[]>;
   createScanResult(result: InsertScanResult): Promise<ScanResult>;
   updateScanResult(id: number, data: Partial<{ status: string; results: string; findings: number; severity: string; completedAt: Date }>): Promise<ScanResult | undefined>;
+  deleteScanResult(id: number, orgId: number): Promise<boolean>;
+  deleteScanResults(ids: number[], orgId: number): Promise<number>;
 
   getSupportTickets(orgId: number): Promise<SupportTicket[]>;
   getAllSupportTickets(): Promise<SupportTicket[]>;
@@ -902,6 +904,17 @@ export class DatabaseStorage implements IStorage {
   async updateScanResult(id: number, data: Partial<{ status: string; results: string; findings: number; severity: string; completedAt: Date }>): Promise<ScanResult | undefined> {
     const [updated] = await db.update(scanResults).set(data).where(eq(scanResults.id, id)).returning();
     return updated;
+  }
+
+  async deleteScanResult(id: number, orgId: number): Promise<boolean> {
+    const deleted = await db.delete(scanResults).where(and(eq(scanResults.id, id), eq(scanResults.organizationId, orgId))).returning();
+    return deleted.length > 0;
+  }
+
+  async deleteScanResults(ids: number[], orgId: number): Promise<number> {
+    if (ids.length === 0) return 0;
+    const deleted = await db.delete(scanResults).where(and(inArray(scanResults.id, ids), eq(scanResults.organizationId, orgId))).returning();
+    return deleted.length;
   }
 
   async getSupportTickets(orgId: number): Promise<SupportTicket[]> {

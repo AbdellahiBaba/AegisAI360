@@ -2981,6 +2981,31 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/scan/history/:id", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const deleted = await storage.deleteScanResult(id, orgId);
+      if (!deleted) return res.status(404).json({ error: "Scan not found or not yours" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete scan" });
+    }
+  });
+
+  app.post("/api/scan/history/delete-bulk", async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const { ids } = z.object({ ids: z.array(z.number()) }).parse(req.body);
+      if (ids.length === 0) return res.json({ deleted: 0 });
+      const deleted = await storage.deleteScanResults(ids, orgId);
+      res.json({ deleted });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete scans" });
+    }
+  });
+
   app.post("/api/scan/subdomains", async (req, res) => {
     try {
       const orgId = getOrgId(req);

@@ -14,8 +14,9 @@ import { useTranslation } from "react-i18next";
 import {
   Radar, Globe, ShieldCheck, FileSearch, Bug, Loader2, Clock,
   CheckCircle2, XCircle, AlertTriangle, Search, ShieldBan, Bell, Info, Lock,
-  Network, FolderSearch, Cpu, Shield, Landmark, Database, Code, Download,
+  Network, FolderSearch, Cpu, Shield, Landmark, Database, Code, Download, Trash2,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { ScanResult } from "@shared/schema";
 import { generateScannerReportPDF } from "@/lib/reportGenerator";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -1191,8 +1192,57 @@ function XSSResults({ data, target }: { data: any; target: string }) {
 export default function ScannerPage() {
   useDocumentTitle("Scanner");
   const { t } = useTranslation();
+  const { toast } = useToast();
   const { data: history, isLoading } = useQuery<ScanResult[]>({ queryKey: ["/api/scan/history"] });
   const [tabGroup, setTabGroup] = useState<"recon" | "attack">("recon");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  const allIds = (history ?? []).map((s) => s.id);
+  const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.has(id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleOne = (id: number) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const toggleAll = () => {
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(allIds));
+  };
+
+  const deleteSingleMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/scan/history/${id}`),
+    onSuccess: (_data, id) => {
+      setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
+      queryClient.invalidateQueries({ queryKey: ["/api/scan/history"] });
+      toast({ title: "Scan deleted" });
+    },
+    onError: () => toast({ title: "Failed to delete scan", variant: "destructive" }),
+  });
+
+  const deleteBulkMutation = useMutation({
+    mutationFn: (ids: number[]) => apiRequest("POST", "/api/scan/history/delete-bulk", { ids }),
+    onSuccess: (_data: any, ids) => {
+      setSelectedIds((prev) => { const n = new Set(prev); ids.forEach((id) => n.delete(id)); return n; });
+      queryClient.invalidateQueries({ queryKey: ["/api/scan/history"] });
+      toast({ title: `${_data?.deleted ?? ids.length} scan(s) deleted` });
+    },
+    onError: () => toast({ title: "Failed to delete scans", variant: "destructive" }),
+  });
+
+  const handleDeleteSelected = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 1) deleteSingleMutation.mutate(ids[0]);
+    else deleteBulkMutation.mutate(ids);
+  };
+
+  const handleExportSelected = () => {
+    const selected = (history ?? []).filter((s) => selectedIds.has(s.id));
+    if (selected.length === 0) return;
+    generateScannerReportPDF(selected);
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -1409,18 +1459,51 @@ export default function ScannerPage() {
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <CardTitle className="text-sm font-medium tracking-wider uppercase flex items-center gap-2">
               <Clock className="w-4 h-4 text-primary" />{t("scanner.scanHistory")}
+              {someSelected && (
+                <Badge className="text-[10px] bg-primary/10 text-primary border-primary/20">
+                  {selectedIds.size} selected
+                </Badge>
+              )}
             </CardTitle>
-            {history && history.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => generateScannerReportPDF(history)}
-                data-testid="button-export-scanner-pdf"
-              >
-                <Download className="w-3.5 h-3.5 me-1.5" />
-                {t("scanner2.exportPdf")}
-              </Button>
-            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              {someSelected && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportSelected}
+                    data-testid="button-export-selected-pdf"
+                    className="text-xs"
+                  >
+                    <Download className="w-3.5 h-3.5 me-1.5" />
+                    Export {selectedIds.size} selected
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleDeleteSelected}
+                    disabled={deleteSingleMutation.isPending || deleteBulkMutation.isPending}
+                    data-testid="button-delete-selected"
+                    className="text-xs"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 me-1.5" />
+                    Delete {selectedIds.size} selected
+                  </Button>
+                </>
+              )}
+              {!someSelected && history && history.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => generateScannerReportPDF(history)}
+                  data-testid="button-export-scanner-pdf"
+                  className="text-xs"
+                >
+                  <Download className="w-3.5 h-3.5 me-1.5" />
+                  {t("scanner2.exportPdf")}
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -1430,34 +1513,74 @@ export default function ScannerPage() {
             <div className="overflow-x-auto"><Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10 pl-4">
+                    {(history?.length ?? 0) > 0 && (
+                      <Checkbox
+                        checked={allSelected}
+                        onCheckedChange={toggleAll}
+                        data-testid="checkbox-select-all"
+                        aria-label="Select all scans"
+                      />
+                    )}
+                  </TableHead>
                   <TableHead className="text-[10px] uppercase">{t("common.type")}</TableHead>
                   <TableHead className="text-[10px] uppercase">{t("scanner.target")}</TableHead>
                   <TableHead className="text-[10px] uppercase">{t("common.status")}</TableHead>
                   <TableHead className="text-[10px] uppercase">{t("scanner.findings")}</TableHead>
                   <TableHead className="text-[10px] uppercase">{t("common.severity")}</TableHead>
                   <TableHead className="text-[10px] uppercase">{t("common.time")}</TableHead>
+                  <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {history?.length === 0 && (
-                  <TableRow><TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-6">{t("scanner.noScans")}</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center text-xs text-muted-foreground py-6">{t("scanner.noScans")}</TableCell></TableRow>
                 )}
-                {history?.map((scan) => (
-                  <TableRow key={scan.id} data-testid={`scan-history-${scan.id}`}>
-                    <TableCell><Badge variant="outline" className="text-[10px] font-mono">{scan.scanType}</Badge></TableCell>
-                    <TableCell className="text-xs font-mono">{scan.target}</TableCell>
-                    <TableCell>
-                      <Badge variant={scan.status === "completed" ? "default" : scan.status === "failed" ? "destructive" : "secondary"} className="text-[10px]">
-                        {scan.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs font-mono">{scan.findings ?? "-"}</TableCell>
-                    <TableCell>{scan.severity ? <SeverityBadge severity={scan.severity} /> : "-"}</TableCell>
-                    <TableCell className="text-[10px] text-muted-foreground font-mono">
-                      {new Date(scan.createdAt!).toLocaleString()}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {history?.map((scan) => {
+                  const isSelected = selectedIds.has(scan.id);
+                  const isDeleting = deleteSingleMutation.isPending && deleteSingleMutation.variables === scan.id;
+                  return (
+                    <TableRow
+                      key={scan.id}
+                      data-testid={`scan-history-${scan.id}`}
+                      className={isSelected ? "bg-primary/5" : undefined}
+                    >
+                      <TableCell className="pl-4">
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleOne(scan.id)}
+                          data-testid={`checkbox-scan-${scan.id}`}
+                          aria-label={`Select scan ${scan.id}`}
+                        />
+                      </TableCell>
+                      <TableCell><Badge variant="outline" className="text-[10px] font-mono">{scan.scanType}</Badge></TableCell>
+                      <TableCell className="text-xs font-mono">{scan.target}</TableCell>
+                      <TableCell>
+                        <Badge variant={scan.status === "completed" ? "default" : scan.status === "failed" ? "destructive" : "secondary"} className="text-[10px]">
+                          {scan.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs font-mono">{scan.findings ?? "-"}</TableCell>
+                      <TableCell>{scan.severity ? <SeverityBadge severity={scan.severity} /> : "-"}</TableCell>
+                      <TableCell className="text-[10px] text-muted-foreground font-mono">
+                        {new Date(scan.createdAt!).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-7 h-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => deleteSingleMutation.mutate(scan.id)}
+                          disabled={isDeleting || deleteBulkMutation.isPending}
+                          data-testid={`button-delete-scan-${scan.id}`}
+                          aria-label="Delete scan"
+                        >
+                          {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table></div>
           )}
