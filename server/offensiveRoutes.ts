@@ -4,6 +4,8 @@ import { startSQLiScan, getSQLiJob, stopSQLiScan } from "./sqlInjectionEngine";
 import { startAuthTest, getAuthJob, stopAuthTest } from "./authTesterEngine";
 import { startInjectionScan, getInjectionJob, stopInjectionScan } from "./scriptInjectionEngine";
 import { startStressTest, getStressJob, stopStressTest } from "./httpStressEngine";
+import { startFtpAttack, getFtpJob, stopFtpAttack } from "./ftpAttackEngine";
+import { startProtocolAttack, getProtocolJob, stopProtocolAttack } from "./protocolSuiteEngine";
 
 const router = Router();
 
@@ -14,7 +16,9 @@ const CRASH_TECHNIQUES = [
 ];
 const SQLI_TECHNIQUES = ["all", "error-based", "union", "boolean-blind", "time-based"];
 const AUTH_TECHNIQUES = ["all", "default-creds", "sqli-bypass", "lockout-bypass", "rate-limit-check"];
-const INJECT_TECHNIQUES = ["all", "xss-reflected", "xss-headers", "ssti", "cmdi", "html-injection"];
+const INJECT_TECHNIQUES = ["all", "xss-reflected", "xss-headers", "ssti", "cmdi", "html-injection", "prototype-pollution", "csti", "css-injection", "log-injection", "ldap-injection", "xpath-injection", "nosql-injection"];
+const FTP_TECHNIQUES = ["all", "banner-grab", "anonymous-login", "default-creds", "path-traversal", "command-injection", "site-commands", "pasv-flood", "bounce-attack", "directory-listing", "connection-flood"];
+const PROTOCOL_TECHNIQUES = ["all", "ssh", "smtp", "snmp", "redis", "mongodb", "telnet", "rdp", "mysql", "smb", "memcached", "ldap", "vnc"];
 const STRESS_TECHNIQUES = ["http-flood", "post-flood", "mixed-flood", "slowloris", "tls-flood", "pipeline-flood", "conn-exhaust", "cache-buster", "redirect-exhaust", "combined"];
 
 router.post("/crash/start", (req: Request, res: Response) => {
@@ -209,6 +213,79 @@ router.get("/stress/status/:id", (req: Request, res: Response) => {
 
 router.delete("/stress/stop/:id", (req: Request, res: Response) => {
   const ok = stopStressTest(req.params.id);
+  return ok ? res.json({ success: true }) : res.status(404).json({ error: "Not found" });
+});
+
+// ─── FTP Attack Suite ─────────────────────────────────────────────────────────
+router.post("/ftp/start", (req: Request, res: Response) => {
+  const { target, port, technique, duration, customUsers, customPasswords } = req.body;
+  if (!target) return res.status(400).json({ error: "target required" });
+  if (!FTP_TECHNIQUES.includes(technique)) return res.status(400).json({ error: `technique must be one of: ${FTP_TECHNIQUES.join(", ")}` });
+  try {
+    const job = startFtpAttack({
+      target: String(target).trim(),
+      port: Math.min(65535, Math.max(1, parseInt(port) || 21)),
+      technique: String(technique),
+      duration: Math.min(300, Math.max(5, parseInt(duration) || 60)),
+      customUsers: Array.isArray(customUsers) ? customUsers.map(String) : undefined,
+      customPasswords: Array.isArray(customPasswords) ? customPasswords.map(String) : undefined,
+    });
+    return res.json({ jobId: job.id, startTime: job.startTime });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+router.get("/ftp/status/:id", (req: Request, res: Response) => {
+  const job = getFtpJob(req.params.id);
+  if (!job) return res.status(404).json({ error: "Job not found or completed" });
+  return res.json({
+    jobId: job.id, active: job.active,
+    elapsed: Math.floor((Date.now() - job.startTime) / 1000),
+    results: job.results.slice(-100),
+    totalResults: job.results.length,
+    summary: job.summary,
+    config: { target: job.config.target, port: job.config.port, technique: job.config.technique },
+  });
+});
+
+router.delete("/ftp/stop/:id", (req: Request, res: Response) => {
+  const ok = stopFtpAttack(req.params.id);
+  return ok ? res.json({ success: true }) : res.status(404).json({ error: "Not found" });
+});
+
+// ─── Protocol Suite Attacker ──────────────────────────────────────────────────
+router.post("/protocol/start", (req: Request, res: Response) => {
+  const { target, technique, customPorts } = req.body;
+  if (!target) return res.status(400).json({ error: "target required" });
+  if (!PROTOCOL_TECHNIQUES.includes(technique)) return res.status(400).json({ error: `technique must be one of: ${PROTOCOL_TECHNIQUES.join(", ")}` });
+  try {
+    const job = startProtocolAttack({
+      target: String(target).trim(),
+      technique: String(technique),
+      customPorts: customPorts && typeof customPorts === "object" ? customPorts : undefined,
+    });
+    return res.json({ jobId: job.id, startTime: job.startTime });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+router.get("/protocol/status/:id", (req: Request, res: Response) => {
+  const job = getProtocolJob(req.params.id);
+  if (!job) return res.status(404).json({ error: "Job not found or completed" });
+  return res.json({
+    jobId: job.id, active: job.active,
+    elapsed: Math.floor((Date.now() - job.startTime) / 1000),
+    results: job.results.slice(-200),
+    totalResults: job.results.length,
+    summary: job.summary,
+    config: { target: job.config.target, technique: job.config.technique },
+  });
+});
+
+router.delete("/protocol/stop/:id", (req: Request, res: Response) => {
+  const ok = stopProtocolAttack(req.params.id);
   return ok ? res.json({ success: true }) : res.status(404).json({ error: "Not found" });
 });
 

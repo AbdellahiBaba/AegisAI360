@@ -10,7 +10,7 @@ import {
   Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar, LifeBuoy, Server, Key,
   Monitor, Download, Terminal, Activity, ScanSearch, Smartphone, Eye, ShieldCheck,
   Mail, KeyRound, ShieldBan, FileSearch, CalendarClock, Zap, ChevronDown, Gamepad2,
-  Sun, Moon, Globe, RotateCcw, Crosshair, Wifi, Package, Bomb, Code,
+  Sun, Moon, Globe, RotateCcw, Crosshair, Wifi, Package, Bomb, Code, HardDrive,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -121,6 +121,8 @@ export function AppSidebar() {
     { title: "Auth Security Tester", testId: "auth-tester", url: "/auth-tester", icon: KeyRound, requiredFeature: "allowThreatIntel" },
     { title: "Script Injector", testId: "script-injector", url: "/script-injector", icon: Code, requiredFeature: "allowThreatIntel" },
     { title: "HTTP Stress Tester", testId: "http-stress-tester", url: "/http-stress-tester", icon: Flame, requiredFeature: "allowThreatIntel" },
+    { title: "FTP Attack Suite", testId: "ftp-attacker", url: "/ftp-attacker", icon: HardDrive, requiredFeature: "allowThreatIntel" },
+    { title: "Protocol Attacker", testId: "protocol-attacker", url: "/protocol-attacker", icon: Network, requiredFeature: "allowThreatIntel" },
   ];
 
   const allRespondItems: NavItem[] = [

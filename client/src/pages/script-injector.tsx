@@ -12,12 +12,19 @@ import { apiRequest } from "@/lib/queryClient";
 import { Code, AlertTriangle, Activity, Square, ShieldAlert, CheckCircle, Terminal, Flame } from "lucide-react";
 
 const TECHNIQUES = [
-  { id: "all", name: "Full Injection Suite", desc: "Runs all injection techniques: reflected XSS, header XSS, SSTI, command injection, HTML injection" },
+  { id: "all", name: "Full Injection Suite (12 techniques)", desc: "Runs all techniques: reflected XSS, header XSS, SSTI, command injection, HTML injection, prototype pollution, CSTI, CSS injection, log injection, LDAP injection, XPath injection, NoSQL injection" },
   { id: "xss-reflected", name: "Reflected XSS (27 payloads)", desc: "Sends 27 real XSS payloads via URL/POST params — detects if scripts are reflected unescaped and would execute in browser" },
   { id: "xss-headers", name: "XSS via HTTP Headers", desc: "Injects script payloads into X-Forwarded-For, Referer, User-Agent, Accept-Language headers — detects if server reflects them into responses" },
   { id: "ssti", name: "Template Injection (SSTI)", desc: "Tests Jinja2, Twig, FreeMarker, ERB, Thymeleaf, Groovy — detects if {{7*7}} evaluates to 49 (template engine is executing user input)" },
   { id: "cmdi", name: "Command Injection (13 variants)", desc: "Injects ;id, |id, $(id), `id`, ;cat /etc/passwd, && id — confirms OS command execution if uid= or root: appears in response" },
   { id: "html-injection", name: "HTML Injection", desc: "Injects raw HTML tags into parameters — detects if the app renders them for phishing/UI redressing" },
+  { id: "prototype-pollution", name: "Prototype Pollution (9 payloads)", desc: "Sends __proto__[isAdmin]=true, constructor[prototype][isAdmin]=true and 7 variants — detects if server merges attacker-controlled object properties into the prototype chain" },
+  { id: "csti", name: "Client-Side Template Injection (CSTI)", desc: "Tests AngularJS {{constructor.constructor('alert(1)')()}}, Vue.js, Handlebars server-side SSTI — detects if template engine evaluates injected expressions" },
+  { id: "css-injection", name: "CSS Injection (7 payloads)", desc: "Tests @import url(), expression(), behavior:url() — detects if attacker-controlled CSS can exfiltrate data or execute code in Internet Explorer" },
+  { id: "log-injection", name: "CRLF / Log Injection (6 payloads)", desc: "Injects \\r\\n sequences into parameters — detects CRLF injection allowing log forging, HTTP response splitting, and header injection" },
+  { id: "ldap-injection", name: "LDAP Injection (8 payloads)", desc: "Injects *)(|(password=*), admin)(&, *)(uid=*))(|(uid=* — detects if input is passed to LDAP filter queries allowing authentication bypass and directory extraction" },
+  { id: "xpath-injection", name: "XPath Injection (7 payloads)", desc: "Injects ' or '1'='1, //user[...] traversal — detects if input is embedded in XPath expressions allowing full XML tree extraction" },
+  { id: "nosql-injection", name: "NoSQL Injection (9 payloads)", desc: "Sends MongoDB operators {$gt:''}, {$ne:null}, {$where:...}, {$regex:.*} — detects if JSON operators bypass authentication or extract database records" },
 ];
 
 const SEVERITY_CONFIG: Record<string, { label: string; cls: string }> = {
