@@ -87,7 +87,7 @@ export default function ProtocolAttacker() {
     setSummary(null);
     setElapsed(0);
     const ports: Record<string, number> = {};
-    Object.entries(customPorts).forEach(([k, v]) => { if (v) ports[k] = parseInt(v) || PROTOCOL_PORT[k] ?? 0; });
+    Object.entries(customPorts).forEach(([k, v]) => { if (v) ports[k] = (parseInt(v) || PROTOCOL_PORT[k]) ?? 0; });
     try {
       const data: any = await apiRequest("POST", "/api/offensive/protocol/start", {
         target: target.trim(), technique, customPorts: Object.keys(ports).length > 0 ? ports : undefined,
