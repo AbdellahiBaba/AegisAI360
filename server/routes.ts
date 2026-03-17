@@ -27,6 +27,7 @@ import { createSuperAdminRouter } from "./superAdmin";
 import { createThreatFeedsRouter } from "./threatFeeds";
 import { createAgentRouter } from "./agentApi";
 import ddosRouter from "./ddosRoutes";
+import offensiveRouter from "./offensiveRoutes";
 import { abuseIpdbLookup, otxLookup, urlscanLookup, safeBrowsingLookup, malwareBazaarLookup } from "./services/threatIntel";
 import { ResponseEngine } from "./responseEngine";
 import { AlertEngine } from "./alertEngine";
@@ -219,6 +220,7 @@ export async function registerRoutes(
   app.use("/api/threat-feeds", createThreatFeedsRouter());
   app.use("/api/agent", createAgentRouter());
   app.use("/api/ddos", requireAuth, requirePlanFeature("allowThreatIntel"), ddosRouter);
+  app.use("/api/offensive", requireAuth, requirePlanFeature("allowThreatIntel"), offensiveRouter);
 
   registerAegisAgentRoutes(app);
 

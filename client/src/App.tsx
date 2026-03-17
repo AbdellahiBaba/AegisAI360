@@ -79,6 +79,9 @@ import AiAgent from "@/pages/ai-agent";
 import DdosSimulatorPage from "@/pages/ddos-simulator";
 import WifiAttackPage from "@/pages/wifi-attack";
 import PacketCrafterPage from "@/pages/packet-crafter";
+import WebCrashTesterPage from "@/pages/web-crash-tester";
+import SQLiTesterPage from "@/pages/sqli-tester";
+import AuthTesterPage from "@/pages/auth-tester";
 import { PwaInstallBanner } from "@/components/pwa-install-banner";
 
 function PlanGate({ feature, children }: { feature: string; children: React.ReactNode }) {
@@ -178,6 +181,9 @@ function AppRouter() {
       <Route path="/ddos-simulator" component={gated("allowThreatIntel", DdosSimulatorPage)} />
       <Route path="/wifi-attack" component={gated("allowThreatIntel", WifiAttackPage)} />
       <Route path="/packet-crafter" component={gated("allowThreatIntel", PacketCrafterPage)} />
+      <Route path="/web-crash-tester" component={gated("allowThreatIntel", WebCrashTesterPage)} />
+      <Route path="/sqli-tester" component={gated("allowThreatIntel", SQLiTesterPage)} />
+      <Route path="/auth-tester" component={gated("allowThreatIntel", AuthTesterPage)} />
       <Route component={NotFound} />
     </Switch>
   );
