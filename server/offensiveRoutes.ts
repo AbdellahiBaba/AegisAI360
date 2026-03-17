@@ -143,6 +143,89 @@ router.delete("/auth/stop/:id", (req: Request, res: Response) => {
   return ok ? res.json({ success: true }) : res.status(404).json({ error: "Not found" });
 });
 
+// ─── Auto Parameter Probe — discovers real param names from target ────────
+router.post("/inject/probe-params", async (req: Request, res: Response) => {
+  const { target, port, path } = req.body;
+  if (!target) return res.status(400).json({ error: "target required" });
+  const portNum = Math.min(65535, Math.max(1, parseInt(port) || 80));
+  const urlPath = String(path || "/").trim();
+  const isHttps = portNum === 443;
+
+  // Common param suggestions with confidence based on path heuristics
+  const HEURISTIC_PARAMS: Record<string, string[]> = {
+    search:  ["q", "query", "s", "search", "term", "keyword", "text", "find"],
+    login:   ["username", "user", "email", "password", "pass", "login", "auth"],
+    api:     ["id", "key", "token", "data", "payload", "input", "value", "field"],
+    comment: ["comment", "body", "text", "content", "message", "post"],
+    upload:  ["file", "filename", "path", "dir", "folder", "url"],
+    redirect:["url", "next", "redirect", "return", "goto", "redir", "dest", "target"],
+    user:    ["id", "uid", "user_id", "username", "name", "handle"],
+    product: ["id", "pid", "product_id", "sku", "category", "sort"],
+    page:    ["page", "p", "offset", "limit", "count", "start", "per_page"],
+    cmd:     ["cmd", "exec", "command", "run", "execute", "shell", "arg"],
+    template:["template", "view", "tpl", "theme", "lang", "locale"],
+  };
+
+  const pathLower = urlPath.toLowerCase();
+  const suggestions: Array<{ param: string; confidence: "high" | "medium" | "low"; source: string }> = [];
+  const seen = new Set<string>();
+  const addSuggestion = (param: string, confidence: "high" | "medium" | "low", source: string) => {
+    if (!seen.has(param)) { seen.add(param); suggestions.push({ param, confidence, source }); }
+  };
+
+  // Apply heuristics
+  for (const [key, params] of Object.entries(HEURISTIC_PARAMS)) {
+    if (pathLower.includes(key)) params.forEach((p) => addSuggestion(p, "high", `path contains '${key}'`));
+  }
+
+  // Try to probe the target and parse HTML
+  let probeData: { fromHtml: string[]; fromQuery: string[] } = { fromHtml: [], fromQuery: [] };
+  try {
+    const mod = isHttps ? await import("https") : await import("http");
+    probeData = await new Promise<typeof probeData>((resolve) => {
+      const reqOpts = {
+        hostname: target, port: portNum, path: urlPath,
+        method: "GET",
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Accept": "text/html,*/*" },
+        timeout: 6000, rejectUnauthorized: false,
+      };
+      const r = mod.default.request(reqOpts, (resp: any) => {
+        let body = "";
+        resp.on("data", (c: Buffer) => { body += c.toString().slice(0, 8000); });
+        resp.on("end", () => {
+          const fromHtml: string[] = [];
+          // Parse <input name="..."> and <textarea name="...">
+          const inputMatches = body.matchAll(/(?:<input|<textarea)[^>]*?\bname=["']?([a-zA-Z0-9_\-\.]+)["']?/gi);
+          for (const m of inputMatches) if (m[1] && !["submit", "button", "csrf", "_token"].includes(m[1].toLowerCase())) fromHtml.push(m[1]);
+          // Parse <form action="...?param=">
+          const actionMatches = body.matchAll(/action=["'][^"']*\?([^"'#&]+)/gi);
+          for (const m of actionMatches) {
+            m[1].split("&").forEach((kv) => { const k = kv.split("=")[0]; if (k) fromHtml.push(k); });
+          }
+          // Parse JSON keys in response
+          const jsonMatches = body.matchAll(/"([a-zA-Z_][a-zA-Z0-9_]{1,20})":/g);
+          const fromQuery: string[] = [];
+          for (const m of jsonMatches) fromQuery.push(m[1]);
+          resolve({ fromHtml: [...new Set(fromHtml)].slice(0, 10), fromQuery: [...new Set(fromQuery)].slice(0, 10) });
+        });
+      });
+      r.on("timeout", () => { r.destroy(); resolve({ fromHtml: [], fromQuery: [] }); });
+      r.on("error", () => resolve({ fromHtml: [], fromQuery: [] }));
+      r.end();
+    });
+  } catch {}
+
+  probeData.fromHtml.forEach((p) => addSuggestion(p, "high", "auto-detected from HTML form"));
+  probeData.fromQuery.forEach((p) => addSuggestion(p, "medium", "detected from JSON/API response"));
+
+  // Fallback common params if nothing found
+  if (suggestions.length === 0) {
+    ["q", "id", "input", "data", "search", "query", "url", "name", "value", "cmd"].forEach((p) => addSuggestion(p, "low", "common parameter"));
+  }
+
+  return res.json({ suggestions: suggestions.slice(0, 15), probed: probeData.fromHtml.length > 0 });
+});
+
 router.post("/inject/start", (req: Request, res: Response) => {
   const { target, port, path, method, paramName, technique, jsonMode } = req.body;
   if (!target) return res.status(400).json({ error: "target required" });

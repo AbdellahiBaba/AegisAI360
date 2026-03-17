@@ -20,6 +20,7 @@ export interface InjectionResult {
   statusCode?: number;
   responseTime?: number;
   evidence?: string;
+  decodedEvidence?: string;
   severity: "critical" | "high" | "medium" | "info";
   timestamp: number;
   retried?: boolean;
@@ -33,7 +34,7 @@ export interface InjectionJob {
   startTime: number;
   active: boolean;
   results: InjectionResult[];
-  summary: { executed: number; reflected: number; tested: number; wafBlocked: number; bypassed: number };
+  summary: { executed: number; reflected: number; tested: number; wafBlocked: number; bypassed: number; timeouts: number; errors: number };
   trafficLog: string[];
   learning: {
     wafSignatures: string[];
@@ -41,6 +42,9 @@ export interface InjectionJob {
     blockedCodes: number[];
     preferJsonMode: boolean;
     responseBaseline?: number;
+    avgResponseMs: number;
+    consecutiveErrors: number;
+    adaptiveTimeoutMs: number;
   };
 }
 
@@ -567,7 +571,7 @@ function sendRequest(
 
   const req = mod.request({
     hostname: config.target, port: config.port, path,
-    method: config.method, headers, timeout: 12000, rejectUnauthorized: false,
+    method: config.method, headers, timeout: timeoutMs, rejectUnauthorized: false,
   }, (res) => {
     let data = "";
     res.on("data", (c: Buffer) => { data += c.toString().slice(0, 6000); });
@@ -587,8 +591,8 @@ function sendRequest(
     });
   });
   req.on("timeout", () => {
-    pushTraffic(trafficLog, [`[${tsFmt()}] ! TIMEOUT after 12000ms`]);
-    req.destroy(); cb(0, "", 12000, "timeout");
+    pushTraffic(trafficLog, [`[${tsFmt()}] ! TIMEOUT after ${timeoutMs}ms — connection unresponsive`]);
+    req.destroy(); cb(0, "", timeoutMs, "timeout");
   });
   req.on("error", (e) => {
     pushTraffic(trafficLog, [`[${tsFmt()}] ! ERROR: ${e.message}`]);
@@ -618,6 +622,78 @@ function analyzeXSS(payload: string, body: string): { status: InjectionResult["s
   return { status: "not_reflected", severity: "info" };
 }
 
+// ─── Smart Timeout Retry — rebuilds attack on connection failure in ms ───────
+async function retryOnTimeout(
+  config: ScriptInjectionConfig,
+  payload: string,
+  job: InjectionJob,
+  technique: string,
+): Promise<{ code: number; body: string; rt: number; recovered: boolean }> {
+  const ts = tsFmt();
+  job.summary.timeouts++;
+  job.learning.consecutiveErrors++;
+
+  // Adapt the timeout based on consecutive failures
+  if (job.learning.consecutiveErrors >= 3) {
+    // Target is very slow / blocking — shrink payload, use HEAD probe
+    const headResult = await new Promise<{ alive: boolean; rt: number }>((resolve) => {
+      const isHttps = config.port === 443;
+      const mod: typeof http | typeof https = isHttps ? https : http;
+      const start = Date.now();
+      const req = mod.request({
+        hostname: config.target, port: config.port, path: config.path,
+        method: "HEAD", headers: { "User-Agent": "Mozilla/5.0", "Connection": "close" },
+        timeout: 5000, rejectUnauthorized: false,
+      }, () => resolve({ alive: true, rt: Date.now() - start }));
+      req.on("timeout", () => { req.destroy(); resolve({ alive: false, rt: 5000 }); });
+      req.on("error", () => resolve({ alive: false, rt: 0 }));
+      req.end();
+    });
+
+    if (!headResult.alive) {
+      pushTraffic(job.trafficLog, [
+        `[${ts}] ! TARGET UNREACHABLE — HEAD probe failed. Engine pausing 2s then switching strategy.`,
+        `[${ts}] ! Consecutive errors: ${job.learning.consecutiveErrors} — forcing compact payload mode`,
+      ]);
+      await new Promise<void>((r) => setTimeout(r, 2000));
+      // Shrink payload and retry with 5s timeout
+      const compact = payload.slice(0, 80);
+      return new Promise<{ code: number; body: string; rt: number; recovered: boolean }>((resolve) => {
+        sendRequest(config, compact, {}, job.trafficLog, (code, body, rt, err) => {
+          if (!err) job.learning.consecutiveErrors = 0;
+          resolve({ code, body, rt, recovered: !err });
+        }, config.jsonMode, undefined, 5000);
+      });
+    }
+
+    // Target alive but slow — increase adaptive timeout
+    job.learning.adaptiveTimeoutMs = Math.min(25000, job.learning.adaptiveTimeoutMs + 4000);
+    pushTraffic(job.trafficLog, [
+      `[${ts}] ! Target responding slowly (HEAD: ${headResult.rt}ms). Expanding adaptive timeout → ${job.learning.adaptiveTimeoutMs}ms`,
+      `[${ts}] ! Rebuilding attack with extended timeout — retrying...`,
+    ]);
+  } else {
+    pushTraffic(job.trafficLog, [
+      `[${ts}] ! TIMEOUT/HANG — rebuilding attack in adaptive mode (attempt ${job.learning.consecutiveErrors})`,
+      `[${ts}] ! Switching to ${job.learning.adaptiveTimeoutMs}ms timeout with bypass variant`,
+    ]);
+  }
+
+  // Retry with adaptive timeout and a mutation
+  const { mutated, bypassName } = mutatePayload(payload, technique, job.learning.consecutiveErrors);
+  pushTraffic(job.trafficLog, [`[${ts}] • Timeout-recovery retry with [${bypassName}]: ${mutated.slice(0, 80)}`]);
+
+  return new Promise<{ code: number; body: string; rt: number; recovered: boolean }>((resolve) => {
+    sendRequest(config, mutated, {}, job.trafficLog, (code, body, rt, err) => {
+      if (!err) {
+        job.learning.consecutiveErrors = 0;
+        pushTraffic(job.trafficLog, [`[${tsFmt()}] • RECOVERED — target responded (HTTP ${code}, ${rt}ms)`]);
+      }
+      resolve({ code, body, rt, recovered: !err });
+    }, config.jsonMode, undefined, job.learning.adaptiveTimeoutMs);
+  });
+}
+
 // ─── Smart Retry Logic ───────────────────────────────────────────────────────
 async function smartRetry(
   config: ScriptInjectionConfig,
@@ -645,7 +721,7 @@ async function smartRetry(
     const result = await new Promise<{ code: number; body: string; rt: number }>((resolve) => {
       sendRequest(config, mutated, {}, job.trafficLog, (code, body, rt) => {
         resolve({ code, body, rt });
-      }, config.jsonMode);
+      }, config.jsonMode, undefined, job.learning.adaptiveTimeoutMs);
     });
 
     if (!isWafBlocked(result.code, result.body)) {
@@ -677,12 +753,17 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
   const job: InjectionJob = {
     id, config, startTime: Date.now(),
     active: true, results: [], trafficLog: [],
-    summary: { executed: 0, reflected: 0, tested: 0, wafBlocked: 0, bypassed: 0 },
-    learning: { wafSignatures: [], workingBypass: [], blockedCodes: [], preferJsonMode: false },
+    summary: { executed: 0, reflected: 0, tested: 0, wafBlocked: 0, bypassed: 0, timeouts: 0, errors: 0 },
+    learning: { wafSignatures: [], workingBypass: [], blockedCodes: [], preferJsonMode: false, avgResponseMs: 0, consecutiveErrors: 0, adaptiveTimeoutMs: 12000 },
   };
   jobs.set(id, job);
 
   const addResult = (r: InjectionResult) => {
+    // Auto-decode any evidence before storing — only set if decoding produced a different result
+    if (r.evidence) {
+      const dec = decodeResponseClues(r.evidence);
+      if (dec && dec !== r.evidence) r.decodedEvidence = dec;
+    }
     job.results.push(r);
     job.summary.tested++;
     if (r.status === "executed" || r.status === "ssti_hit" || r.status === "cmdi_hit" || r.status === "waf_bypassed" || r.status === "oob_hit" || r.status === "redirect_hit") job.summary.executed++;
@@ -716,20 +797,51 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
 
     const sendWithRetry = async (
       payload: string, technique: string,
-      onResult: (code: number, body: string, rt: number, bypassed: boolean, bypassUsed?: string, wafWas?: boolean) => void
+      onResult: (code: number, body: string, rt: number, bypassed: boolean, bypassUsed?: string, wafWas?: boolean, connErr?: boolean) => void
     ) => {
       return new Promise<void>((resolve) => {
         sendRequest(config, payload, {}, job.trafficLog, async (code, body, rt, err) => {
-          if (err) { onResult(0, "", 0, false); return resolve(); }
+          // Handle timeout and socket hang up — rebuild attack automatically
+          if (err && (err === "timeout" || err.includes("hang") || err.includes("ECONNRESET") || err.includes("ETIMEDOUT") || err.includes("ECONNREFUSED") || err.includes("ENOTFOUND"))) {
+            if (job.active) {
+              const recovered = await retryOnTimeout(config, payload, job, technique);
+              if (recovered.recovered && recovered.code > 0) {
+                const wafDetected = isWafBlocked(recovered.code, recovered.body);
+                if (wafDetected) {
+                  const retry2 = await smartRetry(config, payload, job, recovered.code, recovered.body, technique);
+                  onResult(retry2.code, retry2.body, retry2.rt, retry2.success, retry2.bypassUsed, true, false);
+                } else {
+                  onResult(recovered.code, recovered.body, recovered.rt, false, undefined, false, false);
+                }
+              } else {
+                job.summary.errors++;
+                onResult(0, "", 0, false, undefined, false, true);
+              }
+            } else {
+              onResult(0, "", 0, false, undefined, false, true);
+            }
+            return resolve();
+          }
+          if (err) {
+            job.summary.errors++;
+            onResult(0, "", 0, false, undefined, false, true);
+            return resolve();
+          }
+          // Reset consecutive errors on success
+          job.learning.consecutiveErrors = 0;
+          // Update rolling average response time
+          if (rt > 0) {
+            job.learning.avgResponseMs = job.learning.avgResponseMs === 0 ? rt : Math.round((job.learning.avgResponseMs * 0.8) + (rt * 0.2));
+          }
           const wafDetected = isWafBlocked(code, body);
           if (wafDetected && job.active) {
             const retry = await smartRetry(config, payload, job, code, body, technique);
-            onResult(retry.code, retry.body, retry.rt, retry.success, retry.bypassUsed, true);
+            onResult(retry.code, retry.body, retry.rt, retry.success, retry.bypassUsed, true, false);
           } else {
-            onResult(code, body, rt, false, undefined, false);
+            onResult(code, body, rt, false, undefined, false, false);
           }
           resolve();
-        }, config.jsonMode);
+        }, config.jsonMode, undefined, job.learning.adaptiveTimeoutMs);
       });
     };
 
