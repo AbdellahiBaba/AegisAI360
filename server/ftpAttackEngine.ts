@@ -25,6 +25,7 @@ export interface FtpJob {
   active: boolean;
   results: FtpResult[];
   summary: { vulns: number; success: number; tested: number; serverBanner?: string; serverType?: string };
+  trafficLog: string[];
 }
 
 const jobs = new Map<string, FtpJob>();
@@ -97,9 +98,13 @@ function parseFtpCode(data: string): number {
   return m ? parseInt(m[1]) : 0;
 }
 
+function tsFmt() { return new Date().toISOString().slice(11, 23); }
+function pushLog(log: string[], lines: string[]) { log.push(...lines); if (log.length > 2000) log.splice(0, log.length - 2000); }
+
 function ftpSession(
   target: string, port: number, timeout: number,
-  handler: (sock: net.Socket, banner: string, write: (cmd: string) => void, onData: (cb: (d: string) => void) => void) => Promise<void>
+  handler: (sock: net.Socket, banner: string, write: (cmd: string) => void, onData: (cb: (d: string) => void) => void) => Promise<void>,
+  trafficLog?: string[]
 ): Promise<void> {
   return new Promise<void>((resolve) => {
     const sock = net.createConnection({ host: target, port, family: 4 });
@@ -108,14 +113,24 @@ function ftpSession(
     let dataHandlers: Array<(d: string) => void> = [];
     let connected = false;
 
+    if (trafficLog) pushLog(trafficLog, [`[${tsFmt()}] • TCP → Connecting to ${target}:${port}...`]);
+
     sock.on("data", (d: Buffer) => {
-      const s = d.toString();
+      const s = d.toString().trim();
+      if (trafficLog) pushLog(trafficLog, [`[${tsFmt()}] ← ${s.replace(/\r?\n/g, " | ")}`]);
       if (!connected) {
-        banner = s.trim();
+        banner = s;
         connected = true;
-        const write = (cmd: string) => { sock.write(cmd + "\r\n"); };
+        const write = (cmd: string) => {
+          if (trafficLog) {
+            const masked = cmd.startsWith("PASS ") ? "PASS ****" : cmd;
+            pushLog(trafficLog, [`[${tsFmt()}] → ${masked}`]);
+          }
+          sock.write(cmd + "\r\n");
+        };
         const onData = (cb: (d: string) => void) => { dataHandlers.push(cb); };
         handler(sock, banner, write, onData).finally(() => {
+          if (trafficLog) pushLog(trafficLog, [`[${tsFmt()}] • TCP × Session closed`]);
           try { sock.destroy(); } catch {}
           resolve();
         });
@@ -124,8 +139,9 @@ function ftpSession(
       }
     });
 
-    sock.on("error", () => resolve());
-    sock.on("timeout", () => { sock.destroy(); resolve(); });
+    sock.on("connect", () => { if (trafficLog) pushLog(trafficLog, [`[${tsFmt()}] • TCP ✓ Connected to ${target}:${port}`]); });
+    sock.on("error", (e) => { if (trafficLog) pushLog(trafficLog, [`[${tsFmt()}] ! TCP ERROR: ${e.message}`]); resolve(); });
+    sock.on("timeout", () => { if (trafficLog) pushLog(trafficLog, [`[${tsFmt()}] ! TCP TIMEOUT (${timeout}ms)`]); sock.destroy(); resolve(); });
     sock.on("close", () => resolve());
   });
 }
@@ -166,7 +182,7 @@ export function startFtpAttack(config: FtpAttackConfig): FtpJob {
   const id = makeId();
   const job: FtpJob = {
     id, config, startTime: Date.now(),
-    active: true, results: [],
+    active: true, results: [], trafficLog: [],
     summary: { vulns: 0, success: 0, tested: 0 },
   };
   jobs.set(id, job);
@@ -178,6 +194,11 @@ export function startFtpAttack(config: FtpAttackConfig): FtpJob {
     if (r.status === "success") job.summary.success++;
   };
 
+  const ftpSess = (
+    target: string, port: number, timeout: number,
+    handler: Parameters<typeof ftpSession>[3]
+  ) => ftpSession(target, port, timeout, handler, job.trafficLog);
+
   const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
   const runAll = async () => {
@@ -187,7 +208,7 @@ export function startFtpAttack(config: FtpAttackConfig): FtpJob {
 
     // 1. Banner Grab + Version Detection
     if (techniques.includes("banner-grab") && job.active) {
-      await ftpSession(config.target, config.port, 5000, async (sock, banner, write, onData) => {
+      await ftpSess(config.target, config.port, 5000, async (sock, banner, write, onData) => {
         job.summary.serverBanner = banner;
         const serverType =
           banner.toLowerCase().includes("vsftpd") ? "vsftpd" :
@@ -253,7 +274,7 @@ export function startFtpAttack(config: FtpAttackConfig): FtpJob {
     if (techniques.includes("path-traversal") && job.active) {
       for (const path of PATH_TRAVERSAL_PATHS) {
         if (!job.active) break;
-        await ftpSession(config.target, config.port, 6000, async (sock, banner, write, onData) => {
+        await ftpSess(config.target, config.port, 6000, async (sock, banner, write, onData) => {
           await new Promise<void>((resolve) => {
             let phase = 0;
             let cwd_resp = "";
@@ -292,7 +313,7 @@ export function startFtpAttack(config: FtpAttackConfig): FtpJob {
     if (techniques.includes("command-injection") && job.active) {
       for (const payload of INJECTION_PAYLOADS) {
         if (!job.active) break;
-        await ftpSession(config.target, config.port, 5000, async (sock, banner, write, onData) => {
+        await ftpSess(config.target, config.port, 5000, async (sock, banner, write, onData) => {
           await new Promise<void>((resolve) => {
             let phase = 0;
             onData((s) => {
@@ -318,7 +339,7 @@ export function startFtpAttack(config: FtpAttackConfig): FtpJob {
 
     // 6. SITE Command Abuse
     if (techniques.includes("site-commands") && job.active) {
-      await ftpSession(config.target, config.port, 8000, async (sock, banner, write, onData) => {
+      await ftpSess(config.target, config.port, 8000, async (sock, banner, write, onData) => {
         await new Promise<void>((resolve) => {
           let phase = 0;
           let cmdIdx = 0;
@@ -355,7 +376,7 @@ export function startFtpAttack(config: FtpAttackConfig): FtpJob {
 
     // 7. FTP Bounce Attack (PORT command)
     if (techniques.includes("bounce-attack") && job.active) {
-      await ftpSession(config.target, config.port, 8000, async (sock, banner, write, onData) => {
+      await ftpSess(config.target, config.port, 8000, async (sock, banner, write, onData) => {
         await new Promise<void>((resolve) => {
           let phase = 0;
           onData((s) => {
@@ -390,7 +411,7 @@ export function startFtpAttack(config: FtpAttackConfig): FtpJob {
     // 8. Directory Listing (root, /etc, /var, /home)
     if (techniques.includes("directory-listing") && job.active) {
       const dirs = ["/", "/etc", "/var", "/home", "/root", "/tmp", "/var/www", "/usr/local"];
-      await ftpSession(config.target, config.port, 8000, async (sock, banner, write, onData) => {
+      await ftpSess(config.target, config.port, 8000, async (sock, banner, write, onData) => {
         await new Promise<void>((resolve) => {
           let phase = 0;
           let dirIdx = 0;

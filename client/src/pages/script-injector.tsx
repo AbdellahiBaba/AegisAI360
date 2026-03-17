@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { apiRequest } from "@/lib/queryClient";
 import { Code, AlertTriangle, Activity, Square, ShieldAlert, CheckCircle, Terminal, Flame } from "lucide-react";
+import { TrafficConsole } from "@/components/traffic-console";
 
 const TECHNIQUES = [
   { id: "all", name: "Full Injection Suite (12 techniques)", desc: "Runs all techniques: reflected XSS, header XSS, SSTI, command injection, HTML injection, prototype pollution, CSTI, CSS injection, log injection, LDAP injection, XPath injection, NoSQL injection" },
@@ -63,6 +64,7 @@ interface JobStatus {
   totalResults: number;
   summary: { executed: number; reflected: number; tested: number };
   config: { target: string; paramName: string; technique: string };
+  trafficLog?: string[];
 }
 
 export default function ScriptInjectorPage() {
@@ -298,6 +300,14 @@ export default function ScriptInjectorPage() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {status && (
+            <TrafficConsole
+              trafficLog={status.trafficLog ?? []}
+              active={isRunning}
+              title="Script Injection — Live Traffic"
+            />
           )}
         </div>
       </div>

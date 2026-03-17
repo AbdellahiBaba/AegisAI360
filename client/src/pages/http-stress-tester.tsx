@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { apiRequest } from "@/lib/queryClient";
 import { Flame, AlertTriangle, Activity, Square, Wifi, Zap, Shield, Server, TrendingUp, Clock } from "lucide-react";
+import { TrafficConsole } from "@/components/traffic-console";
 
 const TECHNIQUES = [
   { id: "combined", name: "Combined Attack (Max Power)", desc: "Simultaneously runs HTTP flood + Slowloris + TLS/pipeline flood using all concurrency threads — maximum server stress" },
@@ -53,6 +54,7 @@ interface JobStatus {
   progressPct: number;
   metrics: Metrics;
   config: { target: string; technique: string; concurrency: number; useHttps: boolean };
+  trafficLog?: string[];
 }
 
 function fmtBytes(b: number) {
@@ -324,6 +326,14 @@ export default function HttpStressTesterPage() {
           </Card>
         </div>
       </div>
+
+      {status && (
+        <TrafficConsole
+          trafficLog={status.trafficLog ?? []}
+          active={isRunning}
+          title="HTTP Stress Tester — Live Traffic"
+        />
+      )}
     </div>
   );
 }

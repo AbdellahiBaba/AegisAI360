@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { apiRequest } from "@/lib/queryClient";
 import { Network, AlertTriangle, Activity, Square, ShieldAlert, CheckCircle, Info } from "lucide-react";
+import { TrafficConsole } from "@/components/traffic-console";
 
 const TECHNIQUES = [
   { id: "all", name: "Full Protocol Suite (12 protocols)", desc: "SSH, SMTP, SNMP, Redis, MongoDB, Telnet, RDP, MySQL, SMB, Memcached, LDAP, VNC — tests all simultaneously for maximum coverage" },
@@ -59,6 +60,7 @@ export default function ProtocolAttacker() {
   const [active, setActive] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [trafficLog, setTrafficLog] = useState<string[]>([]);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -72,6 +74,7 @@ export default function ProtocolAttacker() {
       setSummary(data.summary ?? null);
       setActive(data.active ?? false);
       setElapsed(data.elapsed ?? 0);
+      if (data.trafficLog) setTrafficLog(data.trafficLog);
       if (!data.active) {
         stopPolling();
         setJobId(null);
@@ -261,6 +264,14 @@ export default function ProtocolAttacker() {
               </div>
             </CardContent>
           </Card>
+
+          {(results.length > 0 || active) && (
+            <TrafficConsole
+              trafficLog={trafficLog}
+              active={active}
+              title="Protocol Suite Attacker — Live Traffic"
+            />
+          )}
         </div>
       </div>
     </div>

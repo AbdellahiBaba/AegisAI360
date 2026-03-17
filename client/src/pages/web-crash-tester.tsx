@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { apiRequest } from "@/lib/queryClient";
 import { Bomb, AlertTriangle, Activity, Shield, ChevronRight, Square, CheckCircle, XCircle, AlertCircle, Clock } from "lucide-react";
+import { TrafficConsole } from "@/components/traffic-console";
 
 const TECHNIQUES = [
   { id: "all", name: "Full Suite", desc: "Run all crash techniques in sequence" },
@@ -47,6 +48,7 @@ interface JobStatus {
   totalResults: number;
   crashIndicators: number;
   config: { technique: string; target: string; duration: number };
+  trafficLog?: string[];
 }
 
 const STATUS_ICON: Record<string, JSX.Element> = {
@@ -236,6 +238,14 @@ export default function WebCrashTesterPage() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {status && (
+            <TrafficConsole
+              trafficLog={status.trafficLog ?? []}
+              active={isRunning}
+              title="Web Crash Tester — Live Traffic"
+            />
           )}
         </div>
       </div>

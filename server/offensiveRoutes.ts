@@ -51,6 +51,7 @@ router.get("/crash/status/:id", (req: Request, res: Response) => {
     totalResults: job.results.length,
     crashIndicators: job.results.filter((r) => r.status === "crash_indicator").length,
     config: { technique: job.config.technique, target: job.config.target, duration: job.config.duration },
+    trafficLog: (job.trafficLog ?? []).slice(-300),
   });
 });
 
@@ -93,6 +94,7 @@ router.get("/sqli/status/:id", (req: Request, res: Response) => {
     summary: job.summary,
     dbTypeDetected: job.dbTypeDetected,
     config: { target: job.config.target, paramName: job.config.paramName, technique: job.config.technique },
+    trafficLog: (job.trafficLog ?? []).slice(-300),
   });
 });
 
@@ -132,6 +134,7 @@ router.get("/auth/status/:id", (req: Request, res: Response) => {
     totalResults: job.results.length,
     summary: job.summary,
     config: { target: job.config.target, loginPath: job.config.loginPath, technique: job.config.technique },
+    trafficLog: (job.trafficLog ?? []).slice(-300),
   });
 });
 
@@ -170,6 +173,7 @@ router.get("/inject/status/:id", (req: Request, res: Response) => {
     totalResults: job.results.length,
     summary: job.summary,
     config: { target: job.config.target, paramName: job.config.paramName, technique: job.config.technique },
+    trafficLog: (job.trafficLog ?? []).slice(-300),
   });
 });
 
@@ -208,6 +212,7 @@ router.get("/stress/status/:id", (req: Request, res: Response) => {
     progressPct: Math.min(100, Math.floor((elapsed / job.config.duration) * 100)),
     metrics: job.metrics,
     config: { target: job.config.target, technique: job.config.technique, concurrency: job.config.concurrency, useHttps: job.config.useHttps },
+    trafficLog: (job.log ?? []).slice(-300),
   });
 });
 
@@ -246,6 +251,7 @@ router.get("/ftp/status/:id", (req: Request, res: Response) => {
     totalResults: job.results.length,
     summary: job.summary,
     config: { target: job.config.target, port: job.config.port, technique: job.config.technique },
+    trafficLog: (job.trafficLog ?? []).slice(-300),
   });
 });
 
@@ -281,6 +287,7 @@ router.get("/protocol/status/:id", (req: Request, res: Response) => {
     totalResults: job.results.length,
     summary: job.summary,
     config: { target: job.config.target, technique: job.config.technique },
+    trafficLog: (job.trafficLog ?? []).slice(-300),
   });
 });
 

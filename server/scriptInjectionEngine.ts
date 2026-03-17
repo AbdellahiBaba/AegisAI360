@@ -30,6 +30,7 @@ export interface InjectionJob {
   active: boolean;
   results: InjectionResult[];
   summary: { executed: number; reflected: number; tested: number };
+  trafficLog: string[];
 }
 
 const jobs = new Map<string, InjectionJob>();
@@ -198,10 +199,17 @@ const HTML_INJECTION_PAYLOADS = [
   `<link rel="stylesheet" href="http://evil.com/evil.css">`,
 ];
 
+function tsFmt() { return new Date().toISOString().slice(11, 23); }
+function pushTraffic(log: string[], lines: string[]) {
+  log.push(...lines);
+  if (log.length > 2000) log.splice(0, log.length - 2000);
+}
+
 function sendRequest(
   config: ScriptInjectionConfig,
   payload: string,
   extraHeaders: Record<string, string> = {},
+  trafficLog: string[],
   cb: (code: number, body: string, rt: number, err?: string) => void
 ) {
   const isHttps = config.port === 443;
@@ -218,8 +226,9 @@ function sendRequest(
   }
 
   const headers: Record<string, string> = {
-    "User-Agent": "Mozilla/5.0 (compatible; SecurityScanner/1.0)",
+    "User-Agent": "Mozilla/5.0 (compatible; AegisAI360/2.0; +https://aegisai360.com)",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "X-Forwarded-For": `10.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`,
     ...extraHeaders,
   };
   if (reqBody) {
@@ -227,16 +236,44 @@ function sendRequest(
     headers["Content-Length"] = String(reqBody.length);
   }
 
+  const ts = tsFmt();
+  const reqLines = [
+    `[${ts}] ─────── NEW REQUEST ───────────────────────────────`,
+    `[${ts}] → ${config.method} ${path} HTTP/1.1`,
+    `[${ts}] → Host: ${config.target}:${config.port}`,
+    ...Object.entries(headers).map(([k, v]) => `[${ts}] → ${k}: ${v}`),
+    `[${ts}] →`,
+  ];
+  if (reqBody) reqLines.push(`[${ts}] → ${reqBody.slice(0, 400)}`);
+  pushTraffic(trafficLog, reqLines);
+
   const req = mod.request({
     hostname: config.target, port: config.port, path,
     method: config.method, headers, timeout: 10000, rejectUnauthorized: false,
   }, (res) => {
     let data = "";
     res.on("data", (c: Buffer) => { data += c.toString().slice(0, 4096); });
-    res.on("end", () => cb(res.statusCode ?? 0, data, Date.now() - start));
+    res.on("end", () => {
+      const ts2 = tsFmt();
+      const respLines = [
+        `[${ts2}] ← HTTP/1.1 ${res.statusCode} ${res.statusMessage ?? ""}`,
+        ...Object.entries(res.headers).map(([k, v]) => `[${ts2}] ← ${k}: ${Array.isArray(v) ? v.join(", ") : v}`),
+        `[${ts2}] ←`,
+        `[${ts2}] ← ${data.slice(0, 500).replace(/\r?\n/g, " ↵ ")}`,
+        `[${ts2}] • RTT: ${Date.now() - start}ms`,
+      ];
+      pushTraffic(trafficLog, respLines);
+      cb(res.statusCode ?? 0, data, Date.now() - start);
+    });
   });
-  req.on("timeout", () => { req.destroy(); cb(0, "", 10000, "timeout"); });
-  req.on("error", (e) => cb(0, "", 0, e.message));
+  req.on("timeout", () => {
+    pushTraffic(trafficLog, [`[${tsFmt()}] ! TIMEOUT after 10000ms — server did not respond`]);
+    req.destroy(); cb(0, "", 10000, "timeout");
+  });
+  req.on("error", (e) => {
+    pushTraffic(trafficLog, [`[${tsFmt()}] ! ERROR: ${e.message}`]);
+    cb(0, "", 0, e.message);
+  });
   if (reqBody) req.write(reqBody);
   req.end();
 }
@@ -269,7 +306,7 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
   const id = makeId();
   const job: InjectionJob = {
     id, config, startTime: Date.now(),
-    active: true, results: [],
+    active: true, results: [], trafficLog: [],
     summary: { executed: 0, reflected: 0, tested: 0 },
   };
   jobs.set(id, job);
@@ -292,7 +329,7 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
       for (const payload of XSS_REFLECTED_PAYLOADS) {
         if (!job.active) break;
         await new Promise<void>((resolve) => {
-          sendRequest(config, payload, {}, (code, body, rt, err) => {
+          sendRequest(config, payload, {}, job.trafficLog, (code, body, rt, err) => {
             if (err) {
               addResult({ technique: "xss-reflected", payload, status: "error", responseTime: rt, evidence: err, severity: "info", timestamp: Date.now() });
               return resolve();
@@ -311,7 +348,7 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
         if (!job.active) break;
         await new Promise<void>((resolve) => {
           const extraHeaders: Record<string, string> = { [header]: value };
-          sendRequest(config, "probe", extraHeaders, (code, body, rt, err) => {
+          sendRequest(config, "probe", extraHeaders, job.trafficLog, (code, body, rt, err) => {
             if (err) {
               addResult({ technique: "xss-headers", payload: `${header}: ${value}`, status: "error", evidence: err, severity: "info", timestamp: Date.now() });
               return resolve();
@@ -329,7 +366,7 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
       for (const { payload, expect, engine } of SSTI_PAYLOADS) {
         if (!job.active) break;
         await new Promise<void>((resolve) => {
-          sendRequest(config, payload, {}, (code, body, rt, err) => {
+          sendRequest(config, payload, {}, job.trafficLog, (code, body, rt, err) => {
             if (err) {
               addResult({ technique: "ssti", payload, status: "error", evidence: err, severity: "info", timestamp: Date.now() });
               return resolve();
@@ -353,7 +390,7 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
         if (!job.active) break;
         await new Promise<void>((resolve) => {
           const before = Date.now();
-          sendRequest(config, payload, {}, (code, body, rt, err) => {
+          sendRequest(config, payload, {}, job.trafficLog, (code, body, rt, err) => {
             if (err) {
               addResult({ technique: "cmdi", payload, status: "error", evidence: err, severity: "info", timestamp: Date.now() });
               return resolve();
@@ -384,7 +421,7 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
       for (const payload of HTML_INJECTION_PAYLOADS) {
         if (!job.active) break;
         await new Promise<void>((resolve) => {
-          sendRequest(config, payload, {}, (code, body, rt, err) => {
+          sendRequest(config, payload, {}, job.trafficLog, (code, body, rt, err) => {
             if (err) {
               addResult({ technique: "html-injection", payload, status: "error", evidence: err, severity: "info", timestamp: Date.now() });
               return resolve();
@@ -411,7 +448,7 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
         for (const payload of PROTOTYPE_POLLUTION_PAYLOADS) {
           if (!job.active) break;
           await new Promise<void>((resolve) => {
-            sendRequest(config, payload, {}, (code, body, rt, err) => {
+            sendRequest(config, payload, {}, job.trafficLog, (code, body, rt, err) => {
               if (err) { addResult({ technique: "prototype-pollution", payload, status: "error", evidence: err, severity: "info", timestamp: Date.now() }); return resolve(); }
               const hit = body.includes("isAdmin") || body.includes("\"admin\":true") || body.toLowerCase().includes("privilege");
               addResult({ technique: "prototype-pollution", payload, status: hit ? "executed" : "not_reflected", statusCode: code, responseTime: rt, evidence: hit ? `Prototype pollution hit — server merged attacker properties: ${body.slice(0, 200)}` : undefined, severity: hit ? "critical" : "info", timestamp: Date.now() });
@@ -425,7 +462,7 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
         for (const payload of CSTI_PAYLOADS) {
           if (!job.active) break;
           await new Promise<void>((resolve) => {
-            sendRequest(config, payload, {}, (code, body, rt, err) => {
+            sendRequest(config, payload, {}, job.trafficLog, (code, body, rt, err) => {
               if (err) { addResult({ technique: "csti", payload, status: "error", evidence: err, severity: "info", timestamp: Date.now() }); return resolve(); }
               const hit = body.includes("49") || body.includes("7777777") || body.includes("uid=");
               addResult({ technique: "csti", payload, status: hit ? "executed" : "not_reflected", statusCode: code, responseTime: rt, evidence: hit ? `CLIENT-SIDE TEMPLATE INJECTION — Template engine evaluated payload: ${body.slice(0, 300)}` : undefined, severity: hit ? "critical" : "info", timestamp: Date.now() });
@@ -439,7 +476,7 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
         for (const payload of CSS_INJECTION_PAYLOADS) {
           if (!job.active) break;
           await new Promise<void>((resolve) => {
-            sendRequest(config, payload, {}, (code, body, rt, err) => {
+            sendRequest(config, payload, {}, job.trafficLog, (code, body, rt, err) => {
               if (err) { addResult({ technique: "css-injection", payload, status: "error", evidence: err, severity: "info", timestamp: Date.now() }); return resolve(); }
               const reflected = body.includes(payload) || body.includes("expression(") || body.includes("@import");
               addResult({ technique: "css-injection", payload, status: reflected ? "reflected_unescaped" : "not_reflected", statusCode: code, responseTime: rt, evidence: reflected ? `CSS injection reflected — can exfiltrate data or execute via expression()` : undefined, severity: reflected ? "high" : "info", timestamp: Date.now() });
@@ -453,7 +490,7 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
         for (const payload of LOG_INJECTION_PAYLOADS) {
           if (!job.active) break;
           await new Promise<void>((resolve) => {
-            sendRequest(config, payload, {}, (code, body, rt, err) => {
+            sendRequest(config, payload, {}, job.trafficLog, (code, body, rt, err) => {
               if (err) { addResult({ technique: "log-injection", payload, status: "error", evidence: err, severity: "info", timestamp: Date.now() }); return resolve(); }
               const reflected = body.includes("injected-header") || body.includes("logged in") || code === 400;
               addResult({ technique: "log-injection", payload, status: reflected ? "reflected_unescaped" : "not_reflected", statusCode: code, responseTime: rt, evidence: reflected ? `CRLF injection — log forging or response splitting possible` : undefined, severity: reflected ? "high" : "info", timestamp: Date.now() });
@@ -467,7 +504,7 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
         for (const payload of LDAP_INJECTION_PAYLOADS) {
           if (!job.active) break;
           await new Promise<void>((resolve) => {
-            sendRequest(config, payload, {}, (code, body, rt, err) => {
+            sendRequest(config, payload, {}, job.trafficLog, (code, body, rt, err) => {
               if (err) { addResult({ technique: "ldap-injection", payload, status: "error", evidence: err, severity: "info", timestamp: Date.now() }); return resolve(); }
               const vuln = body.toLowerCase().includes("ldap") || body.toLowerCase().includes("directory") || code === 500;
               addResult({ technique: "ldap-injection", payload, status: vuln ? "executed" : "not_reflected", statusCode: code, responseTime: rt, evidence: vuln ? `LDAP injection indicator — server may pass input to LDAP query: ${body.slice(0, 200)}` : undefined, severity: vuln ? "critical" : "info", timestamp: Date.now() });
@@ -481,7 +518,7 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
         for (const payload of XPATH_INJECTION_PAYLOADS) {
           if (!job.active) break;
           await new Promise<void>((resolve) => {
-            sendRequest(config, payload, {}, (code, body, rt, err) => {
+            sendRequest(config, payload, {}, job.trafficLog, (code, body, rt, err) => {
               if (err) { addResult({ technique: "xpath-injection", payload, status: "error", evidence: err, severity: "info", timestamp: Date.now() }); return resolve(); }
               const vuln = body.toLowerCase().includes("xpath") || body.toLowerCase().includes("xml") || code === 500;
               addResult({ technique: "xpath-injection", payload, status: vuln ? "executed" : "not_reflected", statusCode: code, responseTime: rt, evidence: vuln ? `XPath injection indicator — XML/XPath tree extraction possible` : undefined, severity: vuln ? "critical" : "info", timestamp: Date.now() });
@@ -495,7 +532,7 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
         for (const payload of NOSQL_PAYLOADS) {
           if (!job.active) break;
           await new Promise<void>((resolve) => {
-            sendRequest(config, payload, {}, (code, body, rt, err) => {
+            sendRequest(config, payload, {}, job.trafficLog, (code, body, rt, err) => {
               if (err) { addResult({ technique: "nosql-injection", payload, status: "error", evidence: err, severity: "info", timestamp: Date.now() }); return resolve(); }
               const authBypass = code >= 200 && code < 400 && (body.toLowerCase().includes("dashboard") || body.toLowerCase().includes("token") || body.toLowerCase().includes("welcome"));
               const vuln = authBypass || body.toLowerCase().includes("mongo") || body.toLowerCase().includes("objectid");

@@ -31,6 +31,7 @@ export interface SQLiJob {
   results: SQLiResult[];
   summary: { vulnerable: number; potential: number; tested: number };
   dbTypeDetected?: string;
+  trafficLog: string[];
 }
 
 const jobs = new Map<string, SQLiJob>();
@@ -102,9 +103,13 @@ function isVulnerable(body: string): boolean {
   return Object.values(ERROR_SIGNATURES).flat().some((s) => lower.includes(s));
 }
 
+function tsFmt() { return new Date().toISOString().slice(11, 23); }
+function pushLog(log: string[], lines: string[]) { log.push(...lines); if (log.length > 2000) log.splice(0, log.length - 2000); }
+
 function sendRequest(
   config: SQLiConfig,
   payload: string,
+  trafficLog: string[],
   cb: (code: number, body: string, rt: number, err?: string) => void
 ) {
   const isHttps = config.port === 443;
@@ -113,42 +118,62 @@ function sendRequest(
 
   let reqOpts: http.RequestOptions;
   let body: string | null = null;
+  let reqPath: string;
 
   if (config.method === "GET") {
     const sep = config.path.includes("?") ? "&" : "?";
+    reqPath = `${config.path}${sep}${config.paramName}=${encodeURIComponent(payload)}`;
     reqOpts = {
-      hostname: config.target,
-      port: config.port,
-      path: `${config.path}${sep}${config.paramName}=${encodeURIComponent(payload)}`,
-      method: "GET",
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; SecurityScanner/1.0)" },
-      timeout: 10000,
-      rejectUnauthorized: false,
+      hostname: config.target, port: config.port, path: reqPath, method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; AegisAI360/2.0; SQLi-Scanner)",
+        "X-Forwarded-For": `10.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.1`,
+      },
+      timeout: 10000, rejectUnauthorized: false,
     };
   } else {
     body = `${config.paramName}=${encodeURIComponent(payload)}`;
+    reqPath = config.path;
     reqOpts = {
-      hostname: config.target,
-      port: config.port,
-      path: config.path,
-      method: "POST",
+      hostname: config.target, port: config.port, path: reqPath, method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         "Content-Length": String(body.length),
-        "User-Agent": "Mozilla/5.0 (compatible; SecurityScanner/1.0)",
+        "User-Agent": "Mozilla/5.0 (compatible; AegisAI360/2.0; SQLi-Scanner)",
+        "X-Forwarded-For": `10.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.1`,
       },
-      timeout: 10000,
-      rejectUnauthorized: false,
+      timeout: 10000, rejectUnauthorized: false,
     };
   }
+
+  const ts = tsFmt();
+  const reqLines = [
+    `[${ts}] ─── SQLi PROBE ─────────────────────────────────────`,
+    `[${ts}] → ${config.method} ${reqPath} HTTP/1.1`,
+    `[${ts}] → Host: ${config.target}:${config.port}`,
+    ...Object.entries(reqOpts.headers ?? {}).map(([k, v]) => `[${ts}] → ${k}: ${v}`),
+    `[${ts}] →`,
+  ];
+  if (body) reqLines.push(`[${ts}] → ${body.slice(0, 400)}`);
+  pushLog(trafficLog, reqLines);
 
   const req = mod.request(reqOpts, (res) => {
     let data = "";
     res.on("data", (chunk: Buffer) => { data += chunk.toString().slice(0, 2048); });
-    res.on("end", () => cb(res.statusCode ?? 0, data, Date.now() - start));
+    res.on("end", () => {
+      const ts2 = tsFmt();
+      pushLog(trafficLog, [
+        `[${ts2}] ← HTTP/1.1 ${res.statusCode} ${res.statusMessage ?? ""}`,
+        ...Object.entries(res.headers).map(([k, v]) => `[${ts2}] ← ${k}: ${Array.isArray(v) ? v.join(", ") : v}`),
+        `[${ts2}] ←`,
+        `[${ts2}] ← ${data.slice(0, 500).replace(/\r?\n/g, " ↵ ")}`,
+        `[${ts2}] • RTT: ${Date.now() - start}ms`,
+      ]);
+      cb(res.statusCode ?? 0, data, Date.now() - start);
+    });
   });
-  req.on("timeout", () => { req.destroy(); cb(0, "", 10000, "timeout"); });
-  req.on("error", (e) => cb(0, "", 0, e.message));
+  req.on("timeout", () => { pushLog(trafficLog, [`[${tsFmt()}] ! TIMEOUT 10000ms`]); req.destroy(); cb(0, "", 10000, "timeout"); });
+  req.on("error", (e) => { pushLog(trafficLog, [`[${tsFmt()}] ! ERROR: ${e.message}`]); cb(0, "", 0, e.message); });
   if (body) req.write(body);
   req.end();
 }
@@ -158,7 +183,7 @@ export function startSQLiScan(config: SQLiConfig): SQLiJob {
   const job: SQLiJob = {
     id, config,
     startTime: Date.now(),
-    active: true, results: [],
+    active: true, results: [], trafficLog: [],
     summary: { vulnerable: 0, potential: 0, tested: 0 },
   };
   jobs.set(id, job);
@@ -196,7 +221,7 @@ export function startSQLiScan(config: SQLiConfig): SQLiJob {
       if (!job.active) break;
 
       await new Promise<void>((resolve) => {
-        sendRequest(config, payload, (code, body, rt, err) => {
+        sendRequest(config, payload, job.trafficLog, (code, body, rt, err) => {
           if (err) {
             addResult({ technique, payload, status: "error", responseTime: rt, evidence: err, timestamp: Date.now() });
             return resolve();

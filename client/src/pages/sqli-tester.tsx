@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { apiRequest } from "@/lib/queryClient";
 import { Database, AlertTriangle, Activity, Square, ChevronRight, ShieldAlert, CheckCircle, XCircle } from "lucide-react";
+import { TrafficConsole } from "@/components/traffic-console";
 
 const TECHNIQUES = [
   { id: "all", name: "All Techniques", desc: "Run error-based, UNION, boolean-blind, and time-based in sequence" },
@@ -40,6 +41,7 @@ interface JobStatus {
   summary: { vulnerable: number; potential: number; tested: number };
   dbTypeDetected?: string;
   config: { target: string; paramName: string; technique: string };
+  trafficLog?: string[];
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -264,6 +266,14 @@ export default function SQLiTesterPage() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {status && (
+            <TrafficConsole
+              trafficLog={status.trafficLog ?? []}
+              active={isRunning}
+              title="SQLi Tester — Live Traffic"
+            />
           )}
         </div>
       </div>

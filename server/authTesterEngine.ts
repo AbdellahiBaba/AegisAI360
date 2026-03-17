@@ -31,6 +31,7 @@ export interface AuthTesterJob {
   active: boolean;
   results: AuthTestResult[];
   summary: { bypassed: number; found: number; tested: number; lockoutDetected: boolean };
+  trafficLog: string[];
 }
 
 const jobs = new Map<string, AuthTesterJob>();
@@ -74,11 +75,15 @@ function isBypass(code: number, body: string, referer: string): boolean {
   return false;
 }
 
+function tsFmt() { return new Date().toISOString().slice(11, 23); }
+function pushLog(log: string[], lines: string[]) { log.push(...lines); if (log.length > 2000) log.splice(0, log.length - 2000); }
+
 function sendAuth(
   config: AuthTesterConfig,
   username: string,
   password: string,
   extraHeaders: Record<string, string> = {},
+  trafficLog: string[],
   cb: (code: number, body: string, headers: Record<string, string | string[]>, rt: number, err?: string) => void
 ) {
   const isHttps = config.port === 443;
@@ -86,23 +91,51 @@ function sendAuth(
   const body = `${config.usernameField}=${encodeURIComponent(username)}&${config.passwordField}=${encodeURIComponent(password)}`;
   const start = Date.now();
 
+  const reqHeaders: Record<string, string> = {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "Content-Length": String(body.length),
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "X-Forwarded-For": `10.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.1`,
+    ...extraHeaders,
+  };
+
+  const ts = tsFmt();
+  pushLog(trafficLog, [
+    `[${ts}] ─── AUTH ATTEMPT ────────────────────────────────────`,
+    `[${ts}] → POST ${config.loginPath} HTTP/1.1`,
+    `[${ts}] → Host: ${config.target}:${config.port}`,
+    ...Object.entries(reqHeaders).map(([k, v]) => `[${ts}] → ${k}: ${v}`),
+    `[${ts}] →`,
+    `[${ts}] → ${body.slice(0, 400)}`,
+  ]);
+
   const req = mod.request({
     hostname: config.target, port: config.port, path: config.loginPath,
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "Content-Length": String(body.length),
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      ...extraHeaders,
-    },
+    method: "POST", headers: reqHeaders,
     timeout: 8000, rejectUnauthorized: false,
   }, (res) => {
     let data = "";
     res.on("data", (c: Buffer) => { data += c.toString().slice(0, 2048); });
-    res.on("end", () => cb(res.statusCode ?? 0, data, res.headers as any, Date.now() - start));
+    res.on("end", () => {
+      const ts2 = tsFmt();
+      pushLog(trafficLog, [
+        `[${ts2}] ← HTTP/1.1 ${res.statusCode} ${res.statusMessage ?? ""}`,
+        ...Object.entries(res.headers).map(([k, v]) => `[${ts2}] ← ${k}: ${Array.isArray(v) ? v.join(", ") : v}`),
+        `[${ts2}] ←`,
+        `[${ts2}] ← ${data.slice(0, 500).replace(/\r?\n/g, " ↵ ")}`,
+        `[${ts2}] • RTT: ${Date.now() - start}ms`,
+      ]);
+      cb(res.statusCode ?? 0, data, res.headers as any, Date.now() - start);
+    });
   });
-  req.on("timeout", () => { req.destroy(); cb(0, "", {}, 8000, "timeout"); });
-  req.on("error", (e) => cb(0, "", {}, 0, e.message));
+  req.on("timeout", () => {
+    pushLog(trafficLog, [`[${tsFmt()}] ! TIMEOUT 8000ms`]);
+    req.destroy(); cb(0, "", {}, 8000, "timeout");
+  });
+  req.on("error", (e) => {
+    pushLog(trafficLog, [`[${tsFmt()}] ! ERROR: ${e.message}`]);
+    cb(0, "", {}, 0, e.message);
+  });
   req.write(body);
   req.end();
 }
@@ -111,7 +144,7 @@ export function startAuthTest(config: AuthTesterConfig): AuthTesterJob {
   const id = makeId();
   const job: AuthTesterJob = {
     id, config, startTime: Date.now(),
-    active: true, results: [],
+    active: true, results: [], trafficLog: [],
     summary: { bypassed: 0, found: 0, tested: 0, lockoutDetected: false },
   };
   jobs.set(id, job);
@@ -138,7 +171,7 @@ export function startAuthTest(config: AuthTesterConfig): AuthTesterJob {
       for (const { u, p } of credList) {
         if (!job.active) break;
         await new Promise<void>((resolve) => {
-          sendAuth(config, u, p, {}, (code, body, headers, rt, err) => {
+          sendAuth(config, u, p, {}, job.trafficLog, (code, body, headers, rt, err) => {
             if (err) {
               addResult({ technique: "default-creds", username: u, password: p, status: "error", evidence: err, timestamp: Date.now() });
               return resolve();
@@ -163,7 +196,7 @@ export function startAuthTest(config: AuthTesterConfig): AuthTesterJob {
       for (const { u, p } of AUTH_BYPASS_PAYLOADS) {
         if (!job.active) break;
         await new Promise<void>((resolve) => {
-          sendAuth(config, u, p, {}, (code, body, headers, rt, err) => {
+          sendAuth(config, u, p, {}, job.trafficLog, (code, body, headers, rt, err) => {
             if (err) {
               addResult({ technique: "sqli-bypass", username: u, password: p, status: "error", evidence: err, timestamp: Date.now() });
               return resolve();
@@ -191,7 +224,7 @@ export function startAuthTest(config: AuthTesterConfig): AuthTesterJob {
         for (const wp of wrongPasses) {
           if (!job.active) break;
           await new Promise<void>((resolve) => {
-            sendAuth(config, user, wp, {}, (code, body, headers, rt, err) => {
+            sendAuth(config, user, wp, {}, job.trafficLog, (code, body, headers, rt, err) => {
               if (code === 429 || body.toLowerCase().includes("locked") || body.toLowerCase().includes("too many")) {
                 lockoutTriggered = true;
                 job.summary.lockoutDetected = true;
@@ -209,7 +242,7 @@ export function startAuthTest(config: AuthTesterConfig): AuthTesterJob {
 
           await new Promise<void>((resolve) => {
             const bypassHeaders = { "X-Forwarded-For": "1.2.3.4", "X-Real-IP": "5.6.7.8", "X-Originating-IP": "9.10.11.12" };
-            sendAuth(config, user, "wrong", bypassHeaders, (code, body, headers, rt, err) => {
+            sendAuth(config, user, "wrong", bypassHeaders, job.trafficLog, (code, body, headers, rt, err) => {
               addResult({ technique: "lockout-bypass", username: user, password: "bypass-headers", status: "info", statusCode: code, responseTime: rt, evidence: `Header spoofing test — if IP-based lockout can be bypassed using X-Forwarded-For manipulation`, timestamp: Date.now() });
               resolve();
             });
@@ -223,7 +256,7 @@ export function startAuthTest(config: AuthTesterConfig): AuthTesterJob {
       for (let i = 0; i < 20; i++) {
         if (!job.active) break;
         await new Promise<void>((resolve) => {
-          sendAuth(config, "testuser", "testpass", {}, (code, body, headers, rt, err) => {
+          sendAuth(config, "testuser", "testpass", {}, job.trafficLog, (code, body, headers, rt, err) => {
             results.push(code);
             if (i === 19) {
               const rateLimited = results.some((c) => c === 429);

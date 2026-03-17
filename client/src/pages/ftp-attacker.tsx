@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { apiRequest } from "@/lib/queryClient";
 import { HardDrive, AlertTriangle, Activity, Square, ShieldAlert, CheckCircle, Info, Wifi } from "lucide-react";
+import { TrafficConsole } from "@/components/traffic-console";
 
 const TECHNIQUES = [
   { id: "all", name: "Full FTP Attack Suite", desc: "Runs all 10 FTP attack techniques — banner grab, anonymous login, default creds, path traversal, command injection, SITE commands, PASV flood, FTP bounce, directory listing, connection flood" },
@@ -53,6 +54,7 @@ export default function FtpAttacker() {
   const [active, setActive] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [trafficLog, setTrafficLog] = useState<string[]>([]);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -66,6 +68,7 @@ export default function FtpAttacker() {
       setSummary(data.summary ?? null);
       setActive(data.active ?? false);
       setElapsed(data.elapsed ?? 0);
+      if (data.trafficLog) setTrafficLog(data.trafficLog);
       if (!data.active) {
         stopPolling();
         setJobId(null);
@@ -239,6 +242,14 @@ export default function FtpAttacker() {
               </div>
             </CardContent>
           </Card>
+
+          {(results.length > 0 || active) && (
+            <TrafficConsole
+              trafficLog={trafficLog}
+              active={active}
+              title="FTP Attack Suite — Live Traffic"
+            />
+          )}
         </div>
       </div>
     </div>
