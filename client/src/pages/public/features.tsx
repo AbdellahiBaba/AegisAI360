@@ -10,7 +10,7 @@ import {
   Monitor, Scan, Mail, Search, Key, Wifi,
   AlertTriangle, Terminal, Lock, Eye,
   Network, BarChart3, Bug, Crosshair, FileSearch,
-  Fingerprint, Layers, Zap
+  Fingerprint, Layers, Zap, Package, Radio
 } from "lucide-react";
 
 const featureCategories = [
@@ -34,6 +34,9 @@ const featureCategories = [
       { icon: Lock, titleKey: "feat.sslTitle", descKey: "feat.sslDesc", capKeys: ["feat.sslC1", "feat.sslC2", "feat.sslC3", "feat.sslC4"] },
       { icon: Key, titleKey: "feat.passwordTitle", descKey: "feat.passwordDesc", capKeys: ["feat.passwordC1", "feat.passwordC2", "feat.passwordC3", "feat.passwordC4"] },
       { icon: Mail, titleKey: "feat.emailTitle", descKey: "feat.emailDesc", capKeys: ["feat.emailC1", "feat.emailC2", "feat.emailC3", "feat.emailC4"] },
+      { icon: Zap, titleKey: "feat.ddosSimTitle", descKey: "feat.ddosSimDesc", capKeys: ["feat.ddosSimC1", "feat.ddosSimC2", "feat.ddosSimC3", "feat.ddosSimC4"] },
+      { icon: Radio, titleKey: "feat.wifiAttackTitle", descKey: "feat.wifiAttackDesc", capKeys: ["feat.wifiAttackC1", "feat.wifiAttackC2", "feat.wifiAttackC3", "feat.wifiAttackC4"] },
+      { icon: Package, titleKey: "feat.packetCraftTitle", descKey: "feat.packetCraftDesc", capKeys: ["feat.packetCraftC1", "feat.packetCraftC2", "feat.packetCraftC3", "feat.packetCraftC4"] },
     ],
   },
   {

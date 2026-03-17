@@ -76,6 +76,9 @@ import WebsiteRecoveryPage from "@/pages/website-recovery";
 import VulnerabilityTracking from "@/pages/vulnerability-tracking";
 import ThreatHuntingPage from "@/pages/threat-hunting";
 import AiAgent from "@/pages/ai-agent";
+import DdosSimulatorPage from "@/pages/ddos-simulator";
+import WifiAttackPage from "@/pages/wifi-attack";
+import PacketCrafterPage from "@/pages/packet-crafter";
 import { PwaInstallBanner } from "@/components/pwa-install-banner";
 
 function PlanGate({ feature, children }: { feature: string; children: React.ReactNode }) {
@@ -172,6 +175,9 @@ function AppRouter() {
       <Route path="/threat-hunting" component={gated("allowThreatIntel", ThreatHuntingPage)} />
       <Route path="/vulnerability-tracking" component={gated("allowThreatIntel", VulnerabilityTracking)} />
       <Route path="/ai-agent" component={gated("allowAegisAgent", AiAgent)} />
+      <Route path="/ddos-simulator" component={gated("allowThreatIntel", DdosSimulatorPage)} />
+      <Route path="/wifi-attack" component={gated("allowThreatIntel", WifiAttackPage)} />
+      <Route path="/packet-crafter" component={gated("allowThreatIntel", PacketCrafterPage)} />
       <Route component={NotFound} />
     </Switch>
   );

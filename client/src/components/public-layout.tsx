@@ -112,8 +112,10 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       <footer className="border-t border-primary/10 bg-background">
         <div className="max-w-7xl mx-auto px-6 py-10">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
               <AegisLogo size={28} />
+              <p className="text-xs font-semibold text-foreground">FAHADERA LLC</p>
+              <p className="text-xs text-muted-foreground">8 The Green Suite B, Dover, Delaware, US</p>
               <p className="text-xs text-muted-foreground">
                 {t("landing.copyright")}
               </p>

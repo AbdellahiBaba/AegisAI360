@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { PublicLayout } from "@/components/public-layout";
 import { Card } from "@/components/ui/card";
-import { Shield, Lightbulb, Award, Scale } from "lucide-react";
+import { Shield, Lightbulb, Award, Scale, Building2, MapPin } from "lucide-react";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const valueIcons = [Shield, Lightbulb, Award, Scale];
@@ -56,6 +56,39 @@ export default function AboutPage() {
           <p className="text-muted-foreground leading-relaxed">
             {t("public.aboutTeamDesc")}
           </p>
+        </div>
+      </section>
+
+      <section className="py-16 px-6 border-t border-border/30">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-10">
+            <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-primary">Corporate Information</span>
+            <h2 className="text-2xl font-bold mt-3 mb-2">Company Details</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="p-6 flex items-start gap-4" data-testid="card-company-entity">
+              <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                <Building2 className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold tracking-wide uppercase mb-1">Business Entity</h3>
+                <p className="text-base font-bold text-primary">FAHADERA LLC</p>
+                <p className="text-xs text-muted-foreground mt-1">Registered Limited Liability Company</p>
+                <p className="text-xs text-muted-foreground">State of Delaware, United States</p>
+              </div>
+            </Card>
+            <Card className="p-6 flex items-start gap-4" data-testid="card-company-address">
+              <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                <MapPin className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold tracking-wide uppercase mb-1">Registered Address</h3>
+                <p className="text-sm font-medium">8 The Green Suite B</p>
+                <p className="text-sm text-muted-foreground">Dover, Delaware</p>
+                <p className="text-sm text-muted-foreground">United States of America</p>
+              </div>
+            </Card>
+          </div>
         </div>
       </section>
     </PublicLayout>

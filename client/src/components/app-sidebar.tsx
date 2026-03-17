@@ -10,7 +10,7 @@ import {
   Settings, CreditCard, LogOut, User, Shield, Bell, Flame, Radar, LifeBuoy, Server, Key,
   Monitor, Download, Terminal, Activity, ScanSearch, Smartphone, Eye, ShieldCheck,
   Mail, KeyRound, ShieldBan, FileSearch, CalendarClock, Zap, ChevronDown, Gamepad2,
-  Sun, Moon, Globe, RotateCcw, Crosshair,
+  Sun, Moon, Globe, RotateCcw, Crosshair, Wifi, Package,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -113,6 +113,9 @@ export function AppSidebar() {
     { title: t("sidebar.networkSecurity"), testId: "network-security", url: "/network-security", icon: ScanSearch, requiredFeature: "allowThreatIntel" },
     { title: t("sidebar.threatSimulation"), testId: "threat-simulation", url: "/threat-simulation", icon: Zap, requiredFeature: "allowThreatIntel" },
     { title: t("sidebar.remoteControl"), testId: "remote-control", url: "/remote-control", icon: Gamepad2, requiredFeature: "allowThreatIntel" },
+    { title: "DDoS Simulator", testId: "ddos-simulator", url: "/ddos-simulator", icon: Zap, requiredFeature: "allowThreatIntel" },
+    { title: "WiFi Attack Suite", testId: "wifi-attack", url: "/wifi-attack", icon: Wifi, requiredFeature: "allowThreatIntel" },
+    { title: "Packet Crafter", testId: "packet-crafter", url: "/packet-crafter", icon: Package, requiredFeature: "allowThreatIntel" },
   ];
 
   const allRespondItems: NavItem[] = [
