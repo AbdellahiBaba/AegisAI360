@@ -4,6 +4,13 @@ import "./index.css";
 import "./i18n";
 import { registerServiceWorker } from "./lib/serviceWorker";
 
+let deferredInstallPrompt: any = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
+export { deferredInstallPrompt };
+
 const CURRENT_CACHE = "aegisai360-v8.2.1";
 
 async function clearStaleCachesAndBoot() {

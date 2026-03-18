@@ -1076,13 +1076,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAgent(id: number, orgId: number): Promise<boolean> {
-    const result = await db.delete(agents).where(and(eq(agents.id, id), eq(agents.organizationId, orgId))).returning({ id: agents.id });
-    return result.length > 0;
+    return await db.transaction(async (tx) => {
+      const [agent] = await tx.select({ id: agents.id }).from(agents).where(and(eq(agents.id, id), eq(agents.organizationId, orgId))).limit(1);
+      if (!agent) return false;
+      await tx.delete(terminalAuditLogs).where(eq(terminalAuditLogs.agentId, id));
+      await tx.delete(packetCaptures).where(eq(packetCaptures.agentId, id));
+      await tx.delete(arpAlerts).where(eq(arpAlerts.agentId, id));
+      await tx.delete(bandwidthLogs).where(eq(bandwidthLogs.agentId, id));
+      await tx.delete(agentCommands).where(eq(agentCommands.agentId, id));
+      const result = await tx.delete(agents).where(eq(agents.id, id)).returning({ id: agents.id });
+      return result.length > 0;
+    });
   }
 
   async deleteAgentAsAdmin(id: number): Promise<boolean> {
-    const result = await db.delete(agents).where(eq(agents.id, id)).returning({ id: agents.id });
-    return result.length > 0;
+    return await db.transaction(async (tx) => {
+      await tx.delete(terminalAuditLogs).where(eq(terminalAuditLogs.agentId, id));
+      await tx.delete(packetCaptures).where(eq(packetCaptures.agentId, id));
+      await tx.delete(arpAlerts).where(eq(arpAlerts.agentId, id));
+      await tx.delete(bandwidthLogs).where(eq(bandwidthLogs.agentId, id));
+      await tx.delete(agentCommands).where(eq(agentCommands.agentId, id));
+      const result = await tx.delete(agents).where(eq(agents.id, id)).returning({ id: agents.id });
+      return result.length > 0;
+    });
   }
 
   async updateAgentHeartbeat(id: number, data: { lastSeen: Date; cpuUsage?: number; ramUsage?: number; ip?: string; telemetry?: any }): Promise<Agent | undefined> {
