@@ -15,7 +15,7 @@ import {
   Radar, Globe, ShieldCheck, FileSearch, Bug, Loader2, Clock,
   CheckCircle2, XCircle, AlertTriangle, Search, ShieldBan, Bell, Info, Lock,
   Network, FolderSearch, Cpu, Shield, Landmark, Database, Code, Download, Trash2,
-  ExternalLink, FileDown,
+  ExternalLink, FileDown, ShieldAlert, Copy, CheckCheck, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { ScanResult } from "@shared/schema";
@@ -746,6 +746,39 @@ function DirBruteResults({ data, target }: { data: any; target: string }) {
   const remediation = useRemediation();
   const { toast } = useToast();
   const [downloading, setDownloading] = useState(false);
+  const [bypassTarget, setBypassTarget] = useState<{ path: string; statusCode: number } | null>(null);
+  const [bypassReport, setBypassReport] = useState<any | null>(null);
+  const [bypassLoading, setBypassLoading] = useState(false);
+  const [bypassTab, setBypassTab] = useState<"all" | "header" | "path" | "method" | "credentials">("all");
+  const [copiedCurl, setCopiedCurl] = useState<string | null>(null);
+
+  const runBypassTest = async (path: string, statusCode: number) => {
+    setBypassTarget({ path, statusCode });
+    setBypassReport(null);
+    setBypassLoading(true);
+    setBypassTab("all");
+    try {
+      const res = await fetch("/api/scan/bypass-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ target, path, originalStatusCode: statusCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setBypassReport(data);
+    } catch (e: any) {
+      toast({ title: "Bypass test failed", description: e.message, variant: "destructive" });
+    } finally {
+      setBypassLoading(false);
+    }
+  };
+
+  const copyCurl = (cmd: string) => {
+    navigator.clipboard.writeText(cmd);
+    setCopiedCurl(cmd);
+    setTimeout(() => setCopiedCurl(null), 2000);
+  };
 
   if (data.error) return <Card><CardContent className="p-4 text-xs text-destructive">{data.error}</CardContent></Card>;
 
@@ -902,16 +935,39 @@ function DirBruteResults({ data, target }: { data: any; target: string }) {
                       </Tooltip>
                     </TableCell>
                     <TableCell>
-                      {(p.severity === "high" || p.severity === "critical") && (
-                        <RemediationButton
-                          icon={ShieldBan}
-                          label={t("scanner.blockThisPath")}
-                          explanation={t("scanner.blockPathExplanation", { path: p.path })}
-                          onClick={() => remediation.mutate({ actionType: "block_path", target, details: { path: p.path, severity: p.severity } })}
-                          isPending={remediation.isPending}
-                          testId={`button-block-dir-${i}`}
-                        />
-                      )}
+                      <div className="flex items-center gap-1">
+                        {(p.statusCode === 401 || p.statusCode === 403 || p.statusCode === 405) && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={`h-6 w-6 ${bypassTarget?.path === p.path ? "text-amber-400" : "text-muted-foreground hover:text-amber-400"}`}
+                                onClick={() => runBypassTest(p.path, p.statusCode)}
+                                disabled={bypassLoading && bypassTarget?.path === p.path}
+                                data-testid={`button-bypass-${i}`}
+                              >
+                                {bypassLoading && bypassTarget?.path === p.path
+                                  ? <span className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                                  : <ShieldAlert className="w-3.5 h-3.5" />}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="text-[10px]">
+                              Test bypass techniques on this {p.statusCode === 401 ? "401 (auth-required)" : p.statusCode === 403 ? "403 (forbidden)" : "405 (method-restricted)"} path
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                        {(p.severity === "high" || p.severity === "critical") && (
+                          <RemediationButton
+                            icon={ShieldBan}
+                            label={t("scanner.blockThisPath")}
+                            explanation={t("scanner.blockPathExplanation", { path: p.path })}
+                            onClick={() => remediation.mutate({ actionType: "block_path", target, details: { path: p.path, severity: p.severity } })}
+                            isPending={remediation.isPending}
+                            testId={`button-block-dir-${i}`}
+                          />
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                   );
@@ -922,6 +978,160 @@ function DirBruteResults({ data, target }: { data: any; target: string }) {
         </Card>
       ) : (
         <Card><CardContent className="p-4 text-center text-xs text-muted-foreground">{t("scanner.noDirResults")}</CardContent></Card>
+      )}
+
+      {/* ── Bypass Test Results Panel ─────────────────────────────────────── */}
+      {bypassTarget && (
+        <Card className="border-amber-500/30">
+          <CardHeader className="pb-2 pt-3 px-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle className="text-xs font-medium tracking-wider uppercase flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-amber-400" />
+                Bypass Test — <span className="font-mono text-amber-300">{bypassTarget.path}</span>
+                <Badge variant="outline" className="text-[10px] font-mono border-orange-400 text-orange-400 ml-1">
+                  {bypassTarget.statusCode}
+                </Badge>
+              </CardTitle>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setBypassTarget(null); setBypassReport(null); }}>
+                <XCircle className="w-3.5 h-3.5 text-muted-foreground" />
+              </Button>
+            </div>
+            {bypassLoading && (
+              <p className="text-[10px] text-amber-400 flex items-center gap-1 mt-1">
+                <span className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin inline-block" />
+                Running {bypassTarget.statusCode === 401 ? "header injection, path manipulation, method tampering, and default credential spray..." : "header injection, path manipulation, and method tampering..."}
+              </p>
+            )}
+            {bypassReport && !bypassLoading && (
+              <p className={`text-[10px] mt-1 font-semibold ${bypassReport.bypassedCount > 0 ? "text-red-400" : "text-green-400"}`}>
+                {bypassReport.bypassedCount > 0
+                  ? `${bypassReport.bypassedCount} bypass technique(s) SUCCEEDED out of ${bypassReport.totalTested} tested`
+                  : `All ${bypassReport.totalTested} techniques blocked — path appears well protected`}
+              </p>
+            )}
+          </CardHeader>
+
+          {bypassReport && !bypassLoading && (
+            <CardContent className="px-4 pb-4">
+              {/* Category filter tabs */}
+              <div className="flex gap-1 mb-3 flex-wrap">
+                {(["all", "header", "path", "method", "credentials"] as const)
+                  .filter(tab => tab === "all" || bypassTarget.statusCode === 401 || tab !== "credentials")
+                  .map(tab => {
+                    const allResults = [...bypassReport.bypasses, ...bypassReport.failed];
+                    const count = tab === "all" ? allResults.length : allResults.filter((r: any) => r.category === tab).length;
+                    const bypassCount = tab === "all" ? bypassReport.bypassedCount : bypassReport.bypasses.filter((r: any) => r.category === tab).length;
+                    return (
+                      <button
+                        key={tab}
+                        onClick={() => setBypassTab(tab)}
+                        data-testid={`button-bypass-tab-${tab}`}
+                        className={`text-[10px] px-2 py-0.5 rounded border font-medium transition-colors ${bypassTab === tab ? "border-amber-500 bg-amber-500/10 text-amber-300" : "border-border text-muted-foreground hover:border-amber-500/50"}`}
+                      >
+                        {tab === "all" ? "All" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        <span className="ml-1 opacity-70">({count})</span>
+                        {bypassCount > 0 && <span className="ml-1 text-red-400 font-bold">{bypassCount} ✓</span>}
+                      </button>
+                    );
+                  })}
+              </div>
+
+              {/* Results table */}
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-[10px] uppercase w-6"></TableHead>
+                      <TableHead className="text-[10px] uppercase">Technique</TableHead>
+                      <TableHead className="text-[10px] uppercase">Category</TableHead>
+                      <TableHead className="text-[10px] uppercase">Result</TableHead>
+                      <TableHead className="text-[10px] uppercase">Description</TableHead>
+                      <TableHead className="text-[10px] uppercase">Curl</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {[...bypassReport.bypasses, ...bypassReport.failed]
+                      .filter((r: any) => bypassTab === "all" || r.category === bypassTab)
+                      .map((r: any, i: number) => (
+                        <TableRow
+                          key={i}
+                          data-testid={`bypass-result-${i}`}
+                          className={r.bypassed ? "bg-red-950/20 border-l-2 border-l-red-500" : ""}
+                        >
+                          <TableCell>
+                            {r.bypassed
+                              ? <CheckCheck className="w-3.5 h-3.5 text-red-400" />
+                              : <XCircle className="w-3 h-3 text-muted-foreground/40" />}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs max-w-[180px]">
+                            <span className={r.bypassed ? "text-red-300 font-semibold" : "text-muted-foreground"}>{r.technique}</span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className={`text-[10px] ${
+                              r.category === "header" ? "bg-blue-900/30 text-blue-300" :
+                              r.category === "path" ? "bg-purple-900/30 text-purple-300" :
+                              r.category === "method" ? "bg-green-900/30 text-green-300" :
+                              "bg-yellow-900/30 text-yellow-300"
+                            }`}>{r.category}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={`text-[10px] font-mono ${
+                              r.bypassed ? "border-red-500 text-red-400" : "border-muted text-muted-foreground"
+                            }`}>
+                              {r.statusCode === 0 ? "err" : r.statusCode}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-[10px] text-muted-foreground max-w-[240px] truncate" title={r.description}>
+                            {r.description}
+                          </TableCell>
+                          <TableCell>
+                            {r.bypassed && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={() => copyCurl(r.curlCommand)}
+                                    data-testid={`button-copy-curl-${i}`}
+                                  >
+                                    {copiedCurl === r.curlCommand
+                                      ? <CheckCheck className="w-3 h-3 text-green-400" />
+                                      : <Copy className="w-3 h-3 text-amber-400" />}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="text-[10px] max-w-xs break-all font-mono">
+                                  {r.curlCommand}
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {bypassReport.bypassedCount > 0 && (
+                <div className="mt-3 p-3 rounded border border-red-500/30 bg-red-950/20">
+                  <p className="text-[10px] font-semibold text-red-400 uppercase mb-1">Successful Bypass Commands</p>
+                  <div className="space-y-1">
+                    {bypassReport.bypasses.map((r: any, i: number) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <code className="text-[10px] font-mono text-green-300 break-all flex-1">{r.curlCommand}</code>
+                        <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={() => copyCurl(r.curlCommand)}>
+                          {copiedCurl === r.curlCommand
+                            ? <CheckCheck className="w-3 h-3 text-green-400" />
+                            : <Copy className="w-3 h-3 text-muted-foreground" />}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          )}
+        </Card>
       )}
     </div>
   );

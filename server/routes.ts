@@ -34,7 +34,7 @@ import { ResponseEngine } from "./responseEngine";
 import { AlertEngine } from "./alertEngine";
 import { testChannel } from "./notificationService";
 import { scanPorts, lookupDNS, checkSSL, scanHeaders, scanVulnerabilities, isPrivateTarget } from "./scanEngine";
-import { enumerateSubdomains, bruteforceDirectories, fingerprintTechnology, detectWAF, whoisLookup, testSQLInjection, testXSS, identifyHash, crackHash, analyzePassword, fetchDiscoveredPaths } from "./pentestEngine";
+import { enumerateSubdomains, bruteforceDirectories, fingerprintTechnology, detectWAF, whoisLookup, testSQLInjection, testXSS, identifyHash, crackHash, analyzePassword, fetchDiscoveredPaths, testBypassTechniques } from "./pentestEngine";
 import { lookupHash, classifyBehavior, generateYARARule, generateSigmaRule, extractIOCs, listFamilies, extractIOCsFromText, getThreatActor, getKillChain, getMitreHeatmap } from "./trojanAnalyzer";
 import { analyzePermissions, testMobileEndpoint, checkOWASPMobile, lookupDeviceVulnerabilities } from "./mobilePentestEngine";
 import { generateReverseShell, generateBindShell, generateWebShell, generateMeterpreterStager, encodePayload, getSupportedLanguages } from "./payloadGenerator";
@@ -3127,6 +3127,27 @@ export async function registerRoutes(
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
       res.status(500).json({ error: "Fetch failed" });
+    }
+  });
+
+  app.post("/api/scan/bypass-test", async (req, res) => {
+    try {
+      const { target, path, originalStatusCode } = z.object({
+        target: z.string().min(1),
+        path: z.string().min(1),
+        originalStatusCode: z.number().int(),
+      }).parse(req.body);
+
+      const cleanTarget = target.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+      if (isPrivateTarget(cleanTarget)) {
+        return res.status(400).json({ error: "Scanning private/internal addresses is not allowed" });
+      }
+
+      const report = await testBypassTechniques(target, path, originalStatusCode);
+      return res.json(report);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Bypass test failed" });
     }
   });
 
