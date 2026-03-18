@@ -40,9 +40,9 @@ function NavGroup({ label, items, location, defaultOpen = true }: { label: strin
     <Collapsible open={open || hasActiveItem} onOpenChange={setOpen}>
       <SidebarGroup>
         <CollapsibleTrigger className="w-full">
-          <SidebarGroupLabel className="text-[9px] tracking-[0.3em] uppercase text-muted-foreground/60 font-semibold px-3 cursor-pointer flex items-center justify-between gap-1 w-full">
+          <SidebarGroupLabel className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-bold px-3 py-1 cursor-pointer flex items-center justify-between gap-1 w-full">
             <span>{label}</span>
-            <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${open || hasActiveItem ? "" : "-rotate-90"}`} />
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${open || hasActiveItem ? "" : "-rotate-90"}`} />
           </SidebarGroupLabel>
         </CollapsibleTrigger>
         <CollapsibleContent>
@@ -53,11 +53,11 @@ function NavGroup({ label, items, location, defaultOpen = true }: { label: strin
                   <SidebarMenuButton
                     asChild
                     data-active={location === item.url}
-                    className="data-[active=true]:bg-primary/10 data-[active=true]:text-primary data-[active=true]:font-semibold h-8"
+                    className="data-[active=true]:bg-primary/10 data-[active=true]:text-primary data-[active=true]:font-semibold h-9"
                   >
                     <Link href={item.url} data-testid={`link-${item.testId}`}>
-                      <item.icon className="w-4 h-4" />
-                      <span className="text-xs">{item.title}</span>
+                      <item.icon className="w-4 h-4 shrink-0" />
+                      <span className="text-sm font-medium">{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
