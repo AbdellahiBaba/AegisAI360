@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
+import { fileURLToPath } from "url";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -394,7 +395,7 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  const currentDir = typeof __dirname !== "undefined" ? __dirname : path.dirname(new URL(import.meta.url).pathname);
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
   const downloadsDir = path.resolve(currentDir, "..", "public", "downloads");
   app.use("/downloads", express.static(downloadsDir, {
     setHeaders: (res, filePath) => {
