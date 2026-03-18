@@ -1,6 +1,5 @@
-const CACHE_NAME = 'aegisai360-v1';
+const CACHE_NAME = 'aegisai360-v8.2.1';
 const STATIC_ASSETS = [
-  '/',
   '/favicon.png',
   '/favicon.svg',
   '/apple-touch-icon.png',
@@ -66,21 +65,23 @@ self.addEventListener('fetch', function(event) {
   }
 
   var acceptHeader = event.request.headers.get('Accept') || '';
-  var isStaticAsset = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/i.test(url.pathname);
 
-  if (isStaticAsset) {
+  var isViteAsset = url.pathname.startsWith('/@') ||
+                    url.pathname.startsWith('/node_modules/') ||
+                    url.searchParams.has('v') ||
+                    url.searchParams.has('t') ||
+                    url.pathname.includes('__vite');
+
+  if (isViteAsset) {
+    return;
+  }
+
+  var isContentHashedAsset = /\.[a-f0-9]{8,}\.(js|css|woff2?|ttf|eot)$/i.test(url.pathname);
+
+  if (isContentHashedAsset) {
     event.respondWith(
       caches.match(event.request).then(function(cached) {
-        if (cached) {
-          fetch(event.request).then(function(response) {
-            if (response && response.status === 200 && response.type === 'basic') {
-              caches.open(CACHE_NAME).then(function(cache) {
-                cache.put(event.request, response);
-              });
-            }
-          }).catch(function() {});
-          return cached;
-        }
+        if (cached) return cached;
         return fetch(event.request).then(function(response) {
           if (response && response.status === 200 && response.type === 'basic') {
             var responseClone = response.clone();
@@ -90,6 +91,26 @@ self.addEventListener('fetch', function(event) {
           }
           return response;
         });
+      })
+    );
+    return;
+  }
+
+  var isStaticAsset = /\.(png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/i.test(url.pathname);
+
+  if (isStaticAsset) {
+    event.respondWith(
+      caches.match(event.request).then(function(cached) {
+        var networkFetch = fetch(event.request).then(function(response) {
+          if (response && response.status === 200 && response.type === 'basic') {
+            var responseClone = response.clone();
+            caches.open(CACHE_NAME).then(function(cache) {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return response;
+        }).catch(function() { return cached; });
+        return cached || networkFetch;
       })
     );
     return;
