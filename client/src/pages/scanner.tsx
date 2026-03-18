@@ -859,7 +859,24 @@ function DirBruteResults({ data, target }: { data: any; target: string }) {
                   return (
                   <TableRow key={i} data-testid={`dir-row-${i}`}>
                     <TableCell className="font-mono text-xs">{p.path}</TableCell>
-                    <TableCell><Badge variant="outline" className="text-[10px] font-mono">{p.statusCode}</Badge></TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] font-mono ${
+                          p.statusCode >= 200 && p.statusCode < 300 ? "border-green-500 text-green-400" :
+                          p.statusCode >= 300 && p.statusCode < 400 ? "border-blue-400 text-blue-400" :
+                          p.statusCode === 401 ? "border-yellow-400 text-yellow-400" :
+                          p.statusCode === 403 ? "border-orange-400 text-orange-400" :
+                          p.statusCode === 405 ? "border-purple-400 text-purple-400" :
+                          "border-muted-foreground text-muted-foreground"
+                        }`}
+                      >
+                        {p.statusCode}
+                        {p.statusCode === 401 && " auth"}
+                        {p.statusCode === 403 && " denied"}
+                        {p.statusCode === 405 && " exists"}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="text-xs font-mono">{p.contentLength ? `${p.contentLength}B` : "-"}</TableCell>
                     <TableCell><Badge variant="secondary" className="text-[10px]">{p.category}</Badge></TableCell>
                     <TableCell><SeverityBadge severity={p.severity} /></TableCell>
