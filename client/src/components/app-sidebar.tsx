@@ -138,6 +138,7 @@ export function AppSidebar() {
   const allEndpointItems: NavItem[] = [
     { title: t("sidebar.endpoints"), testId: "endpoints", url: "/endpoints", icon: Monitor },
     { title: t("sidebar.deployAgent"), testId: "download-agent", url: "/download-agent", icon: Download },
+    { title: "Linux Deploy", testId: "linux-deploy", url: "/linux-deploy", icon: Server },
   ];
 
   const allIntelItems: NavItem[] = [

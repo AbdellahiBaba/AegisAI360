@@ -86,6 +86,7 @@ import ScriptInjectorPage from "@/pages/script-injector";
 import HttpStressTesterPage from "@/pages/http-stress-tester";
 import FtpAttackerPage from "@/pages/ftp-attacker";
 import ProtocolAttackerPage from "@/pages/protocol-attacker";
+import LinuxDeployPage from "@/pages/linux-deploy";
 import { PwaInstallBanner } from "@/components/pwa-install-banner";
 
 function PlanGate({ feature, children }: { feature: string; children: React.ReactNode }) {
@@ -192,6 +193,7 @@ function AppRouter() {
       <Route path="/http-stress-tester" component={gated("allowThreatIntel", HttpStressTesterPage)} />
       <Route path="/ftp-attacker" component={gated("allowThreatIntel", FtpAttackerPage)} />
       <Route path="/protocol-attacker" component={gated("allowThreatIntel", ProtocolAttackerPage)} />
+      <Route path="/linux-deploy" component={LinuxDeployPage} />
       <Route component={NotFound} />
     </Switch>
   );
