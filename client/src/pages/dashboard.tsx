@@ -737,6 +737,17 @@ export default function Dashboard() {
     };
   }, [wsReady]);
 
+  const isTrialing = billingStatus?.subscriptionStatus === "trialing";
+
+  const [trialRemaining, setTrialRemaining] = useState<number>(0);
+  useEffect(() => {
+    if (!billingStatus?.subscriptionExpiresAt || !isTrialing) return;
+    const tick = () => setTrialRemaining(Math.max(0, new Date(billingStatus.subscriptionExpiresAt!).getTime() - Date.now()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [billingStatus?.subscriptionExpiresAt, isTrialing]);
+
   const recentEvents = events?.slice(0, 15) || [];
   const feedEvents = events?.slice(0, 10) || [];
   const recentActions = responseActions?.slice(0, 10) || [];
@@ -771,17 +782,7 @@ export default function Dashboard() {
   }
 
   const showUpgradeBanner = user?.role === "admin" && !user?.isSuperAdmin && billingStatus && !billingStatus.stripeSubscriptionId && billingStatus.subscriptionStatus !== "trialing";
-  const isTrialing = billingStatus?.subscriptionStatus === "trialing";
   const trialExpiredOnDash = billingStatus?.trialUsed && !isTrialing && billingStatus?.subscriptionStatus !== "active" && billingStatus?.subscriptionStatus !== "inactive";
-
-  const [trialRemaining, setTrialRemaining] = useState<number>(0);
-  useEffect(() => {
-    if (!billingStatus?.subscriptionExpiresAt || !isTrialing) return;
-    const tick = () => setTrialRemaining(Math.max(0, new Date(billingStatus.subscriptionExpiresAt!).getTime() - Date.now()));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [billingStatus?.subscriptionExpiresAt, isTrialing]);
   const trialHours = Math.floor(trialRemaining / 3600000);
   const trialMins = Math.floor((trialRemaining % 3600000) / 60000);
   const trialSecs = Math.floor((trialRemaining % 60000) / 1000);

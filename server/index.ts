@@ -266,11 +266,16 @@ app.use((req, res, next) => {
       const buf = (await scryptAsync(adminPassword, salt, 64)) as Buffer;
       const hashedPassword = `${buf.toString("hex")}.${salt}`;
       const adminOrg = await storageInstance.createOrganization({
-        name: "Platform Administration",
-        slug: "platform-admin",
+        name: "AegisAI360",
+        slug: "aegisai360",
         plan: "enterprise",
         maxUsers: 100,
       });
+      await storageInstance.updateOrganization(adminOrg.id, {
+        subscriptionStatus: "active",
+        subscriptionExpiresAt: null,
+        trialUsed: true,
+      } as any);
       await storageInstance.createUser({
         username: "admin",
         password: hashedPassword,
