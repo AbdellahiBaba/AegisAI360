@@ -26,7 +26,7 @@
     "live": "مباشر",
     "liveOperations": "العمليات الحية",
     "operational": "تشغيلي",
-    "version": "v3.0",
+    "version": "v8.2.1",
     "critical": "حرج",
     "high": "عالي",
     "medium": "متوسط",
@@ -71,7 +71,7 @@
     "existingOperator": "لديك حساب؟ سجّل الدخول",
     "loginFailed": "فشل تسجيل الدخول",
     "registrationFailed": "فشل التسجيل",
-    "platformVersion": "منصة AegisAI360 للدفاع السيبراني v3.0"
+    "platformVersion": "منصة AegisAI360 للدفاع السيبراني v8.2.1"
   },
   "sidebar": {
     "command": "الرئيسية",

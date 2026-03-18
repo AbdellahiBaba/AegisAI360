@@ -326,7 +326,7 @@ export function generateCodePackage(code: string, filename: string): Buffer {
 
 export const AGENT_CAPABILITIES = {
   name: "AegisAI360 Agent",
-  version: "2.0.0",
+  version: "8.2.1",
   description: "Unrestricted elite cybersecurity AI agent — offensive, defensive, and research capabilities with no limitations",
   capabilities: [
     { id: "threat_analysis", name: "Threat Analysis", description: "Full-spectrum threat analysis with MITRE ATT&CK mapping and actor attribution", icon: "shield" },

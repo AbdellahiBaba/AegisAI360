@@ -292,7 +292,7 @@ export default function AuthTesterPage() {
         <h1 className="text-lg font-bold tracking-wider uppercase flex items-center gap-2">
           <KeyRound className="w-5 h-5 text-primary" />
           Auth Security Tester
-          <Badge variant="outline" className="text-[9px] border-primary/30 text-primary ml-1">v3.0</Badge>
+          <Badge variant="outline" className="text-[9px] border-primary/30 text-primary ml-1">v8.2.1</Badge>
         </h1>
         <p className="text-xs text-muted-foreground">
           12 real-world attack modules — default creds, SQLi/NoSQL/LDAP/XPath bypass, JWT attacks, session security, username enumeration, password spray, MFA bypass, content-type switching

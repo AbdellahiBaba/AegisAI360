@@ -560,7 +560,7 @@ router.get("/auth/download/:id", (req: Request, res: Response) => {
     })),
   }));
   const report = {
-    meta: buildMeta("AegisAI360 Authentication Security Tester v3.0", target, job.config.technique, job.startTime),
+    meta: buildMeta("AegisAI360 Authentication Security Tester v8.2.1", target, job.config.technique, job.startTime),
     executiveSummary: {
       overallRiskLevel: riskLevel(riskScore),
       overallRiskScore: riskScore,

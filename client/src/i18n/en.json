@@ -26,7 +26,7 @@
     "live": "Live",
     "liveOperations": "Live Operations",
     "operational": "OPERATIONAL",
-    "version": "v3.0",
+    "version": "v8.2.1",
     "critical": "Critical",
     "high": "High",
     "medium": "Medium",
@@ -71,7 +71,7 @@
     "existingOperator": "Already have an account? Sign in",
     "loginFailed": "Login failed",
     "registrationFailed": "Registration failed",
-    "platformVersion": "AegisAI360 Cyber Defense Platform v3.0"
+    "platformVersion": "AegisAI360 Cyber Defense Platform v8.2.1"
   },
   "sidebar": {
     "command": "Overview",

@@ -3,7 +3,7 @@ import * as https from "https";
 import { randomBytes, createHmac } from "crypto";
 
 // ═══════════════════════════════════════════════════════════════════════════
-// AUTH SECURITY TESTER  v3.0  —  Real-World Advanced Engine
+// AUTH SECURITY TESTER  v8.2.1  —  Real-World Advanced Engine
 // Modules: DefaultCreds · SQLi · NoSQL/LDAP/XPath · LockoutBypass ·
 //          RateLimit · JWT · Session · UserEnum · PasswordSpray ·
 //          MFABypass · ContentTypeSwitch
@@ -355,7 +355,7 @@ export function startAuthTest(config: AuthTesterConfig): AuthTesterJob {
     const ts = tsFmt;
     pushLog(job.trafficLog, [
       `[${ts()}] ╔══════════════════════════════════════════════════════╗`,
-      `[${ts()}] ║   AegisAI360 Auth Security Tester  v3.0              ║`,
+      `[${ts()}] ║   AegisAI360 Auth Security Tester  v8.2.1            ║`,
       `[${ts()}] ║   Target : ${config.target}:${config.port}${config.loginPath}`.slice(0, 55).padEnd(55) + "║",
       `[${ts()}] ║   Mode   : ${config.technique}`.slice(0, 55).padEnd(55) + "║",
       `[${ts()}] ╚══════════════════════════════════════════════════════╝`,
