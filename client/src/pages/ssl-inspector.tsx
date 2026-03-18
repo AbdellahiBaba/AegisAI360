@@ -139,7 +139,7 @@ export default function SSLInspectorPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => generateSSLInspectorReportPDF(result)}
+              onClick={async () => { await generateSSLInspectorReportPDF(result); }}
               data-testid="button-export-ssl-pdf"
             >
               <Download className="w-3.5 h-3.5 me-1.5" />

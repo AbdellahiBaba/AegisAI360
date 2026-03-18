@@ -200,7 +200,7 @@ export default function EmailAnalyzerPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => generateEmailAnalysisReportPDF(result)}
+              onClick={async () => { await generateEmailAnalysisReportPDF(result); }}
               data-testid="button-export-email-pdf"
             >
               <Download className="w-3.5 h-3.5 me-1.5" />

@@ -603,7 +603,7 @@ export default function NetworkMonitorPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => generateNetworkMonitorReportPDF(infrastructureAssets)}
+            onClick={async () => { await generateNetworkMonitorReportPDF(infrastructureAssets); }}
             data-testid="button-export-network-pdf"
           >
             <Download className="w-3.5 h-3.5 me-1.5" />

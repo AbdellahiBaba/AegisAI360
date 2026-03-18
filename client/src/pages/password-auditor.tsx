@@ -202,7 +202,7 @@ export default function PasswordAuditorPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => generatePasswordAuditReportPDF(analysis, breachResult, policyResult)}
+            onClick={async () => { await generatePasswordAuditReportPDF(analysis, breachResult, policyResult); }}
             data-testid="button-export-password-pdf"
           >
             <Download className="w-3.5 h-3.5 me-1.5" />

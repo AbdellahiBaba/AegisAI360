@@ -309,7 +309,7 @@ export default function DarkWebMonitor() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => generateDarkWebReportPDF(result)}
+              onClick={async () => { await generateDarkWebReportPDF(result); }}
               data-testid="button-export-darkweb-pdf"
             >
               <Download className="w-3.5 h-3.5 me-1.5" />

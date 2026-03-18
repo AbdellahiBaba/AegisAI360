@@ -1,5 +1,30 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import logoSrc from "@assets/image_1773813071839.png";
+
+let _logoDataUrl: string | null = null;
+const _logoReady = (async () => {
+  try {
+    const res = await fetch(logoSrc);
+    const blob = await res.blob();
+    _logoDataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {}
+})();
+
+async function ensureLogo() {
+  await _logoReady;
+}
+
+function drawLogoImage(doc: jsPDF, x: number, y: number, w: number, h: number) {
+  if (_logoDataUrl) {
+    doc.addImage(_logoDataUrl, "PNG", x, y, w, h);
+  }
+}
 
 const COLORS = {
   primary: [212, 175, 55] as [number, number, number],
@@ -19,58 +44,6 @@ const COLORS = {
   goldTint: [253, 250, 240] as [number, number, number],
 };
 
-function drawShieldLogo(doc: jsPDF, x: number, y: number, size: number) {
-  const s = size / 48;
-  const cx = x + 24 * s;
-  doc.setFillColor(212, 175, 55);
-  doc.triangle(
-    x + 24 * s, y + 2 * s,
-    x + 6 * s, y + 10 * s,
-    x + 42 * s, y + 10 * s,
-    "F"
-  );
-  doc.rect(x + 6 * s, y + 10 * s, 36 * s, 12 * s, "F");
-  doc.triangle(
-    x + 6 * s, y + 22 * s,
-    x + 42 * s, y + 22 * s,
-    x + 24 * s, y + 46 * s,
-    "F"
-  );
-
-  doc.setFillColor(15, 23, 42);
-  doc.triangle(
-    x + 24 * s, y + 6 * s,
-    x + 10 * s, y + 12.5 * s,
-    x + 38 * s, y + 12.5 * s,
-    "F"
-  );
-  doc.rect(x + 10 * s, y + 12.5 * s, 28 * s, 9.5 * s, "F");
-  doc.triangle(
-    x + 10 * s, y + 22 * s,
-    x + 38 * s, y + 22 * s,
-    x + 24 * s, y + 41.8 * s,
-    "F"
-  );
-
-  doc.setFillColor(212, 175, 55);
-  doc.circle(cx, y + 20 * s, 2 * s, "F");
-
-  doc.setDrawColor(212, 175, 55);
-  doc.setLineWidth(0.6 * s);
-  doc.circle(cx, y + 20 * s, 5 * s);
-
-  doc.setLineWidth(0.5 * s);
-  doc.line(cx, y + 15 * s, cx, y + 10 * s);
-  doc.line(cx, y + 25 * s, cx, y + 30 * s);
-  doc.line(x + 19 * s, y + 20 * s, x + 14 * s, y + 20 * s);
-  doc.line(x + 29 * s, y + 20 * s, x + 34 * s, y + 20 * s);
-
-  doc.setFillColor(212, 175, 55);
-  doc.circle(x + 14 * s, y + 20 * s, 0.8 * s, "F");
-  doc.circle(x + 34 * s, y + 20 * s, 0.8 * s, "F");
-  doc.circle(cx, y + 10 * s, 0.8 * s, "F");
-  doc.circle(cx, y + 30 * s, 0.8 * s, "F");
-}
 
 function addHeader(doc: jsPDF, title: string, subtitle?: string) {
   doc.setFillColor(...COLORS.dark);
@@ -82,30 +55,18 @@ function addHeader(doc: jsPDF, title: string, subtitle?: string) {
   doc.setFillColor(...COLORS.primary);
   doc.rect(0, 42, 210, 2, "F");
 
-  drawShieldLogo(doc, 10, 4, 32);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.setTextColor(...COLORS.primary);
-  doc.text("AEGIS", 32, 16);
-  doc.setTextColor(...COLORS.primaryLight);
-  doc.text("AI", 32 + doc.getTextWidth("AEGIS"), 16);
-
-  doc.setFontSize(5.5);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(150, 160, 180);
-  doc.text("CYBER DEFENSE PLATFORM", 32, 21);
+  drawLogoImage(doc, 8, 9, 68, 25);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(...COLORS.white);
-  doc.text(title, 32, 30);
+  doc.text(title, 84, 25);
 
   if (subtitle) {
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(180, 190, 200);
-    doc.text(subtitle, 32, 36);
+    doc.text(subtitle, 84, 33);
   }
 
   const dateStr = new Date().toLocaleString();
@@ -195,24 +156,14 @@ function addCoverPage(doc: jsPDF, reportTitle: string, reportSubtitle: string) {
     doc.line(0, j, 210, j);
   }
 
-  drawShieldLogo(doc, 80, 60, 56);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(28);
-  doc.setTextColor(...COLORS.primary);
-  doc.text("AEGIS", 105, 140, { align: "center" });
-  const aegisW = doc.getTextWidth("AEGIS");
-  doc.setTextColor(...COLORS.primaryLight);
-  doc.text("AI", 105 + aegisW / 2 + 2, 140);
+  const cvLogoW = 116;
+  const cvLogoH = 42;
+  const cvLogoX = (210 - cvLogoW) / 2;
+  drawLogoImage(doc, cvLogoX, 90, cvLogoW, cvLogoH);
 
   doc.setDrawColor(...COLORS.primary);
   doc.setLineWidth(0.5);
   doc.line(60, 147, 150, 147);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(150, 160, 180);
-  doc.text("CYBER DEFENSE PLATFORM", 105, 154, { align: "center" });
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
@@ -397,6 +348,7 @@ export async function generateExecutiveSummaryPDF(
 ) {
   const aiSummary = await fetchAiSummary(stats, severityData, events);
 
+  await ensureLogo();
   const doc = new jsPDF();
   addCoverPage(doc, "Executive Security Summary", "Real-time Security Posture Overview");
   addHeader(doc, "Executive Security Summary", "Real-time Security Posture Overview");
@@ -590,6 +542,7 @@ export async function generateCompliancePDF(assessment: ComplianceAssessment) {
     );
   }
 
+  await ensureLogo();
   const doc = new jsPDF();
   addCoverPage(doc, "Compliance Assessment Report", `${assessment.frameworkFullName} v${assessment.version}`);
   addHeader(doc, "Compliance Assessment Report", `${assessment.frameworkFullName} v${assessment.version}`);
@@ -793,7 +746,8 @@ interface Incident {
   updatedAt: string | null;
 }
 
-export function generateIncidentReportPDF(incidents: Incident[]) {
+export async function generateIncidentReportPDF(incidents: Incident[]) {
+  await ensureLogo();
   const doc = new jsPDF();
   addHeader(doc, "Incident Report", `${incidents.length} Incident${incidents.length !== 1 ? "s" : ""} Documented`);
 
@@ -924,7 +878,8 @@ export function generateIncidentReportPDF(incidents: Incident[]) {
   doc.save(`AegisAI360-Incident-Report-${new Date().toISOString().split("T")[0]}.pdf`);
 }
 
-export function generateScannerReportPDF(scanHistory: any[]) {
+export async function generateScannerReportPDF(scanHistory: any[]) {
+  await ensureLogo();
   const doc = new jsPDF();
   addHeader(doc, "Security Scanner Report", `${scanHistory.length} Scan(s) Documented`);
 
@@ -982,7 +937,8 @@ export function generateScannerReportPDF(scanHistory: any[]) {
   doc.save(`AegisAI360-Scanner-Report-${new Date().toISOString().split("T")[0]}.pdf`);
 }
 
-export function generateSSLInspectorReportPDF(result: any) {
+export async function generateSSLInspectorReportPDF(result: any) {
+  await ensureLogo();
   const doc = new jsPDF();
   addHeader(doc, "SSL/TLS Certificate Inspection Report", `Domain: ${result.domain}`);
 
@@ -1072,7 +1028,8 @@ export function generateSSLInspectorReportPDF(result: any) {
   doc.save(`AegisAI360-SSL-Inspector-${result.domain}-${new Date().toISOString().split("T")[0]}.pdf`);
 }
 
-export function generateDarkWebReportPDF(result: any) {
+export async function generateDarkWebReportPDF(result: any) {
+  await ensureLogo();
   const doc = new jsPDF();
   addHeader(doc, "Dark Web Exposure Report", `Query: ${result.query} (${result.queryType})`);
 
@@ -1144,7 +1101,8 @@ export function generateDarkWebReportPDF(result: any) {
   doc.save(`AegisAI360-DarkWeb-Report-${result.query}-${new Date().toISOString().split("T")[0]}.pdf`);
 }
 
-export function generateCVEReportPDF(results: any[], totalResults: number) {
+export async function generateCVEReportPDF(results: any[], totalResults: number) {
+  await ensureLogo();
   const doc = new jsPDF();
   addHeader(doc, "CVE Database Report", `${totalResults} Vulnerabilit${totalResults !== 1 ? "ies" : "y"} Found`);
 
@@ -1209,7 +1167,8 @@ export function generateCVEReportPDF(results: any[], totalResults: number) {
   doc.save(`AegisAI360-CVE-Report-${new Date().toISOString().split("T")[0]}.pdf`);
 }
 
-export function generateNetworkMonitorReportPDF(devices: any[]) {
+export async function generateNetworkMonitorReportPDF(devices: any[]) {
+  await ensureLogo();
   const doc = new jsPDF();
   addHeader(doc, "Network Monitor Report", `${devices.length} Asset(s) Monitored`);
 
@@ -1267,7 +1226,8 @@ export function generateNetworkMonitorReportPDF(devices: any[]) {
   doc.save(`AegisAI360-Network-Monitor-Report-${new Date().toISOString().split("T")[0]}.pdf`);
 }
 
-export function generateEmailAnalysisReportPDF(result: any) {
+export async function generateEmailAnalysisReportPDF(result: any) {
+  await ensureLogo();
   const doc = new jsPDF();
   addHeader(doc, "Email Security Analysis Report", `Subject: ${(result.subject || "N/A").substring(0, 60)}`);
 
@@ -1379,7 +1339,8 @@ export function generateEmailAnalysisReportPDF(result: any) {
   doc.save(`AegisAI360-Email-Analysis-${new Date().toISOString().split("T")[0]}.pdf`);
 }
 
-export function generateTrojanAnalysisReportPDF(result: any) {
+export async function generateTrojanAnalysisReportPDF(result: any) {
+  await ensureLogo();
   const doc = new jsPDF();
   addHeader(doc, "Trojan Analysis Report", `Family: ${result.family || "Unknown"}`);
 
@@ -1449,7 +1410,8 @@ export function generateTrojanAnalysisReportPDF(result: any) {
   doc.save(`AegisAI360-Trojan-Analysis-${result.family || "unknown"}-${new Date().toISOString().split("T")[0]}.pdf`);
 }
 
-export function generatePasswordAuditReportPDF(analysis: any, breachResult?: any, policyResult?: any) {
+export async function generatePasswordAuditReportPDF(analysis: any, breachResult?: any, policyResult?: any) {
+  await ensureLogo();
   const doc = new jsPDF();
   addHeader(doc, "Password Security Audit Report", "Strength Analysis & Compliance Check");
 
@@ -1566,7 +1528,8 @@ export function generatePasswordAuditReportPDF(analysis: any, breachResult?: any
   doc.save(`AegisAI360-Password-Audit-${new Date().toISOString().split("T")[0]}.pdf`);
 }
 
-export function generateMobilePentestReportPDF(results: any, testType: string) {
+export async function generateMobilePentestReportPDF(results: any, testType: string) {
+  await ensureLogo();
   const doc = new jsPDF();
   const subtitle = testType === "permissions" ? "Permission Analysis" : testType === "api" ? "API Security Test" : testType === "owasp" ? "OWASP Mobile Top 10" : "Device CVE Lookup";
   addHeader(doc, "Mobile Penetration Test Report", subtitle);
@@ -1747,7 +1710,8 @@ interface LinkScanResultPDF {
   scannedAt: string;
 }
 
-export function generateLinkScannerReportPDF(result: LinkScanResultPDF) {
+export async function generateLinkScannerReportPDF(result: LinkScanResultPDF) {
+  await ensureLogo();
   const doc = new jsPDF();
   addCoverPage(doc, "Link Scanner Report", `URL Analysis: ${result.url.substring(0, 60)}`);
   addHeader(doc, "Link Scanner Report", `URL: ${result.url.substring(0, 80)}`);

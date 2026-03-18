@@ -131,10 +131,10 @@ export default function LinkScannerPage() {
     scanMutation.mutate(scanUrl);
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!result) return;
     try {
-      generateLinkScannerReportPDF(result);
+      await generateLinkScannerReportPDF(result);
       toast({ title: "Report Exported", description: "PDF report has been downloaded." });
     } catch {
       toast({ title: "Export Failed", description: "Could not generate the PDF report.", variant: "destructive" });

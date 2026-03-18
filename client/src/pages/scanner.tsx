@@ -1548,10 +1548,10 @@ export default function ScannerPage() {
     else deleteBulkMutation.mutate(ids);
   };
 
-  const handleExportSelected = () => {
+  const handleExportSelected = async () => {
     const selected = (history ?? []).filter((s) => selectedIds.has(s.id));
     if (selected.length === 0) return;
-    generateScannerReportPDF(selected);
+    await generateScannerReportPDF(selected);
   };
 
   return (
@@ -1805,7 +1805,7 @@ export default function ScannerPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => generateScannerReportPDF(history)}
+                  onClick={async () => { await generateScannerReportPDF(history); }}
                   data-testid="button-export-scanner-pdf"
                   className="text-xs"
                 >

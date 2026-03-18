@@ -133,7 +133,7 @@ function HashLookupTab() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => generateTrojanAnalysisReportPDF(result)}
+              onClick={async () => { await generateTrojanAnalysisReportPDF(result); }}
               data-testid="button-export-trojan-pdf"
             >
               <Download className="w-3.5 h-3.5 me-1.5" />

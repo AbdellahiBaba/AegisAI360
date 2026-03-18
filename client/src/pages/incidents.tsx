@@ -335,7 +335,7 @@ export default function Incidents() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => generateIncidentReportPDF(incidents as any)}
+                onClick={async () => { await generateIncidentReportPDF(incidents as any); }}
                 data-testid="button-generate-pdf-report"
               >
                 <FileDown className="w-4 h-4 me-1" />
