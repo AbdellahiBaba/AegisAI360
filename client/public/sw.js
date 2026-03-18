@@ -29,16 +29,22 @@ self.addEventListener('install', function(event) {
 self.addEventListener('activate', function(event) {
   event.waitUntil(
     caches.keys().then(function(cacheNames) {
-      return Promise.all(
-        cacheNames.filter(function(name) {
-          return name !== CACHE_NAME;
-        }).map(function(name) {
-          return caches.delete(name);
-        })
-      );
-    }).then(function() {
-      notifyClients({ type: 'SW_ACTIVATED', timestamp: Date.now() });
-      return self.clients.claim();
+      var stale = cacheNames.filter(function(name) { return name !== CACHE_NAME; });
+      var hadStale = stale.length > 0;
+      return Promise.all(stale.map(function(name) {
+        return caches.delete(name);
+      })).then(function() {
+        return self.clients.claim();
+      }).then(function() {
+        if (hadStale) {
+          return self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clients) {
+            clients.forEach(function(client) {
+              client.navigate(client.url);
+            });
+          });
+        }
+        notifyClients({ type: 'SW_ACTIVATED', timestamp: Date.now() });
+      });
     })
   );
 });
