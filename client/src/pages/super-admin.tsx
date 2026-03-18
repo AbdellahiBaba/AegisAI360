@@ -44,7 +44,10 @@ import {
   Calendar,
   RefreshCw,
   XCircle,
+  Trash2,
+  Monitor,
 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 interface PlatformStats {
   totalOrgs: number;
@@ -133,6 +136,33 @@ export default function SuperAdmin() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("overview");
+  const [selectedOrgForAgents, setSelectedOrgForAgents] = useState<string>("");
+  const [agentToDelete, setAgentToDelete] = useState<{ id: number; hostname: string } | null>(null);
+
+  const { data: allOrgs } = useQuery<AdminOrganization[]>({
+    queryKey: ["/api/admin/organizations"],
+  });
+
+  const { data: adminAgents, isLoading: agentsLoading, refetch: refetchAgents } = useQuery<any[]>({
+    queryKey: ["/api/admin/organizations", selectedOrgForAgents, "agents"],
+    queryFn: () => fetch(`/api/admin/organizations/${selectedOrgForAgents}/agents`).then(r => r.json()),
+    enabled: !!selectedOrgForAgents,
+  });
+
+  const deleteAdminAgentMutation = useMutation({
+    mutationFn: async (agentId: number) => {
+      const res = await apiRequest("DELETE", `/api/admin/agents/${agentId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Agent removed", description: "Agent permanently deleted." });
+      setAgentToDelete(null);
+      refetchAgents();
+    },
+    onError: () => {
+      toast({ title: "Failed to delete agent", variant: "destructive" });
+    },
+  });
 
   if (!user?.isSuperAdmin) {
     return (
@@ -170,6 +200,7 @@ export default function SuperAdmin() {
           <TabsTrigger value="system" data-testid="tab-system">{t("superAdmin.system")}</TabsTrigger>
           <TabsTrigger value="security" data-testid="tab-security">{t("superAdmin.security", "Security")}</TabsTrigger>
           <TabsTrigger value="support" data-testid="tab-support"><LifeBuoy className="w-3.5 h-3.5 ltr:mr-1 rtl:ml-1" />{t("sidebar.support")}</TabsTrigger>
+          <TabsTrigger value="agents" data-testid="tab-agents"><Monitor className="w-3.5 h-3.5 ltr:mr-1 rtl:ml-1" />Agents</TabsTrigger>
           <TabsTrigger value="audit" data-testid="tab-audit">{t("superAdmin.auditLog")}</TabsTrigger>
         </TabsList>
 
@@ -197,10 +228,117 @@ export default function SuperAdmin() {
           <SupportPanel />
         </TabsContent>
 
+        <TabsContent value="agents" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Monitor className="w-4 h-4" />
+                Agent Management
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Select value={selectedOrgForAgents} onValueChange={setSelectedOrgForAgents}>
+                  <SelectTrigger className="w-64" data-testid="select-org-for-agents">
+                    <SelectValue placeholder="Select an organization..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(allOrgs || []).map((org) => (
+                      <SelectItem key={org.id} value={String(org.id)}>{org.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedOrgForAgents && (
+                  <Button size="sm" variant="outline" onClick={() => refetchAgents()} data-testid="button-refresh-agents">
+                    <RefreshCw className="w-3.5 h-3.5 mr-1" />Refresh
+                  </Button>
+                )}
+              </div>
+
+              {!selectedOrgForAgents && (
+                <p className="text-sm text-muted-foreground py-4 text-center">Select an organization to view its agents.</p>
+              )}
+
+              {selectedOrgForAgents && agentsLoading && (
+                <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+              )}
+
+              {selectedOrgForAgents && !agentsLoading && adminAgents && (
+                adminAgents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">No agents registered for this organization.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Hostname</TableHead>
+                        <TableHead>IP</TableHead>
+                        <TableHead>OS</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Last Seen</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {adminAgents.map((agent: any) => (
+                        <TableRow key={agent.id} data-testid={`row-admin-agent-${agent.id}`}>
+                          <TableCell className="font-mono text-xs">{agent.hostname}</TableCell>
+                          <TableCell className="font-mono text-xs">{agent.ip || "—"}</TableCell>
+                          <TableCell className="text-xs">{agent.os || "—"}</TableCell>
+                          <TableCell>
+                            <Badge className={`text-[9px] uppercase ${agent.status === "online" ? "bg-status-online/20 text-status-online" : "bg-muted text-muted-foreground"}`}>
+                              {agent.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {new Date(agent.lastSeen).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+                              onClick={() => setAgentToDelete({ id: agent.id, hostname: agent.hostname })}
+                              data-testid={`button-admin-delete-agent-${agent.id}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mr-1" />Remove
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="audit" className="mt-4">
           <AuditLogFeed />
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={!!agentToDelete} onOpenChange={(open) => { if (!open) setAgentToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove agent permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete agent <strong>{agentToDelete?.hostname}</strong> from the platform and all its data. The agent service will disconnect on its next heartbeat. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-admin-cancel-delete-agent">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => agentToDelete && deleteAdminAgentMutation.mutate(agentToDelete.id)}
+              disabled={deleteAdminAgentMutation.isPending}
+              data-testid="button-admin-confirm-delete-agent"
+            >
+              Remove agent
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

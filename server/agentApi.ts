@@ -734,6 +734,28 @@ export function createAgentRouter(): Router {
     }
   });
 
+  router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
+    try {
+      const agentId = parseInt(req.params.id);
+      const orgId = getOrgId(req);
+      const agent = await storage.getAgentById(agentId);
+      if (!agent || agent.organizationId !== orgId) return res.status(404).json({ error: "Agent not found" });
+      const deleted = await storage.deleteAgent(agentId, orgId);
+      if (!deleted) return res.status(404).json({ error: "Agent not found" });
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: (req.user as any).id,
+        action: "delete_agent",
+        targetType: "agent",
+        targetId: String(agentId),
+        details: `Agent "${agent.hostname}" (${agent.ip || "unknown IP"}) deleted by admin`,
+      });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete agent" });
+    }
+  });
+
   router.get("/:id/commands", requireAuth, async (req, res) => {
     try {
       const agent = await storage.getAgentById(parseInt(req.params.id));

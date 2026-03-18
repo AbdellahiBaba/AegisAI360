@@ -10,10 +10,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, Monitor, Cpu, MemoryStick, Wifi, WifiOff, Terminal, Send, RefreshCw, Clock, Activity, ArrowDown, ArrowUp, HardDrive, Globe, Server, Layers, Info, FileSearch, AlertTriangle, FileText, Shield, Download, ShieldAlert, ShieldOff, File, Hash } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Loader2, Monitor, Cpu, MemoryStick, Wifi, WifiOff, Terminal, Send, RefreshCw, Clock, Activity, ArrowDown, ArrowUp, HardDrive, Globe, Server, Layers, Info, FileSearch, AlertTriangle, FileText, Shield, Download, ShieldAlert, ShieldOff, File, Hash, Trash2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToCsv } from "@/lib/csvExport";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useAuth } from "@/hooks/use-auth";
 
 const COMMANDS = [
   { value: "run_system_scan", labelKey: "endpoints.cmdSystemScan" },
@@ -486,8 +488,10 @@ export default function Endpoints() {
   useDocumentTitle("Endpoints");
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [, navigate] = useLocation();
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null);
+  const [agentToDelete, setAgentToDelete] = useState<{ id: number; hostname: string } | null>(null);
   const [command, setCommand] = useState("");
   const [params, setParams] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
@@ -585,6 +589,22 @@ export default function Endpoints() {
     },
   });
 
+  const deleteAgentMutation = useMutation({
+    mutationFn: async (agentId: number) => {
+      const res = await apiRequest("DELETE", `/api/agent/${agentId}`);
+      return res.json();
+    },
+    onSuccess: (_, agentId) => {
+      toast({ title: "Agent removed", description: "The agent has been permanently deleted." });
+      if (selectedAgent === agentId) setSelectedAgent(null);
+      setAgentToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/agent/list"] });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete agent", variant: "destructive" });
+    },
+  });
+
   const getStatusColor = (status: string) => {
     if (status === "online") return "bg-green-500";
     if (status === "offline") return "bg-red-500";
@@ -669,7 +689,21 @@ export default function Endpoints() {
                     <div className={`w-2 h-2 rounded-full ${getStatusColor(agent.status)}`} />
                     <span className="font-medium text-sm">{agent.hostname}</span>
                   </div>
-                  <Badge variant="outline" className="text-xs">{agent.os || "Unknown"}</Badge>
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="outline" className="text-xs">{agent.os || "Unknown"}</Badge>
+                    {(user?.role === "admin" || user?.isSuperAdmin) && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+                        onClick={(e) => { e.stopPropagation(); setAgentToDelete({ id: agent.id, hostname: agent.hostname }); }}
+                        data-testid={`button-delete-agent-${agent.id}`}
+                        title="Remove agent"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground flex-wrap">
                   <span>{agent.ip || "No IP"}</span>
@@ -1048,6 +1082,29 @@ export default function Endpoints() {
           )}
         </div>
       </div>
+
+      <AlertDialog open={!!agentToDelete} onOpenChange={(open) => { if (!open) setAgentToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove agent permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{agentToDelete?.hostname}</strong> from the platform. The agent service on that machine will disconnect on its next heartbeat. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-agent">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => agentToDelete && deleteAgentMutation.mutate(agentToDelete.id)}
+              disabled={deleteAgentMutation.isPending}
+              data-testid="button-confirm-delete-agent"
+            >
+              {deleteAgentMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Remove agent
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

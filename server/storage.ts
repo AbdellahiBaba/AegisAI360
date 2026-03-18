@@ -222,6 +222,8 @@ export interface IStorage {
   createAgent(agent: InsertAgent): Promise<Agent>;
   getAgentById(id: number): Promise<Agent | undefined>;
   getAgentsByOrg(orgId: number): Promise<Agent[]>;
+  deleteAgent(id: number, orgId: number): Promise<boolean>;
+  deleteAgentAsAdmin(id: number): Promise<boolean>;
   updateAgentHeartbeat(id: number, data: { lastSeen: Date; cpuUsage?: number; ramUsage?: number; ip?: string; telemetry?: any }): Promise<Agent | undefined>;
   updateAgentStatus(id: number, status: string): Promise<void>;
   updateAgent(id: number, data: Partial<{ isIsolated: boolean }>): Promise<void>;
@@ -1071,6 +1073,16 @@ export class DatabaseStorage implements IStorage {
 
   async getAgentsByOrg(orgId: number): Promise<Agent[]> {
     return db.select().from(agents).where(eq(agents.organizationId, orgId)).orderBy(desc(agents.lastSeen));
+  }
+
+  async deleteAgent(id: number, orgId: number): Promise<boolean> {
+    const result = await db.delete(agents).where(and(eq(agents.id, id), eq(agents.organizationId, orgId))).returning({ id: agents.id });
+    return result.length > 0;
+  }
+
+  async deleteAgentAsAdmin(id: number): Promise<boolean> {
+    const result = await db.delete(agents).where(eq(agents.id, id)).returning({ id: agents.id });
+    return result.length > 0;
   }
 
   async updateAgentHeartbeat(id: number, data: { lastSeen: Date; cpuUsage?: number; ramUsage?: number; ip?: string; telemetry?: any }): Promise<Agent | undefined> {

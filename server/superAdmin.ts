@@ -236,6 +236,37 @@ export function createSuperAdminRouter() {
     }
   });
 
+  router.get("/organizations/:orgId/agents", async (req: Request, res: Response) => {
+    try {
+      const orgId = parseInt(req.params.orgId);
+      const agents = await storage.getAgentsByOrg(orgId);
+      res.json(agents);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch agents" });
+    }
+  });
+
+  router.delete("/agents/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const agent = await storage.getAgentById(id);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+      const deleted = await storage.deleteAgentAsAdmin(id);
+      if (!deleted) return res.status(404).json({ error: "Agent not found" });
+      await storage.createAuditLog({
+        organizationId: agent.organizationId,
+        userId: (req.user as User).id,
+        action: "super_admin_delete_agent",
+        targetType: "agent",
+        targetId: String(id),
+        details: `Agent "${agent.hostname}" (${agent.ip || "unknown IP"}) deleted by super admin`,
+      });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete agent" });
+    }
+  });
+
   router.get("/system-health", async (_req: Request, res: Response) => {
     try {
       const uptime = process.uptime();
