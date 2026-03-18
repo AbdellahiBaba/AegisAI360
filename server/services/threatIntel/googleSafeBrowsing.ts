@@ -16,7 +16,7 @@ export async function safeBrowsingLookup(url: string, overrideKey?: string): Pro
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        client: { clientId: "aegisai360", clientVersion: "1.0.0" },
+        client: { clientId: "aegisai360", clientVersion: "8.2.1" },
         threatInfo: {
           threatTypes: ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION"],
           platformTypes: ["ANY_PLATFORM"],

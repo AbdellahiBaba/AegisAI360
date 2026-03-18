@@ -264,9 +264,9 @@ export default function DownloadAgent() {
                       <p className="text-zinc-500"># Download and run the universal installer</p>
                       <p>curl -fsSL "/api/deploy/package/sh?token={firstToken}" | sudo bash</p>
                       <p className="text-zinc-500 mt-2"># OR run the downloaded file</p>
-                      <p>sudo bash aegisai360-agent_1.1.0_linux.sh</p>
+                      <p>sudo bash aegisai360-agent_8.2.1_linux.sh</p>
                     </div>
-                    <Button size="sm" variant="outline" className="mt-2 gap-2 text-xs" onClick={() => copyToClipboard(`sudo bash aegisai360-agent_1.1.0_linux.sh`)}>
+                    <Button size="sm" variant="outline" className="mt-2 gap-2 text-xs" onClick={() => copyToClipboard(`sudo bash aegisai360-agent_8.2.1_linux.sh`)}>
                       <Copy className="w-3 h-3" /> Copy command
                     </Button>
                   </TabsContent>
@@ -274,7 +274,7 @@ export default function DownloadAgent() {
                   <TabsContent value="deb">
                     <div className="bg-zinc-950 text-zinc-100 rounded-lg p-4 font-mono text-xs space-y-1.5 mt-2" data-testid="code-linux-deb">
                       <p className="text-zinc-500"># Run the .deb installer script (builds and installs the package)</p>
-                      <p>sudo bash aegisai360-agent_1.1.0_amd64.deb.sh</p>
+                      <p>sudo bash aegisai360-agent_8.2.1_amd64.deb.sh</p>
                       <p className="text-zinc-500 mt-2"># Verify installation</p>
                       <p>dpkg -l | grep aegisai360</p>
                       <p>systemctl status aegisai360-agent</p>
@@ -284,7 +284,7 @@ export default function DownloadAgent() {
                   <TabsContent value="rpm">
                     <div className="bg-zinc-950 text-zinc-100 rounded-lg p-4 font-mono text-xs space-y-1.5 mt-2" data-testid="code-linux-rpm">
                       <p className="text-zinc-500"># Run the CentOS/RHEL installer</p>
-                      <p>sudo bash aegisai360-agent_1.1.0_x86_64.rpm.sh</p>
+                      <p>sudo bash aegisai360-agent_8.2.1_x86_64.rpm.sh</p>
                       <p className="text-zinc-500 mt-2"># Verify service</p>
                       <p>systemctl status aegisai360-agent</p>
                     </div>

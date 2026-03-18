@@ -39,12 +39,12 @@ export function createAgentRouter(): Router {
   const router = Router();
 
   router.get("/ping", (_req, res) => {
-    res.json({ status: "ok", timestamp: Date.now(), version: "1.1.0" });
+    res.json({ status: "ok", timestamp: Date.now(), version: "8.2.1" });
   });
 
   router.get("/supported-commands", requireAuth, (_req, res) => {
     res.json({
-      version: "1.1.0",
+      version: "8.2.1",
       categories: [
         {
           name: "System",
@@ -336,7 +336,7 @@ export function createAgentRouter(): Router {
         status: "ok",
         action: "continue",
         suspended: false,
-        version: "1.1.0",
+        version: "8.2.1",
         updateAvailable: false,
       });
     } catch (error) {
@@ -453,7 +453,7 @@ export function createAgentRouter(): Router {
 
   router.get("/version", (req, res) => {
     const currentVersion = req.query.version as string || "0.0.0";
-    const latestVersion = "1.1.0";
+    const latestVersion = "8.2.1";
     const needsUpdate = currentVersion !== latestVersion;
 
     let downloadUrl = "";

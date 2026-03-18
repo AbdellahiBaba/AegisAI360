@@ -5553,7 +5553,7 @@ echo ""
 
   // ─── Linux Agent package installer routes ────────────────────────────────
 
-  const AGENT_VERSION = "1.1.0";
+  const AGENT_VERSION = "8.2.1";
 
   function makeAgentScript(serverUrl: string, token: string): string {
     return `#!/usr/bin/env node
