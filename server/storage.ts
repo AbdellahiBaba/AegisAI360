@@ -65,7 +65,7 @@ import {
   type Vulnerability, type InsertVulnerability,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, and, gte, count, lt, ne, inArray } from "drizzle-orm";
+import { eq, desc, sql, and, gte, count, lt, ne, inArray, isNotNull, lte } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -77,7 +77,8 @@ export interface IStorage {
   getOrganization(id: number): Promise<Organization | undefined>;
   getAllOrganizations(): Promise<Organization[]>;
   getAllOrganizationsWithUserCount(): Promise<(Organization & { userCount: number })[]>;
-  updateOrganization(id: number, data: Partial<InsertOrganization & { suspended: boolean }>): Promise<Organization | undefined>;
+  updateOrganization(id: number, data: Partial<InsertOrganization & { suspended: boolean; subscriptionExpiresAt: Date | null; subscriptionStatus: string }>): Promise<Organization | undefined>;
+  getOrgsWithExpiredSubscriptions(): Promise<Organization[]>;
   getOrganizationUserCount(orgId: number): Promise<number>;
 
   getSecurityEvents(orgId: number): Promise<SecurityEvent[]>;
@@ -372,6 +373,7 @@ export class DatabaseStorage implements IStorage {
       planId: organizations.planId,
       maxUsers: organizations.maxUsers,
       suspended: organizations.suspended,
+      subscriptionExpiresAt: organizations.subscriptionExpiresAt,
       defenseMode: organizations.defenseMode,
       logRetentionDays: organizations.logRetentionDays,
       auditRetentionDays: organizations.auditRetentionDays,
@@ -385,9 +387,19 @@ export class DatabaseStorage implements IStorage {
     return rows.map(r => ({ ...r, userCount: Number(r.userCount) }));
   }
 
-  async updateOrganization(id: number, data: Partial<InsertOrganization & { suspended: boolean }>): Promise<Organization | undefined> {
+  async updateOrganization(id: number, data: Partial<InsertOrganization & { suspended: boolean; subscriptionExpiresAt: Date | null; subscriptionStatus: string }>): Promise<Organization | undefined> {
     const [updated] = await db.update(organizations).set(data).where(eq(organizations.id, id)).returning();
     return updated;
+  }
+
+  async getOrgsWithExpiredSubscriptions(): Promise<Organization[]> {
+    return db.select().from(organizations).where(
+      and(
+        isNotNull(organizations.subscriptionExpiresAt),
+        lte(organizations.subscriptionExpiresAt, new Date()),
+        inArray(organizations.subscriptionStatus, ["active", "trialing"]),
+      )
+    );
   }
 
   async getOrganizationUserCount(orgId: number): Promise<number> {

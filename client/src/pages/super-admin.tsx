@@ -41,6 +41,9 @@ import {
   Settings,
   Flame,
   LayoutDashboard,
+  Calendar,
+  RefreshCw,
+  XCircle,
 } from "lucide-react";
 
 interface PlatformStats {
@@ -57,6 +60,8 @@ interface AdminOrganization {
   suspended: boolean;
   userCount: number;
   createdAt: string;
+  subscriptionStatus: string;
+  subscriptionExpiresAt: string | null;
 }
 
 interface AdminUser {
@@ -268,6 +273,22 @@ function OrganizationsTable() {
     },
   });
 
+  const [renewalEditing, setRenewalEditing] = useState<Record<number, string>>({});
+  const [renewalStatusEditing, setRenewalStatusEditing] = useState<Record<number, string>>({});
+
+  const setRenewalMutation = useMutation({
+    mutationFn: async ({ id, expiresAt, subscriptionStatus }: { id: number; expiresAt: string | null; subscriptionStatus: string }) => {
+      await apiRequest("POST", `/api/admin/organizations/${id}/set-renewal`, { expiresAt, subscriptionStatus });
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/organizations"] });
+      setRenewalEditing(prev => { const n = { ...prev }; delete n[vars.id]; return n; });
+      setRenewalStatusEditing(prev => { const n = { ...prev }; delete n[vars.id]; return n; });
+      toast({ title: "Renewal date updated — agents will disconnect automatically when expired." });
+    },
+    onError: () => toast({ title: "Failed to update renewal date", variant: "destructive" }),
+  });
+
   if (isLoading) {
     return <Skeleton className="h-[400px] w-full" />;
   }
@@ -287,12 +308,20 @@ function OrganizationsTable() {
                 <TableHead className="text-[10px] uppercase tracking-wider">{t("superAdmin.plan")}</TableHead>
                 <TableHead className="text-[10px] uppercase tracking-wider">{t("superAdmin.userCount")}</TableHead>
                 <TableHead className="text-[10px] uppercase tracking-wider">{t("common.status")}</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wider">Renewal / Expiry</TableHead>
                 <TableHead className="text-[10px] uppercase tracking-wider">{t("common.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(orgs || []).map((org) => (
-                <TableRow key={org.id} data-testid={`org-row-${org.id}`}>
+              {(orgs || []).map((org) => {
+                const isExpired = org.subscriptionExpiresAt && new Date(org.subscriptionExpiresAt) < new Date();
+                const expiresInDays = org.subscriptionExpiresAt
+                  ? Math.ceil((new Date(org.subscriptionExpiresAt).getTime() - Date.now()) / 86400000)
+                  : null;
+                const editDate = renewalEditing[org.id] ?? (org.subscriptionExpiresAt ? org.subscriptionExpiresAt.slice(0, 10) : "");
+                const editStatus = renewalStatusEditing[org.id] ?? (org.subscriptionStatus || "active");
+                return (
+                <TableRow key={org.id} data-testid={`org-row-${org.id}`} className={isExpired ? "bg-red-500/5" : ""}>
                   <TableCell className="text-xs font-mono">{org.name}</TableCell>
                   <TableCell>
                     <Badge className={`${planColors[org.plan] || planColors.starter} text-[9px] uppercase`}>
@@ -301,11 +330,71 @@ function OrganizationsTable() {
                   </TableCell>
                   <TableCell className="text-xs font-mono">{org.userCount}</TableCell>
                   <TableCell>
-                    {org.suspended ? (
-                      <Badge variant="destructive" className="text-[9px] uppercase">{t("superAdmin.suspended")}</Badge>
-                    ) : (
-                      <Badge className="bg-status-online/20 text-status-online text-[9px] uppercase">{t("common.active")}</Badge>
-                    )}
+                    <div className="space-y-1">
+                      {org.suspended ? (
+                        <Badge variant="destructive" className="text-[9px] uppercase">{t("superAdmin.suspended")}</Badge>
+                      ) : isExpired ? (
+                        <Badge variant="destructive" className="text-[9px] uppercase">Expired</Badge>
+                      ) : expiresInDays !== null && expiresInDays <= 7 ? (
+                        <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[9px] uppercase">Expires {expiresInDays}d</Badge>
+                      ) : (
+                        <Badge className="bg-status-online/20 text-status-online text-[9px] uppercase">{org.subscriptionStatus || "active"}</Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="min-w-[220px]">
+                    <div className="space-y-1.5">
+                      {org.subscriptionExpiresAt && (
+                        <p className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {new Date(org.subscriptionExpiresAt).toLocaleDateString()}
+                          {isExpired && <span className="text-red-400 font-semibold ml-1">EXPIRED</span>}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="date"
+                          className="text-[10px] h-6 px-1 rounded border border-border/50 bg-background font-mono w-28"
+                          value={editDate}
+                          onChange={e => setRenewalEditing(prev => ({ ...prev, [org.id]: e.target.value }))}
+                          data-testid={`input-renewal-date-${org.id}`}
+                        />
+                        <Select value={editStatus} onValueChange={v => setRenewalStatusEditing(prev => ({ ...prev, [org.id]: v }))}>
+                          <SelectTrigger className="h-6 w-24 text-[10px]" data-testid={`select-sub-status-${org.id}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="active">Active</SelectItem>
+                            <SelectItem value="trialing">Trialing</SelectItem>
+                            <SelectItem value="expired">Expired</SelectItem>
+                            <SelectItem value="canceled">Canceled</SelectItem>
+                            <SelectItem value="inactive">Inactive</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px]"
+                          disabled={setRenewalMutation.isPending}
+                          onClick={() => setRenewalMutation.mutate({ id: org.id, expiresAt: editDate || null, subscriptionStatus: editStatus })}
+                          data-testid={`button-set-renewal-${org.id}`}
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                        </Button>
+                        {org.subscriptionExpiresAt && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-1 text-[10px] text-muted-foreground"
+                            onClick={() => setRenewalMutation.mutate({ id: org.id, expiresAt: null, subscriptionStatus: "active" })}
+                            title="Clear expiry date"
+                            data-testid={`button-clear-renewal-${org.id}`}
+                          >
+                            <XCircle className="w-3 h-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -338,7 +427,8 @@ function OrganizationsTable() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
               {(!orgs || orgs.length === 0) && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">

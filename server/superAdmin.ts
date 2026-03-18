@@ -203,6 +203,39 @@ export function createSuperAdminRouter() {
     }
   });
 
+  router.post("/organizations/:id/set-renewal", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { expiresAt, subscriptionStatus } = z.object({
+        expiresAt: z.string().nullable(),
+        subscriptionStatus: z.string().optional(),
+      }).parse(req.body);
+
+      const updateData: any = {
+        subscriptionExpiresAt: expiresAt ? new Date(expiresAt) : null,
+      };
+      if (subscriptionStatus) updateData.subscriptionStatus = subscriptionStatus;
+
+      const updated = await storage.updateOrganization(id, updateData);
+      if (!updated) return res.status(404).json({ error: "Organization not found" });
+
+      await storage.createAuditLog({
+        organizationId: id,
+        userId: (req.user as User).id,
+        action: "set_renewal_date",
+        targetType: "organization",
+        targetId: String(id),
+        details: expiresAt
+          ? `Subscription renewal set to ${expiresAt}. Status: ${subscriptionStatus || "unchanged"}`
+          : `Subscription expiry cleared. Status: ${subscriptionStatus || "unchanged"}`,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to set renewal date" });
+    }
+  });
+
   router.get("/system-health", async (_req: Request, res: Response) => {
     try {
       const uptime = process.uptime();

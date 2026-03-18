@@ -317,6 +317,13 @@ app.use((req, res, next) => {
     console.log("Report scheduler start skipped (non-fatal)");
   }
 
+  try {
+    const { startSubscriptionEnforcer } = await import("./subscriptionEnforcer");
+    startSubscriptionEnforcer();
+  } catch (err) {
+    console.log("Subscription enforcer start skipped (non-fatal)");
+  }
+
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = process.env.NODE_ENV === "production" ? "Internal Server Error" : (err.message || "Internal Server Error");

@@ -311,8 +311,13 @@ export function createAgentRouter(): Router {
         });
       }
       const paidPlans = ["professional", "enterprise", "starter"];
-      if (org && paidPlans.includes(org.plan ?? "") && org.subscriptionStatus && !["active", "trialing"].includes(org.subscriptionStatus)) {
+      const subscriptionExpiredByStatus = org && paidPlans.includes(org.plan ?? "") && org.subscriptionStatus && !["active", "trialing"].includes(org.subscriptionStatus);
+      const subscriptionExpiredByDate = org && (org as any).subscriptionExpiresAt && new Date((org as any).subscriptionExpiresAt) < new Date();
+      if (subscriptionExpiredByStatus || subscriptionExpiredByDate) {
         await storage.updateAgentStatus(agentId, "offline");
+        if (subscriptionExpiredByDate) {
+          await storage.updateOrganization(org!.id, { subscriptionStatus: "expired" });
+        }
         return res.status(402).json({
           error: "subscription_expired",
           action: "disconnect",
