@@ -230,6 +230,16 @@ export function createAgentRouter(): Router {
       const dt = await storage.getDeviceToken(token);
       if (!dt) return res.status(401).json({ error: "Invalid device token" });
 
+      // Cloud enforcement: block registration for suspended/expired orgs
+      const orgCheck = await storage.getOrganization(dt.organizationId);
+      if (orgCheck?.suspended) {
+        return res.status(403).json({
+          error: "account_suspended",
+          action: "disconnect",
+          message: "This account has been suspended. Contact support at aegisai360.com.",
+        });
+      }
+
       if (dt.used) {
         if (dt.usedByAgentId) {
           const existingAgent = await storage.getAgentById(dt.usedByAgentId);
@@ -290,6 +300,26 @@ export function createAgentRouter(): Router {
       const agent = await storage.getAgentById(agentId);
       if (!agent || agent.deviceToken !== token) return res.status(401).json({ error: "Invalid agent credentials" });
 
+      // Cloud enforcement: check org suspension and subscription status
+      const org = await storage.getOrganization(agent.organizationId);
+      if (org?.suspended) {
+        await storage.updateAgentStatus(agentId, "offline");
+        return res.status(403).json({
+          error: "account_suspended",
+          action: "disconnect",
+          message: "This account has been suspended by the administrator. Contact support to restore access.",
+        });
+      }
+      const paidPlans = ["professional", "enterprise", "starter"];
+      if (org && paidPlans.includes(org.plan ?? "") && org.subscriptionStatus && !["active", "trialing"].includes(org.subscriptionStatus)) {
+        await storage.updateAgentStatus(agentId, "offline");
+        return res.status(402).json({
+          error: "subscription_expired",
+          action: "disconnect",
+          message: "Subscription has expired or been cancelled. Renew at aegisai360.com/billing to reconnect agents.",
+        });
+      }
+
       await storage.updateAgentHeartbeat(agentId, {
         lastSeen: new Date(),
         cpuUsage: cpuUsage ?? undefined,
@@ -297,7 +327,13 @@ export function createAgentRouter(): Router {
         ip: ip ?? undefined,
       });
 
-      res.json({ status: "ok" });
+      res.json({
+        status: "ok",
+        action: "continue",
+        suspended: false,
+        version: "1.1.0",
+        updateAvailable: false,
+      });
     } catch (error) {
       res.status(500).json({ error: "Heartbeat failed" });
     }
