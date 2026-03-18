@@ -15,6 +15,7 @@ import {
   Radar, Globe, ShieldCheck, FileSearch, Bug, Loader2, Clock,
   CheckCircle2, XCircle, AlertTriangle, Search, ShieldBan, Bell, Info, Lock,
   Network, FolderSearch, Cpu, Shield, Landmark, Database, Code, Download, Trash2,
+  ExternalLink, FileDown,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { ScanResult } from "@shared/schema";
@@ -846,17 +847,43 @@ function DirBruteResults({ data, target }: { data: any; target: string }) {
                   <TableHead className="text-[10px] uppercase">{t("scanner.size")}</TableHead>
                   <TableHead className="text-[10px] uppercase">{t("scanner.category")}</TableHead>
                   <TableHead className="text-[10px] uppercase">{t("common.severity")}</TableHead>
+                  <TableHead className="text-[10px] uppercase">Open</TableHead>
                   <TableHead className="text-[10px] uppercase">{t("common.action")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {foundPaths.map((p: any, i: number) => (
+                {foundPaths.map((p: any, i: number) => {
+                  const isBinary = /\.(zip|tar\.gz|tgz|tar\.bz2|gz|7z|rar|sql|bak|dump|db|sqlite|mdb|jar|war|ear|exe|bin|iso|img|apk|ipa|deb|rpm|dmg|pkg|p12|pfx|pem|key|crt|der|jks)$/i.test(p.path);
+                  const cleanBase = target.replace(/\/$/, "");
+                  const fileUrl = `${cleanBase}${p.path}`;
+                  return (
                   <TableRow key={i} data-testid={`dir-row-${i}`}>
                     <TableCell className="font-mono text-xs">{p.path}</TableCell>
                     <TableCell><Badge variant="outline" className="text-[10px] font-mono">{p.statusCode}</Badge></TableCell>
                     <TableCell className="text-xs font-mono">{p.contentLength ? `${p.contentLength}B` : "-"}</TableCell>
                     <TableCell><Badge variant="secondary" className="text-[10px]">{p.category}</Badge></TableCell>
                     <TableCell><SeverityBadge severity={p.severity} /></TableCell>
+                    <TableCell>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <a
+                            href={fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid={`link-open-dir-${i}`}
+                          >
+                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                              {isBinary
+                                ? <FileDown className="w-3.5 h-3.5 text-amber-500" />
+                                : <ExternalLink className="w-3.5 h-3.5 text-blue-400" />}
+                            </Button>
+                          </a>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="text-[10px]">
+                          {isBinary ? "Download binary file" : "Open in new tab"}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TableCell>
                     <TableCell>
                       {(p.severity === "high" || p.severity === "critical") && (
                         <RemediationButton
@@ -870,7 +897,8 @@ function DirBruteResults({ data, target }: { data: any; target: string }) {
                       )}
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table></div>
           </CardContent>
