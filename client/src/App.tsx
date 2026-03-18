@@ -66,6 +66,7 @@ import EmailAnalyzerPage from "@/pages/email-analyzer";
 import CveDatabasePage from "@/pages/cve-database";
 import PasswordAuditorPage from "@/pages/password-auditor";
 import { CommandPalette } from "@/components/command-palette";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { usePlan } from "@/hooks/use-plan";
 import ScheduledScansPage from "@/pages/scheduled-scans";
 import ThreatSimulationPage from "@/pages/threat-simulation";
@@ -330,15 +331,19 @@ function RootRouter() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <TooltipProvider>
-          <RootRouter />
-          <Toaster />
-          <PwaInstallBanner />
-        </TooltipProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <TooltipProvider>
+            <ErrorBoundary>
+              <RootRouter />
+            </ErrorBoundary>
+            <Toaster />
+            <PwaInstallBanner />
+          </TooltipProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

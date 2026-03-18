@@ -854,13 +854,13 @@ export default function Dashboard() {
       <SectionHeading icon={LayoutDashboard} title={t("dashboard.overview", "Overview")} subtitle={t("dashboard.overviewSubtitle", "System status at a glance")} />
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        {show("threat_level") ? <ThreatLevelIndicator stats={stats!} /> : <div className="flex-1" />}
+        {show("threat_level") && stats ? <ThreatLevelIndicator stats={stats} /> : <div className="flex-1" />}
         <div className="flex items-center gap-2 flex-wrap">
           <CustomizeDashboardDialog layout={dashLayout} onSave={(l) => layoutMutation.mutate(l)} isPending={layoutMutation.isPending} />
           <Button
             variant="outline"
             size="sm"
-            onClick={() => generateExecutiveSummaryPDF(stats!, events || [], severityData)}
+            onClick={() => stats && generateExecutiveSummaryPDF(stats, events || [], severityData)}
             data-testid="button-generate-pdf-report"
           >
             <FileDown className="w-4 h-4 me-1" />
