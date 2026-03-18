@@ -16,7 +16,11 @@ const CRASH_TECHNIQUES = [
   "slow-read", "format-string",
 ];
 const SQLI_TECHNIQUES = ["all", "error-based", "union", "boolean-blind", "time-based"];
-const AUTH_TECHNIQUES = ["all", "default-creds", "sqli-bypass", "lockout-bypass", "rate-limit-check"];
+const AUTH_TECHNIQUES = [
+  "all", "default-creds", "sqli-bypass", "nosql-inject", "ldap-xpath",
+  "lockout-bypass", "rate-limit-check", "jwt-attack", "session-security",
+  "user-enum", "password-spray", "mfa-bypass", "content-type-switch",
+];
 const INJECT_TECHNIQUES = ["all", "xss-reflected", "polyglot", "xss-headers", "ssti", "cmdi", "html-injection", "prototype-pollution", "csti", "css-injection", "log-injection", "ldap-injection", "xpath-injection", "nosql-injection", "open-redirect", "host-header", "xxe", "graphql"];
 const FTP_TECHNIQUES = ["all", "banner-grab", "anonymous-login", "default-creds", "path-traversal", "command-injection", "site-commands", "pasv-flood", "bounce-attack", "directory-listing", "connection-flood"];
 const PROTOCOL_TECHNIQUES = ["all", "ssh", "smtp", "snmp", "redis", "mongodb", "telnet", "rdp", "mysql", "smb", "memcached", "ldap", "vnc"];
