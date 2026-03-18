@@ -40,9 +40,9 @@ function NavGroup({ label, items, location, defaultOpen = true }: { label: strin
     <Collapsible open={open || hasActiveItem} onOpenChange={setOpen}>
       <SidebarGroup>
         <CollapsibleTrigger className="w-full">
-          <SidebarGroupLabel className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-bold px-3 py-1 cursor-pointer flex items-center justify-between gap-1 w-full">
+          <SidebarGroupLabel className="text-[13px] tracking-[0.15em] uppercase text-primary font-bold px-3 py-1.5 cursor-pointer flex items-center justify-between gap-1 w-full drop-shadow-[0_0_6px_hsl(42_90%_50%/0.35)]">
             <span>{label}</span>
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${open || hasActiveItem ? "" : "-rotate-90"}`} />
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 text-primary/70 ${open || hasActiveItem ? "" : "-rotate-90"}`} />
           </SidebarGroupLabel>
         </CollapsibleTrigger>
         <CollapsibleContent>
