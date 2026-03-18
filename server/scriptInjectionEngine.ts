@@ -32,6 +32,7 @@ export interface InjectionJob {
   id: string;
   config: ScriptInjectionConfig;
   startTime: number;
+  endTime?: number;
   active: boolean;
   results: InjectionResult[];
   summary: { executed: number; reflected: number; tested: number; wafBlocked: number; bypassed: number; timeouts: number; errors: number };
@@ -1128,7 +1129,9 @@ export function startInjectionScan(config: ScriptInjectionConfig): InjectionJob 
       `[${ts9}] ──────────────────────────────────────────────────────────────────────`,
     ]);
     job.active = false;
-    jobs.delete(id);
+    job.endTime = Date.now();
+    // Keep job for 30 minutes so results can be downloaded
+    setTimeout(() => jobs.delete(id), 30 * 60 * 1000);
   };
 
   runAll();
@@ -1143,6 +1146,7 @@ export function stopInjectionScan(id: string): boolean {
   const job = jobs.get(id);
   if (!job) return false;
   job.active = false;
-  jobs.delete(id);
+  job.endTime = Date.now();
+  setTimeout(() => jobs.delete(id), 30 * 60 * 1000);
   return true;
 }

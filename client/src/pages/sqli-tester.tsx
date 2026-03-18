@@ -10,45 +10,45 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { apiRequest } from "@/lib/queryClient";
-import { Database, AlertTriangle, Activity, Square, ChevronRight, ShieldAlert, CheckCircle, XCircle } from "lucide-react";
+import {
+  Database, AlertTriangle, Activity, Square, ChevronRight, ShieldAlert,
+  CheckCircle, Download, Table2, Loader2, Eye,
+} from "lucide-react";
 import { TrafficConsole } from "@/components/traffic-console";
 
 const TECHNIQUES = [
-  { id: "all", name: "All Techniques", desc: "Run error-based, UNION, boolean-blind, and time-based in sequence" },
-  { id: "error-based", name: "Error-Based", desc: "Injects payloads that trigger database error messages — confirms SQLi and reveals DB type/version" },
-  { id: "union", name: "UNION-Based", desc: "Extends SELECT with UNION statements to retrieve data from additional tables (user(), database(), version())" },
-  { id: "boolean-blind", name: "Boolean Blind", desc: "Detects SQLi when no error is shown — compares TRUE/FALSE condition responses to confirm parameter vulnerability" },
-  { id: "time-based", name: "Time-Based Blind", desc: "Injects SLEEP(5)/WAITFOR DELAY — confirms SQLi when response is delayed, even with no output" },
+  { id: "all",          name: "All Techniques",   desc: "Run error-based, UNION, boolean-blind, and time-based in sequence" },
+  { id: "error-based",  name: "Error-Based",       desc: "Injects payloads that trigger database error messages — confirms SQLi and reveals DB type/version" },
+  { id: "union",        name: "UNION-Based",       desc: "Extends SELECT with UNION statements to retrieve data from additional tables (user(), database(), version())" },
+  { id: "boolean-blind",name: "Boolean Blind",     desc: "Detects SQLi when no error is shown — compares TRUE/FALSE condition responses to confirm parameter vulnerability" },
+  { id: "time-based",   name: "Time-Based Blind",  desc: "Injects SLEEP(5)/WAITFOR DELAY — confirms SQLi when response is delayed, even with no output" },
 ];
 
 interface SQLiResult {
-  technique: string;
-  payload: string;
+  technique: string; payload: string;
   status: "vulnerable" | "potential" | "not_vulnerable" | "error";
-  statusCode?: number;
-  responseTime?: number;
-  evidence?: string;
-  dbType?: string;
-  timestamp: number;
+  statusCode?: number; responseTime?: number; evidence?: string; dbType?: string; timestamp: number;
 }
 
+interface ExtractedRecord { label: string; value: string; payload: string; technique: string; }
+
 interface JobStatus {
-  jobId: string;
-  active: boolean;
-  elapsed: number;
-  results: SQLiResult[];
-  totalResults: number;
+  jobId: string; active: boolean; elapsed: number;
+  results: SQLiResult[]; totalResults: number;
   summary: { vulnerable: number; potential: number; tested: number };
   dbTypeDetected?: string;
   config: { target: string; paramName: string; technique: string };
   trafficLog?: string[];
+  extractedData?: ExtractedRecord[];
+  extractionPhase?: boolean;
+  extractionLog?: string[];
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  vulnerable: "border-severity-critical/50 bg-severity-critical/5 text-severity-critical",
-  potential: "border-severity-high/50 bg-severity-high/5 text-severity-high",
+  vulnerable:     "border-severity-critical/50 bg-severity-critical/5 text-severity-critical",
+  potential:      "border-severity-high/50 bg-severity-high/5 text-severity-high",
   not_vulnerable: "border-border/30",
-  error: "border-border/20 opacity-60",
+  error:          "border-border/20 opacity-60",
 };
 
 export default function SQLiTesterPage() {
@@ -73,18 +73,18 @@ export default function SQLiTesterPage() {
   const pollStatus = useCallback(async (id: string) => {
     const res = await fetch(`/api/offensive/sqli/status/${id}`);
     if (res.status === 404) {
-      stopPolling(); setJobId(null);
+      stopPolling();
       setStatus((prev) => prev ? { ...prev, active: false } : null);
       return;
     }
     const data: JobStatus = await res.json();
     setStatus(data);
     if (!data.active) {
-      stopPolling(); setJobId(null);
+      stopPolling();
       toast({
         title: "SQLi Scan Complete",
         description: data.summary.vulnerable > 0
-          ? `${data.summary.vulnerable} VULNERABLE parameter(s) found!${data.dbTypeDetected ? ` DB: ${data.dbTypeDetected}` : ""}`
+          ? `${data.summary.vulnerable} VULNERABLE parameter(s)!${data.dbTypeDetected ? ` DB: ${data.dbTypeDetected}` : ""}${(data.extractedData?.length ?? 0) > 0 ? ` — ${data.extractedData!.length} DB values extracted` : ""}`
           : `No SQL injection found in ${data.summary.tested} tests`,
         variant: data.summary.vulnerable > 0 ? "destructive" : "default",
       });
@@ -102,21 +102,30 @@ export default function SQLiTesterPage() {
       pollRef.current = setInterval(() => pollStatus(data.jobId), 1000);
     } catch (e: any) {
       toast({ title: "Launch Failed", description: e.message, variant: "destructive" });
-    } finally {
-      setLaunching(false);
-    }
+    } finally { setLaunching(false); }
   };
 
   const stop = async () => {
     if (!jobId) return;
     await fetch(`/api/offensive/sqli/stop/${jobId}`, { method: "DELETE" });
-    stopPolling(); setJobId(null);
+    stopPolling();
     toast({ title: "Scan Stopped" });
   };
 
-  const isRunning = !!jobId && status?.active;
+  const downloadResults = () => {
+    if (!jobId) return;
+    const link = document.createElement("a");
+    link.href = `/api/offensive/sqli/download/${jobId}`;
+    link.download = `sqli-results-${target}-${jobId.slice(0, 8)}.json`;
+    link.click();
+  };
+
+  const isRunning = !!(jobId && status?.active);
+  const extracting = status?.extractionPhase ?? false;
   const selectedTech = TECHNIQUES.find((t) => t.id === technique);
   const vulnResults = status?.results.filter((r) => r.status === "vulnerable") ?? [];
+  const extractedData = status?.extractedData ?? [];
+  const canDownload = !!jobId && !isRunning && status && status.totalResults > 0;
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -125,7 +134,7 @@ export default function SQLiTesterPage() {
           <Database className="w-5 h-5 text-primary" />
           SQL Injection Tester
         </h1>
-        <p className="text-xs text-muted-foreground">Real SQLi detection — error-based, UNION, boolean-blind, time-based — identifies vulnerable parameters and database type</p>
+        <p className="text-xs text-muted-foreground">Real SQLi detection — error-based, UNION, boolean-blind, time-based — identifies vulnerable parameters, detects DB type, and extracts real database data</p>
       </div>
 
       <Alert className="border-severity-medium/50 bg-severity-medium/10">
@@ -192,10 +201,13 @@ export default function SQLiTesterPage() {
 
               {(isRunning || status) && (
                 <div className="p-3 border border-primary/20 rounded-md bg-primary/5 space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                       <div className={`w-2 h-2 rounded-full ${isRunning ? "bg-status-online animate-pulse" : "bg-muted-foreground"}`} />
-                      <span className="text-xs font-mono font-semibold">{isRunning ? "SCANNING" : "COMPLETE"}</span>
+                      <span className="text-xs font-mono font-semibold">
+                        {extracting ? "EXTRACTING DATA" : isRunning ? "SCANNING" : "COMPLETE"}
+                      </span>
+                      {extracting && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />}
                     </div>
                     <div className="flex items-center gap-3 text-xs font-mono">
                       {status?.summary.vulnerable ? (
@@ -203,6 +215,9 @@ export default function SQLiTesterPage() {
                       ) : null}
                       {status?.dbTypeDetected && <Badge variant="outline" className="text-[9px]">{status.dbTypeDetected}</Badge>}
                       <span className="text-muted-foreground">{status?.summary.tested ?? 0} tested</span>
+                      {(extractedData.length > 0) && (
+                        <Badge variant="outline" className="text-[9px] border-green-500/50 text-green-400">{extractedData.length} DB values extracted</Badge>
+                      )}
                     </div>
                   </div>
                   {isRunning && <Progress value={(status?.elapsed ?? 0) / 1.2} className="h-1.5" />}
@@ -218,10 +233,68 @@ export default function SQLiTesterPage() {
                       <Square className="w-4 h-4 me-2" />Stop Scan
                     </Button>
                 }
+                {canDownload && (
+                  <Button variant="outline" onClick={downloadResults} data-testid="button-download-sqli" className="gap-2">
+                    <Download className="w-4 h-4" />
+                    Download Report
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
 
+          {/* Extracted Data Panel */}
+          {extractedData.length > 0 && (
+            <Card className="border-green-500/30 bg-green-500/5">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs uppercase tracking-wider text-green-400 flex items-center gap-2">
+                  <Table2 className="w-4 h-4" />
+                  Extracted Database Data ({extractedData.length} values)
+                  <Button variant="ghost" size="sm" onClick={downloadResults} className="ml-auto h-6 text-[10px] gap-1.5 text-green-400 hover:text-green-300">
+                    <Download className="w-3 h-3" />
+                    Download JSON
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {extractedData.map((rec, i) => (
+                    <div key={i} className="p-2.5 rounded-md border border-green-500/20 bg-background space-y-1" data-testid={`extracted-row-${i}`}>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[9px] border-green-500/50 text-green-400">{rec.label}</Badge>
+                        <Badge variant="outline" className="text-[9px] border-border/40 text-muted-foreground">{rec.technique}</Badge>
+                      </div>
+                      <div className="font-mono text-xs text-green-300 bg-muted/30 rounded p-2 max-h-32 overflow-y-auto break-all" data-testid={`extracted-value-${i}`}>
+                        {rec.value}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground font-mono truncate">via: {rec.payload.slice(0, 80)}</div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Extraction log while extracting */}
+          {extracting && status?.extractionLog && status.extractionLog.length > 0 && (
+            <Card className="border-primary/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs uppercase tracking-wider flex items-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                  Data Extraction in Progress
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-0.5 font-mono text-[10px] text-muted-foreground max-h-32 overflow-y-auto">
+                  {status.extractionLog.slice(-20).map((line, i) => (
+                    <div key={i} className={line.includes("FOUND") ? "text-green-400" : ""}>{line}</div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Confirmed vulnerabilities */}
           {vulnResults.length > 0 && (
             <Card className="border-severity-critical/30">
               <CardHeader className="pb-2">
@@ -238,22 +311,36 @@ export default function SQLiTesterPage() {
                       <div className="text-[10px] font-mono text-muted-foreground">{r.responseTime}ms{r.dbType ? ` · ${r.dbType}` : ""}</div>
                     </div>
                     <div className="text-[10px] font-mono text-muted-foreground bg-muted/30 rounded p-1.5 break-all">Payload: {r.payload}</div>
-                    {r.evidence && <div className="text-[10px] font-mono text-severity-critical bg-severity-critical/5 rounded p-1.5 max-h-20 overflow-y-auto break-all">{r.evidence.slice(0, 300)}</div>}
+                    {r.evidence && (
+                      <div className="text-[10px] font-mono text-severity-critical bg-severity-critical/5 rounded p-1.5 max-h-32 overflow-y-auto break-all">
+                        {r.evidence.slice(0, 600)}
+                      </div>
+                    )}
                   </div>
                 ))}
               </CardContent>
             </Card>
           )}
 
+          {/* All test results */}
           {status && status.results.length > 0 && (
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-xs uppercase tracking-wider">All Test Results</CardTitle></CardHeader>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs uppercase tracking-wider flex items-center justify-between">
+                  <span>All Test Results</span>
+                  <span className="font-normal text-muted-foreground">{status.totalResults} total</span>
+                </CardTitle>
+              </CardHeader>
               <CardContent>
                 <div className="space-y-1 max-h-64 overflow-y-auto">
                   {[...status.results].reverse().map((r, i) => (
                     <div key={i} className={`p-2 rounded-md border text-xs flex items-center justify-between gap-2 ${STATUS_COLOR[r.status] || ""}`}>
                       <div className="flex items-center gap-2 min-w-0">
-                        {r.status === "vulnerable" ? <ShieldAlert className="w-3.5 h-3.5 shrink-0" /> : r.status === "potential" ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />}
+                        {r.status === "vulnerable"
+                          ? <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                          : r.status === "potential"
+                            ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                            : <CheckCircle className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />}
                         <span className="font-mono truncate text-[10px]">{r.payload.slice(0, 60)}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0 text-[10px] font-mono text-muted-foreground">

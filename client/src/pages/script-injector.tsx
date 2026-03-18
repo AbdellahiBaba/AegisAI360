@@ -12,7 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   Code, AlertTriangle, Activity, Square, ShieldAlert, CheckCircle, Terminal,
   Flame, ChevronDown, ChevronRight, Brain, Repeat, Shield, Target, Zap, BookOpen,
-  HelpCircle, Cpu, Wifi, WifiOff, Search, Sparkles, Unlock, Eye
+  HelpCircle, Cpu, Wifi, WifiOff, Search, Sparkles, Unlock, Eye, Download,
 } from "lucide-react";
 import { TrafficConsole } from "@/components/traffic-console";
 
@@ -159,6 +159,7 @@ export default function ScriptInjectorPage() {
   const [technique, setTechnique] = useState("all");
   const [jsonMode, setJsonMode] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [completedJobId, setCompletedJobId] = useState<string | null>(null);
   const [status, setStatus] = useState<JobStatus | null>(null);
   const [launching, setLaunching] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -208,14 +209,14 @@ export default function ScriptInjectorPage() {
   const pollStatus = useCallback(async (id: string) => {
     const res = await fetch(`/api/offensive/inject/status/${id}`);
     if (res.status === 404) {
-      stopPolling(); setJobId(null);
+      stopPolling(); setJobId(null); setCompletedJobId(id);
       setStatus((prev) => prev ? { ...prev, active: false } : null);
       return;
     }
     const data: JobStatus = await res.json();
     setStatus(data);
     if (!data.active) {
-      stopPolling(); setJobId(null);
+      stopPolling(); setJobId(null); setCompletedJobId(id);
       const issues = data.summary.executed + data.summary.reflected;
       toast({
         title: "Injection Scan Complete",
@@ -247,12 +248,22 @@ export default function ScriptInjectorPage() {
 
   const stop = async () => {
     if (!jobId) return;
-    await fetch(`/api/offensive/inject/stop/${jobId}`, { method: "DELETE" });
-    stopPolling(); setJobId(null);
+    const id = jobId;
+    await fetch(`/api/offensive/inject/stop/${id}`, { method: "DELETE" });
+    stopPolling(); setJobId(null); setCompletedJobId(id);
     toast({ title: "Scan Stopped" });
   };
 
-  const isRunning = !!jobId && status?.active;
+  const downloadResults = () => {
+    const id = completedJobId || jobId;
+    if (!id) return;
+    const link = document.createElement("a");
+    link.href = `/api/offensive/inject/download/${id}`;
+    link.download = `xss-inject-results-${target}-${id.slice(0, 8)}.json`;
+    link.click();
+  };
+
+  const isRunning = !!(jobId && status?.active);
   const criticalResults = status?.results.filter((r) =>
     r.status === "executed" || r.status === "ssti_hit" || r.status === "cmdi_hit" ||
     r.status === "waf_bypassed" || r.status === "oob_hit" || r.status === "redirect_hit" ||
@@ -524,6 +535,12 @@ export default function ScriptInjectorPage() {
                       <Square className="w-4 h-4 me-2" />Stop Scan
                     </Button>
                 }
+                {(completedJobId || (!isRunning && status && status.totalResults > 0)) && (
+                  <Button variant="outline" onClick={downloadResults} data-testid="button-download-inject" className="gap-2">
+                    <Download className="w-4 h-4" />
+                    Download Report
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

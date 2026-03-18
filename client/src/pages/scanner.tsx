@@ -745,7 +745,7 @@ function DirBruteResults({ data, target }: { data: any; target: string }) {
   const remediation = useRemediation();
   if (data.error) return <Card><CardContent className="p-4 text-xs text-destructive">{data.error}</CardContent></Card>;
 
-  const foundPaths = data.foundPaths?.filter((p: any) => p.found) || [];
+  const foundPaths = data.foundPaths || [];
 
   return (
     <div className="space-y-3">
@@ -756,7 +756,7 @@ function DirBruteResults({ data, target }: { data: any; target: string }) {
         </CardContent></Card>
         <Card><CardContent className="p-3 text-center">
           <p className="text-[10px] text-muted-foreground uppercase">{t("scanner.checksRun")}</p>
-          <p className="text-lg font-bold font-mono" data-testid="text-dir-total">{data.totalScanned || 0}</p>
+          <p className="text-lg font-bold font-mono" data-testid="text-dir-total">{data.totalChecked || data.totalScanned || 0}</p>
         </CardContent></Card>
         <Card><CardContent className="p-3 text-center">
           <p className="text-[10px] text-muted-foreground uppercase">{t("scanner.riskLevel")}</p>

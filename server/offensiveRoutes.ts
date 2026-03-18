@@ -96,12 +96,41 @@ router.get("/sqli/status/:id", (req: Request, res: Response) => {
     dbTypeDetected: job.dbTypeDetected,
     config: { target: job.config.target, paramName: job.config.paramName, technique: job.config.technique },
     trafficLog: (job.trafficLog ?? []).slice(-300),
+    extractedData: job.extractedData ?? [],
+    extractionPhase: job.extractionPhase ?? false,
+    extractionLog: (job.extractionLog ?? []).slice(-100),
   });
 });
 
 router.delete("/sqli/stop/:id", (req: Request, res: Response) => {
   const ok = stopSQLiScan(req.params.id);
   return ok ? res.json({ success: true }) : res.status(404).json({ error: "Not found" });
+});
+
+router.get("/sqli/download/:id", (req: Request, res: Response) => {
+  const job = getSQLiJob(req.params.id);
+  if (!job) return res.status(404).json({ error: "Job not found — results expire after 30 minutes" });
+  const report = {
+    meta: {
+      tool: "AegisAI360 SQLi Tester",
+      target: `${job.config.target}:${job.config.port}${job.config.path}`,
+      parameter: job.config.paramName,
+      technique: job.config.technique,
+      startTime: new Date(job.startTime).toISOString(),
+      endTime: job.endTime ? new Date(job.endTime).toISOString() : "in progress",
+      duration: `${Math.floor(((job.endTime ?? Date.now()) - job.startTime) / 1000)}s`,
+      dbDetected: job.dbTypeDetected ?? "unknown",
+    },
+    summary: job.summary,
+    vulnerableResults: job.results.filter(r => r.status === "vulnerable" || r.status === "potential"),
+    extractedData: job.extractedData ?? [],
+    extractionLog: job.extractionLog ?? [],
+    allResults: job.results,
+  };
+  const filename = `sqli-results-${job.config.target}-${job.id.slice(0, 8)}.json`;
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Content-Type", "application/json");
+  return res.json(report);
 });
 
 router.post("/auth/start", (req: Request, res: Response) => {
@@ -266,6 +295,55 @@ router.get("/inject/status/:id", (req: Request, res: Response) => {
 router.delete("/inject/stop/:id", (req: Request, res: Response) => {
   const ok = stopInjectionScan(req.params.id);
   return ok ? res.json({ success: true }) : res.status(404).json({ error: "Not found" });
+});
+
+router.get("/inject/download/:id", (req: Request, res: Response) => {
+  const job = getInjectionJob(req.params.id);
+  if (!job) return res.status(404).json({ error: "Job not found — results expire after 30 minutes" });
+  const critical = job.results.filter(r =>
+    r.status === "executed" || r.status === "ssti_hit" || r.status === "cmdi_hit" ||
+    r.status === "waf_bypassed" || r.status === "oob_hit" || r.status === "redirect_hit" ||
+    r.status === "reflected_unescaped"
+  );
+  const report = {
+    meta: {
+      tool: "AegisAI360 XSS / Script Injection Tester",
+      target: `${job.config.target}:${job.config.port}${job.config.path}`,
+      parameter: job.config.paramName,
+      technique: job.config.technique,
+      startTime: new Date(job.startTime).toISOString(),
+      endTime: job.endTime ? new Date(job.endTime).toISOString() : "in progress",
+      duration: `${Math.floor(((job.endTime ?? Date.now()) - job.startTime) / 1000)}s`,
+    },
+    summary: job.summary,
+    criticalFindings: critical.map(r => ({
+      technique: r.technique,
+      status: r.status,
+      severity: r.severity,
+      payload: r.payload,
+      statusCode: r.statusCode,
+      responseTime: r.responseTime,
+      evidence: r.evidence,
+      decodedEvidence: (r as any).decodedEvidence,
+      bypassUsed: r.bypassUsed,
+      timestamp: new Date(r.timestamp).toISOString(),
+    })),
+    wafBypassesLearned: job.learning?.workingBypass ?? [],
+    allResults: job.results.map(r => ({
+      technique: r.technique,
+      status: r.status,
+      severity: r.severity,
+      payload: r.payload.slice(0, 200),
+      statusCode: r.statusCode,
+      responseTime: r.responseTime,
+      evidence: r.evidence?.slice(0, 400),
+      timestamp: new Date(r.timestamp).toISOString(),
+    })),
+  };
+  const filename = `xss-inject-results-${job.config.target}-${job.id.slice(0, 8)}.json`;
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Content-Type", "application/json");
+  return res.json(report);
 });
 
 router.post("/stress/start", (req: Request, res: Response) => {
