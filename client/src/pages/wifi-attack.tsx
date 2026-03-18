@@ -427,11 +427,16 @@ export default function WifiAttackPage() {
               </div>
 
               {/* Launch / Stop buttons */}
+              {tools.length > 0 && tools.some(t => !t.available) && !active && (
+                <p className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1.5">
+                  Required tools not found — this tool must be run on a Kali/Parrot Linux host with aircrack-ng installed and a monitor-mode wireless adapter connected.
+                </p>
+              )}
               <div className="flex items-center gap-3">
                 {!active ? (
                   <Button
                     onClick={handleLaunch}
-                    disabled={launching || !iface.trim()}
+                    disabled={launching || !iface.trim() || (tools.length > 0 && tools.some(t => !t.available))}
                     className="flex-1 h-9 bg-primary hover:bg-primary/90 text-primary-foreground"
                     data-testid="button-wifi-launch"
                   >

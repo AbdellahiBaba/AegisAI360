@@ -371,12 +371,16 @@ echo "[AEGIS] Done"
 
 // ─── Job runner ──────────────────────────────────────────────────────────────
 
+function isToolAvailable(tool: string): boolean {
+  try {
+    const p = execSync(`which ${tool} 2>/dev/null`, { timeout: 2000 }).toString().trim();
+    return p.length > 0;
+  } catch { return false; }
+}
+
 export function startWirelessAttack(cfg: WirelessConfig): WirelessJob {
   const id = makeId();
   const scriptPath = `/tmp/aegis_wireless_${id}.sh`;
-  const script = buildScript(cfg);
-
-  fs.writeFileSync(scriptPath, script, { mode: 0o755 });
 
   const job: WirelessJob = {
     id, config: cfg, startTime: Date.now(),
@@ -385,11 +389,37 @@ export function startWirelessAttack(cfg: WirelessConfig): WirelessJob {
   };
   jobs.set(id, job);
 
+  const ts = () => new Date().toTimeString().slice(0, 8);
   const prefix = `[AEGIS][${new Date().toISOString()}] `;
   job.output.push(`${prefix}Launching: ${cfg.technique.toUpperCase()} on ${cfg.iface}`);
   job.output.push(`${prefix}Target: ${cfg.bssid || "N/A"} SSID: ${cfg.ssid || "N/A"} Channel: ${cfg.channel || "auto"}`);
-  job.output.push(`${prefix}Script written to: ${scriptPath}`);
   job.output.push(`${"─".repeat(60)}`);
+
+  // Pre-flight: verify core tools are present before spawning any script
+  const coreTools = REQUIRED_TOOLS[cfg.technique] ?? [];
+  const missing = coreTools.filter(t => !isToolAvailable(t));
+  if (missing.length > 0) {
+    job.active = false;
+    job.exitCode = 127;
+    job.output.push(`[${ts()}] TOOL NOT FOUND: ${missing.join(", ")}`);
+    job.output.push(`[${ts()}] ──────────────────────────────────────────────────────`);
+    job.output.push(`[${ts()}] Wireless attack tools are not available in this environment.`);
+    job.output.push(`[${ts()}] These tools require a native Linux system with:`);
+    job.output.push(`[${ts()}]   • A monitor-mode capable wireless adapter (e.g. Alfa AWUS036ACH)`);
+    job.output.push(`[${ts()}]   • Kali Linux or Parrot OS with aircrack-ng suite installed`);
+    job.output.push(`[${ts()}]   • Root/sudo access to configure monitor mode`);
+    job.output.push(`[${ts()}] `);
+    job.output.push(`[${ts()}] To install on Kali/Parrot:`);
+    job.output.push(`[${ts()}]   sudo apt-get install -y aircrack-ng hcxtools hashcat reaver hostapd-wpe`);
+    job.output.push(`[${ts()}] `);
+    job.output.push(`[${ts()}] Missing: ${missing.join("  ")}`);
+    job.output.push(`${"─".repeat(60)}`);
+    return job;
+  }
+
+  const script = buildScript(cfg);
+  fs.writeFileSync(scriptPath, script, { mode: 0o755 });
+  job.output.push(`${prefix}Script written to: ${scriptPath}`);
 
   const proc = spawn("bash", [scriptPath], {
     env: { ...process.env, TERM: "dumb" },
