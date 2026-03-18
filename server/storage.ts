@@ -79,6 +79,8 @@ export interface IStorage {
   getAllOrganizationsWithUserCount(): Promise<(Organization & { userCount: number })[]>;
   updateOrganization(id: number, data: Partial<InsertOrganization & { suspended: boolean; subscriptionExpiresAt: Date | null; subscriptionStatus: string }>): Promise<Organization | undefined>;
   getOrgsWithExpiredSubscriptions(): Promise<Organization[]>;
+  getOrgByStripeCustomerId(customerId: string): Promise<Organization | undefined>;
+  getOrgByStripeSubscriptionId(subscriptionId: string): Promise<Organization | undefined>;
   getOrganizationUserCount(orgId: number): Promise<number>;
 
   getSecurityEvents(orgId: number): Promise<SecurityEvent[]>;
