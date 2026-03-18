@@ -1,13 +1,17 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslation } from "react-i18next";
-import { CreditCard, Zap, Shield, Crown, Check, ExternalLink, Loader2, AlertTriangle } from "lucide-react";
-import { useMemo } from "react";
+import { useToast } from "@/hooks/use-toast";
+import {
+  CreditCard, Zap, Shield, Crown, Check, ExternalLink,
+  Loader2, AlertTriangle, Clock, Rocket, FlaskConical, ArrowRight,
+} from "lucide-react";
+import { useMemo, useEffect, useState } from "react";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 interface BillingStatus {
@@ -15,6 +19,12 @@ interface BillingStatus {
   maxUsers: number;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  subscriptionStatus: string;
+  subscriptionExpiresAt: string | null;
+  trialUsed: boolean;
+  trialStartedAt: string | null;
+  planId: number | null;
+  planDetails: any;
 }
 
 interface StripeProduct {
@@ -117,10 +127,90 @@ const planMeta: Record<string, { features: string[]; icon: React.ElementType; po
   },
 };
 
+function useCountdown(targetDate: string | null) {
+  const [remaining, setRemaining] = useState<number>(0);
+  useEffect(() => {
+    if (!targetDate) return;
+    const update = () => {
+      const diff = new Date(targetDate).getTime() - Date.now();
+      setRemaining(Math.max(0, diff));
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [targetDate]);
+  const hours = Math.floor(remaining / 3600000);
+  const mins = Math.floor((remaining % 3600000) / 60000);
+  const secs = Math.floor((remaining % 60000) / 1000);
+  const pct = targetDate
+    ? Math.max(0, Math.min(100, (remaining / (24 * 3600000)) * 100))
+    : 0;
+  return { remaining, hours, mins, secs, pct, expired: remaining === 0 };
+}
+
+function TrialCountdownCard({ expiresAt, onUpgrade }: { expiresAt: string; onUpgrade: () => void }) {
+  const { hours, mins, secs, pct, expired } = useCountdown(expiresAt);
+  if (expired) {
+    return (
+      <div className="flex items-start gap-3 p-4 rounded-lg border border-red-500/50 bg-red-500/10" data-testid="banner-trial-expired">
+        <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-red-400">Your free trial has ended</p>
+          <p className="text-xs text-muted-foreground mt-0.5">All agents have been automatically disconnected. Subscribe to restore access.</p>
+        </div>
+        <Button size="sm" onClick={onUpgrade} data-testid="button-upgrade-after-trial">
+          <ArrowRight className="w-4 h-4 me-1" /> Subscribe now
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="p-4 rounded-lg border border-amber-500/50 bg-amber-500/8 space-y-3" data-testid="card-trial-countdown">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <FlaskConical className="w-5 h-5 text-amber-400" />
+          <span className="text-sm font-semibold text-amber-400">Free trial active</span>
+          <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[9px] uppercase">24h</Badge>
+        </div>
+        <Button size="sm" variant="outline" onClick={onUpgrade} data-testid="button-upgrade-from-trial">
+          Upgrade before trial ends <ArrowRight className="w-3 h-3 ms-1" />
+        </Button>
+      </div>
+      <div className="flex items-center gap-4">
+        {[
+          { label: "Hours", value: String(hours).padStart(2, "0") },
+          { label: "Minutes", value: String(mins).padStart(2, "0") },
+          { label: "Seconds", value: String(secs).padStart(2, "0") },
+        ].map(({ label, value }) => (
+          <div key={label} className="text-center">
+            <div className="text-2xl font-mono font-bold tabular-nums text-amber-300" data-testid={`text-trial-${label.toLowerCase()}`}>
+              {value}
+            </div>
+            <div className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</div>
+          </div>
+        ))}
+        <div className="flex-1">
+          <div className="h-2 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-amber-500 transition-all duration-1000"
+              style={{ width: `${pct}%` }}
+              data-testid="bar-trial-progress"
+            />
+          </div>
+          <p className="text-[9px] text-muted-foreground mt-1">
+            Trial ends {new Date(expiresAt).toLocaleString()}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Billing() {
-  useDocumentTitle("Billing");
+  useDocumentTitle("Billing | AegisAI360");
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { toast } = useToast();
   const isAdmin = user?.role === "admin";
 
   const { data: billingStatus, isLoading } = useQuery<BillingStatus>({
@@ -139,11 +229,9 @@ export default function Billing() {
     const map: Record<string, { priceId: string; amount: number; name: string }> = {};
     if (stripeProducts) {
       for (const p of stripeProducts) {
-        const meta = typeof p.metadata === 'string' ? JSON.parse(p.metadata) : p.metadata;
+        const meta = typeof p.metadata === "string" ? JSON.parse(p.metadata) : p.metadata;
         const tier = meta?.plan || p.name?.toLowerCase();
-        if (tier) {
-          map[tier] = { priceId: p.price_id, amount: p.unit_amount, name: p.name };
-        }
+        if (tier) map[tier] = { priceId: p.price_id, amount: p.unit_amount, name: p.name };
       }
     }
     return map;
@@ -169,6 +257,24 @@ export default function Billing() {
     },
   });
 
+  const trialMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/billing/start-trial", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/billing/status"] });
+      toast({ title: "Free trial started! You have 24 hours of full Professional access." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not start trial", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const scrollToPlans = () => {
+    document.getElementById("plan-cards")?.scrollIntoView({ behavior: "smooth" });
+  };
+
   if (isLoading) {
     return (
       <div className="p-4 md:p-6 space-y-4">
@@ -183,6 +289,11 @@ export default function Billing() {
   const isSuperAdmin = user?.isSuperAdmin === true;
   const currentPlan = isSuperAdmin ? "enterprise" : (billingStatus?.plan || "starter");
   const tiers = ["starter", "professional", "enterprise"];
+  const isTrialing = billingStatus?.subscriptionStatus === "trialing";
+  const isActive = billingStatus?.subscriptionStatus === "active";
+  const trialUsed = billingStatus?.trialUsed ?? false;
+  const trialExpired = trialUsed && !isTrialing && !isActive && billingStatus?.subscriptionStatus !== "inactive";
+  const showTrialOffer = !trialUsed && !isActive && !isTrialing && !isSuperAdmin;
 
   if (isSuperAdmin) {
     return (
@@ -196,7 +307,7 @@ export default function Billing() {
             <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
             <div>
               <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">Stripe Test Mode Active</p>
-              <p className="text-xs text-muted-foreground">Payments are in sandbox/test mode. Configure production Stripe keys in your deployment settings to enable live payments.</p>
+              <p className="text-xs text-muted-foreground">Payments are in sandbox/test mode.</p>
             </div>
           </div>
         )}
@@ -261,11 +372,61 @@ export default function Billing() {
           <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
           <div>
             <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">Stripe Test Mode Active</p>
-            <p className="text-xs text-muted-foreground">Payments are in sandbox/test mode. Configure production Stripe keys in your deployment settings to enable live payments.</p>
+            <p className="text-xs text-muted-foreground">Payments are in sandbox/test mode. Configure production Stripe keys to enable live payments.</p>
           </div>
         </div>
       )}
 
+      {/* Trial countdown or expired banner */}
+      {isTrialing && billingStatus?.subscriptionExpiresAt && (
+        <TrialCountdownCard expiresAt={billingStatus.subscriptionExpiresAt} onUpgrade={scrollToPlans} />
+      )}
+      {trialExpired && (
+        <TrialCountdownCard expiresAt={billingStatus?.subscriptionExpiresAt ?? new Date(0).toISOString()} onUpgrade={scrollToPlans} />
+      )}
+
+      {/* Free trial offer — only for orgs that haven't used it */}
+      {showTrialOffer && (
+        <Card className="border-2 border-amber-500/40 bg-gradient-to-br from-amber-500/5 to-transparent" data-testid="card-trial-offer">
+          <CardContent className="p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="p-3 rounded-xl bg-amber-500/15">
+                <Rocket className="w-7 h-7 text-amber-400" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-bold text-base">Try AegisAI360 free for 24 hours</h3>
+                  <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[10px] uppercase">No credit card required</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Get full Professional plan access — all agents, threat intel, remote terminal, AI analysis, and more. One trial per organization.
+                </p>
+                <div className="flex flex-wrap gap-3 pt-1">
+                  {["25 agents", "All features unlocked", "AI threat analysis", "Remote terminal"].map((f) => (
+                    <span key={f} className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Check className="w-3 h-3 text-amber-400" /> {f}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <Button
+                size="lg"
+                className="bg-amber-500 hover:bg-amber-600 text-black font-bold shrink-0 gap-2"
+                onClick={() => trialMutation.mutate()}
+                disabled={trialMutation.isPending}
+                data-testid="button-start-trial"
+              >
+                {trialMutation.isPending
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Starting...</>
+                  : <><FlaskConical className="w-4 h-4" /> Start Free Trial</>
+                }
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Current subscription status card */}
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -274,37 +435,55 @@ export default function Billing() {
                 <CreditCard className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-bold">{t("billing.currentPlanLabel")}: <span className="text-primary capitalize" data-testid="text-current-plan">{currentPlan}</span></p>
+                <p className="text-sm font-bold">
+                  {t("billing.currentPlanLabel")}:{" "}
+                  <span className="text-primary capitalize" data-testid="text-current-plan">{currentPlan}</span>
+                  {isTrialing && (
+                    <Badge className="ms-2 bg-amber-500/20 text-amber-300 border-amber-500/30 text-[9px] uppercase">Trial</Badge>
+                  )}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {billingStatus?.maxUsers === -1 ? t("billing.unlimited") : billingStatus?.maxUsers} {t("billing.users")}
-                  {billingStatus?.stripeSubscriptionId ? ` · ${t("billing.activeSubscription")}` : ` · ${t("billing.noActiveSubscription")}`}
+                  {billingStatus?.stripeSubscriptionId
+                    ? ` · ${t("billing.activeSubscription")}`
+                    : isTrialing
+                    ? ` · Trial active`
+                    : ` · ${t("billing.noActiveSubscription")}`}
+                  {billingStatus?.subscriptionExpiresAt && !isTrialing && (
+                    <span className="ms-1">· Renews {new Date(billingStatus.subscriptionExpiresAt).toLocaleDateString()}</span>
+                  )}
                 </p>
               </div>
             </div>
-            {isAdmin && billingStatus?.stripeCustomerId && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => portalMutation.mutate()}
-                disabled={portalMutation.isPending}
-                data-testid="button-manage-billing"
-              >
-                {portalMutation.isPending ? <Loader2 className="w-4 h-4 me-1 animate-spin" /> : <ExternalLink className="w-4 h-4 me-1" />}
-                {t("billing.manageBilling")}
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {isAdmin && billingStatus?.stripeCustomerId && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => portalMutation.mutate()}
+                  disabled={portalMutation.isPending}
+                  data-testid="button-manage-billing"
+                >
+                  {portalMutation.isPending ? <Loader2 className="w-4 h-4 me-1 animate-spin" /> : <ExternalLink className="w-4 h-4 me-1" />}
+                  {t("billing.manageBilling")}
+                </Button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Plan cards */}
+      <div id="plan-cards" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {tiers.map((tier) => {
           const meta = planMeta[tier];
           if (!meta) return null;
-          const isCurrent = currentPlan === tier;
+          const isCurrent = currentPlan === tier && !isTrialing;
           const PlanIcon = meta.icon;
           const product = productsByTier[tier];
-          const displayPrice = product ? `$${(product.amount / 100).toFixed(0)}` : tier === "starter" ? "$29" : tier === "professional" ? "$99" : "$299";
+          const displayPrice = product
+            ? `$${(product.amount / 100).toFixed(0)}`
+            : tier === "starter" ? "$29" : tier === "professional" ? "$99" : "$299";
 
           return (
             <Card
@@ -315,6 +494,11 @@ export default function Billing() {
               {meta.popular && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                   <Badge className="bg-primary text-primary-foreground text-[10px]">{t("billing.mostPopular")}</Badge>
+                </div>
+              )}
+              {isTrialing && tier === "professional" && (
+                <div className="absolute -top-3 right-4">
+                  <Badge className="bg-amber-500 text-black text-[10px]">Currently trialing</Badge>
                 </div>
               )}
               <CardHeader className="pb-2 pt-6">
@@ -353,9 +537,15 @@ export default function Billing() {
                     }}
                     data-testid={`button-select-${tier}`}
                   >
-                    {isCurrent ? t("common.currentPlan") :
-                     checkoutMutation.isPending ? <><Loader2 className="w-4 h-4 me-1 animate-spin" />{t("common.processing")}</> :
-                     !product ? t("common.loading") : t("common.upgrade")}
+                    {checkoutMutation.isPending
+                      ? <><Loader2 className="w-4 h-4 me-1 animate-spin" />{t("common.processing")}</>
+                      : isCurrent
+                      ? t("common.currentPlan")
+                      : isTrialing
+                      ? "Subscribe now"
+                      : !product
+                      ? t("common.loading")
+                      : t("common.upgrade")}
                   </Button>
                 )}
               </CardContent>
@@ -363,6 +553,14 @@ export default function Billing() {
           );
         })}
       </div>
+
+      {/* Trial already used notice */}
+      {trialUsed && !isTrialing && !isActive && (
+        <div className="flex items-center gap-3 p-3 rounded-lg border border-border/40 bg-muted/30 text-sm text-muted-foreground" data-testid="banner-trial-used">
+          <Clock className="w-4 h-4 shrink-0" />
+          Your organization has used its free trial. Subscribe to a plan above to continue.
+        </div>
+      )}
     </div>
   );
 }

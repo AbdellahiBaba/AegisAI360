@@ -2104,17 +2104,51 @@ export async function registerRoutes(
       if (!org) return res.status(404).json({ error: "Organization not found" });
       let planDetails = null;
       if (org.planId) planDetails = await storage.getPlanById(org.planId);
+      const orgAny = org as any;
       res.json({
         plan: org.plan,
         maxUsers: org.maxUsers,
         stripeCustomerId: org.stripeCustomerId,
         stripeSubscriptionId: org.stripeSubscriptionId,
         subscriptionStatus: org.subscriptionStatus,
+        subscriptionExpiresAt: orgAny.subscriptionExpiresAt ?? null,
+        trialUsed: orgAny.trialUsed ?? false,
+        trialStartedAt: orgAny.trialStartedAt ?? null,
         planId: org.planId,
         planDetails,
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch billing status" });
+    }
+  });
+
+  app.post("/api/billing/start-trial", requireAuth, async (req: any, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const org = await storage.getOrganization(orgId);
+      if (!org) return res.status(404).json({ error: "Organization not found" });
+      const orgAny = org as any;
+      if (orgAny.trialUsed) {
+        return res.status(400).json({ error: "Your organization has already used its free trial." });
+      }
+      if (org.subscriptionStatus === "active") {
+        return res.status(400).json({ error: "You already have an active subscription." });
+      }
+      if (org.subscriptionStatus === "trialing") {
+        return res.status(400).json({ error: "A trial is already active." });
+      }
+      const updated = await storage.startOrgTrial(orgId);
+      await storage.createAuditLog({
+        organizationId: orgId,
+        userId: req.user.id,
+        action: "start_trial",
+        targetType: "organization",
+        targetId: String(orgId),
+        details: "24-hour free trial started",
+      });
+      res.json({ ok: true, expiresAt: (updated as any)?.subscriptionExpiresAt });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to start trial" });
     }
   });
 

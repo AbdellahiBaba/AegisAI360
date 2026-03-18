@@ -64,6 +64,8 @@ interface AdminOrganization {
   subscriptionExpiresAt: string | null;
   stripeSubscriptionId: string | null;
   stripeCustomerId: string | null;
+  trialUsed: boolean;
+  trialStartedAt: string | null;
 }
 
 interface AdminUser {
@@ -337,10 +339,17 @@ function OrganizationsTable() {
                         <Badge variant="destructive" className="text-[9px] uppercase">{t("superAdmin.suspended")}</Badge>
                       ) : isExpired ? (
                         <Badge variant="destructive" className="text-[9px] uppercase">Expired</Badge>
+                      ) : org.subscriptionStatus === "trialing" ? (
+                        <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[9px] uppercase">
+                          Trial {expiresInDays !== null ? `${expiresInDays}d left` : ""}
+                        </Badge>
                       ) : expiresInDays !== null && expiresInDays <= 7 ? (
                         <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[9px] uppercase">Expires {expiresInDays}d</Badge>
                       ) : (
                         <Badge className="bg-status-online/20 text-status-online text-[9px] uppercase">{org.subscriptionStatus || "active"}</Badge>
+                      )}
+                      {org.trialUsed && org.subscriptionStatus !== "trialing" && (
+                        <Badge className="bg-muted text-muted-foreground text-[8px] uppercase block w-fit">Trial used</Badge>
                       )}
                     </div>
                   </TableCell>

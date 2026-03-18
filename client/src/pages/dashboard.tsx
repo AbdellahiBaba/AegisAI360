@@ -654,6 +654,10 @@ function ResponseActionsFeed({ actions }: { actions: ResponseAction[] }) {
 interface BillingStatus {
   plan: string;
   stripeSubscriptionId: string | null;
+  subscriptionStatus: string;
+  subscriptionExpiresAt: string | null;
+  trialUsed: boolean;
+  trialStartedAt: string | null;
 }
 
 export default function Dashboard() {
@@ -766,11 +770,62 @@ export default function Dashboard() {
     );
   }
 
-  const showUpgradeBanner = user?.role === "admin" && !user?.isSuperAdmin && billingStatus && !billingStatus.stripeSubscriptionId;
+  const showUpgradeBanner = user?.role === "admin" && !user?.isSuperAdmin && billingStatus && !billingStatus.stripeSubscriptionId && billingStatus.subscriptionStatus !== "trialing";
+  const isTrialing = billingStatus?.subscriptionStatus === "trialing";
+  const trialExpiredOnDash = billingStatus?.trialUsed && !isTrialing && billingStatus?.subscriptionStatus !== "active" && billingStatus?.subscriptionStatus !== "inactive";
+
+  const [trialRemaining, setTrialRemaining] = useState<number>(0);
+  useEffect(() => {
+    if (!billingStatus?.subscriptionExpiresAt || !isTrialing) return;
+    const tick = () => setTrialRemaining(Math.max(0, new Date(billingStatus.subscriptionExpiresAt!).getTime() - Date.now()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [billingStatus?.subscriptionExpiresAt, isTrialing]);
+  const trialHours = Math.floor(trialRemaining / 3600000);
+  const trialMins = Math.floor((trialRemaining % 3600000) / 60000);
+  const trialSecs = Math.floor((trialRemaining % 60000) / 1000);
 
   return (
     <div className="p-4 md:p-6 space-y-5 grid-pattern">
       <OnboardingWizard open={showOnboarding} onComplete={() => setShowOnboarding(false)} />
+
+      {/* Trial countdown banner */}
+      {isTrialing && billingStatus?.subscriptionExpiresAt && (
+        <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-amber-500/50 bg-amber-500/8 flex-wrap" data-testid="banner-trial-active">
+          <div className="flex items-center gap-3">
+            <Clock className="w-5 h-5 text-amber-400 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-amber-300">Free trial active</p>
+              <p className="text-xs text-muted-foreground">
+                Time remaining:{" "}
+                <span className="font-mono text-amber-300" data-testid="text-trial-remaining">
+                  {String(trialHours).padStart(2, "0")}:{String(trialMins).padStart(2, "0")}:{String(trialSecs).padStart(2, "0")}
+                </span>
+              </p>
+            </div>
+          </div>
+          <Button size="sm" onClick={() => navigate("/billing")} className="bg-amber-500 hover:bg-amber-600 text-black text-xs" data-testid="button-upgrade-from-trial-banner">
+            Subscribe before trial ends
+          </Button>
+        </div>
+      )}
+
+      {/* Trial expired banner */}
+      {trialExpiredOnDash && (
+        <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-red-500/50 bg-red-500/8 flex-wrap" data-testid="banner-trial-expired-dashboard">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-red-400">Trial ended — agents disconnected</p>
+              <p className="text-xs text-muted-foreground">Subscribe to a plan to reconnect all agents and restore access.</p>
+            </div>
+          </div>
+          <Button size="sm" onClick={() => navigate("/billing")} data-testid="button-subscribe-after-trial">
+            Subscribe now
+          </Button>
+        </div>
+      )}
 
       {showUpgradeBanner && (
         <Card className="border-primary/30 bg-primary/5" data-testid="upgrade-banner">

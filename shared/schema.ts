@@ -17,6 +17,8 @@ export const organizations = pgTable("organizations", {
   maxUsers: integer("max_users").notNull().default(5),
   suspended: boolean("suspended").notNull().default(false),
   subscriptionExpiresAt: timestamp("subscription_expires_at"),
+  trialUsed: boolean("trial_used").notNull().default(false),
+  trialStartedAt: timestamp("trial_started_at"),
   defenseMode: text("defense_mode").notNull().default("auto"),
   logRetentionDays: integer("log_retention_days").notNull().default(90),
   auditRetentionDays: integer("audit_retention_days").notNull().default(365),

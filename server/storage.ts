@@ -81,6 +81,7 @@ export interface IStorage {
   getOrgsWithExpiredSubscriptions(): Promise<Organization[]>;
   getOrgByStripeCustomerId(customerId: string): Promise<Organization | undefined>;
   getOrgByStripeSubscriptionId(subscriptionId: string): Promise<Organization | undefined>;
+  startOrgTrial(orgId: number): Promise<Organization | undefined>;
   getOrganizationUserCount(orgId: number): Promise<number>;
 
   getSecurityEvents(orgId: number): Promise<SecurityEvent[]>;
@@ -376,6 +377,8 @@ export class DatabaseStorage implements IStorage {
       maxUsers: organizations.maxUsers,
       suspended: organizations.suspended,
       subscriptionExpiresAt: organizations.subscriptionExpiresAt,
+      trialUsed: organizations.trialUsed,
+      trialStartedAt: organizations.trialStartedAt,
       defenseMode: organizations.defenseMode,
       logRetentionDays: organizations.logRetentionDays,
       auditRetentionDays: organizations.auditRetentionDays,
@@ -412,6 +415,18 @@ export class DatabaseStorage implements IStorage {
   async getOrgByStripeSubscriptionId(subscriptionId: string): Promise<Organization | undefined> {
     const [org] = await db.select().from(organizations).where(eq(organizations.stripeSubscriptionId, subscriptionId)).limit(1);
     return org;
+  }
+
+  async startOrgTrial(orgId: number): Promise<Organization | undefined> {
+    const now = new Date();
+    const trialEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const [updated] = await db.update(organizations).set({
+      trialUsed: true,
+      trialStartedAt: now,
+      subscriptionStatus: "trialing",
+      subscriptionExpiresAt: trialEnd,
+    } as any).where(eq(organizations.id, orgId)).returning();
+    return updated;
   }
 
   async getOrganizationUserCount(orgId: number): Promise<number> {
