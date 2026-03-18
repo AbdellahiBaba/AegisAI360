@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { apiRequest } from "@/lib/queryClient";
-import { HardDrive, AlertTriangle, Activity, Square, ShieldAlert, CheckCircle, Info, Wifi } from "lucide-react";
+import { HardDrive, AlertTriangle, Activity, Square, ShieldAlert, CheckCircle, Info, Wifi, Download } from "lucide-react";
 import { TrafficConsole } from "@/components/traffic-console";
 
 const TECHNIQUES = [
@@ -49,6 +49,7 @@ export default function FtpAttacker() {
   const [port, setPort] = useState("21");
   const [technique, setTechnique] = useState("all");
   const [jobId, setJobId] = useState<string | null>(null);
+  const [completedJobId, setCompletedJobId] = useState<string | null>(null);
   const [results, setResults] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
   const [active, setActive] = useState(false);
@@ -71,6 +72,7 @@ export default function FtpAttacker() {
       if (data.trafficLog) setTrafficLog(data.trafficLog);
       if (!data.active) {
         stopPolling();
+        setCompletedJobId(id);
         setJobId(null);
         toast({ title: "FTP attack complete", description: `${data.summary?.tested ?? 0} tests run, ${data.summary?.vulns ?? 0} vulnerabilities found` });
       }
@@ -97,10 +99,21 @@ export default function FtpAttacker() {
 
   const stopAttack = async () => {
     if (!jobId) return;
+    const id = jobId;
     stopPolling();
-    try { await apiRequest("DELETE", `/api/offensive/ftp/stop/${jobId}`); } catch {}
+    try { await apiRequest("DELETE", `/api/offensive/ftp/stop/${id}`); } catch {}
     setActive(false);
+    setCompletedJobId(id);
     setJobId(null);
+  };
+
+  const downloadReport = () => {
+    const id = completedJobId || jobId;
+    if (!id) return;
+    const link = document.createElement("a");
+    link.href = `/api/offensive/ftp/download/${id}`;
+    link.download = `ftp-report-${target}-${id.slice(0, 8)}.json`;
+    link.click();
   };
 
   useEffect(() => () => stopPolling(), []);
@@ -162,15 +175,23 @@ export default function FtpAttacker() {
               </p>
             )}
             {error && <p className="text-xs text-red-400">{error}</p>}
-            {!active ? (
-              <Button data-testid="button-start" onClick={startAttack} className="w-full bg-primary text-primary-foreground">
-                <HardDrive className="w-4 h-4 mr-2" /> Launch FTP Attack
-              </Button>
-            ) : (
-              <Button data-testid="button-stop" onClick={stopAttack} variant="destructive" className="w-full">
-                <Square className="w-4 h-4 mr-2" /> Stop Attack
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {!active ? (
+                <Button data-testid="button-start" onClick={startAttack} className="flex-1 bg-primary text-primary-foreground">
+                  <HardDrive className="w-4 h-4 mr-2" /> Launch FTP Attack
+                </Button>
+              ) : (
+                <Button data-testid="button-stop" onClick={stopAttack} variant="destructive" className="flex-1">
+                  <Square className="w-4 h-4 mr-2" /> Stop Attack
+                </Button>
+              )}
+              {(completedJobId || (!active && results.length > 0)) && (
+                <Button variant="outline" onClick={downloadReport} data-testid="button-download-ftp" className="gap-2 shrink-0">
+                  <Download className="w-4 h-4" />
+                  Download Report
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
 

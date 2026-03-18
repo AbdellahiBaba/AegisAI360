@@ -13,7 +13,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { apiRequest } from "@/lib/queryClient";
 import {
   Flame, AlertTriangle, Activity, Square, Shield, Server, TrendingUp, Clock,
-  Target, Zap, BarChart3, ArrowUp, CheckCircle, AlertCircle, RefreshCw,
+  Target, Zap, BarChart3, ArrowUp, CheckCircle, AlertCircle, RefreshCw, Download,
 } from "lucide-react";
 import { TrafficConsole } from "@/components/traffic-console";
 
@@ -94,6 +94,7 @@ export default function HttpStressTesterPage() {
   const selfTestPollRef = useRef<NodeJS.Timeout | null>(null);
 
   const [jobId, setJobId] = useState<string | null>(null);
+  const [completedJobId, setCompletedJobId] = useState<string | null>(null);
   const [status, setStatus] = useState<JobStatus | null>(null);
   const [launching, setLaunching] = useState(false);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
@@ -145,7 +146,7 @@ export default function HttpStressTesterPage() {
     const data: JobStatus = await res.json();
     setStatus(data);
     if (!data.active) {
-      stopPolling(); setJobId(null);
+      stopPolling(); setCompletedJobId(id); setJobId(null);
       const m = data.metrics;
       toast({
         title: data.resilienceReport ? "Resilience Test Complete" : "Stress Test Complete",
@@ -176,9 +177,19 @@ export default function HttpStressTesterPage() {
 
   const stop = async () => {
     if (!jobId) return;
-    await fetch(`/api/offensive/stress/stop/${jobId}`, { method: "DELETE" });
-    stopPolling(); setJobId(null);
+    const id = jobId;
+    await fetch(`/api/offensive/stress/stop/${id}`, { method: "DELETE" });
+    stopPolling(); setCompletedJobId(id); setJobId(null);
     toast({ title: "Test Stopped" });
+  };
+
+  const downloadReport = () => {
+    const id = completedJobId || jobId;
+    if (!id) return;
+    const link = document.createElement("a");
+    link.href = `/api/offensive/stress/download/${id}`;
+    link.download = `stress-report-${target}-${id.slice(0, 8)}.json`;
+    link.click();
   };
 
   const isRunning = !!jobId && status?.active;
@@ -488,6 +499,12 @@ export default function HttpStressTesterPage() {
                       <Square className="w-4 h-4 me-2" />Stop Test
                     </Button>
                 }
+                {(completedJobId || (!isRunning && status)) && (
+                  <Button variant="outline" onClick={downloadReport} data-testid="button-download-stress" className="gap-2 shrink-0">
+                    <Download className="w-4 h-4" />
+                    Download Report
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

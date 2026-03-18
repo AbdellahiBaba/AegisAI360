@@ -12,7 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   KeyRound, AlertTriangle, Activity, Square, ShieldAlert,
   Info, Shield, Copy, ChevronDown, ChevronRight, Zap,
-  Lock, Unlock, Eye, Database, Cpu, CheckCircle,
+  Lock, Unlock, Eye, Database, Cpu, CheckCircle, Download,
 } from "lucide-react";
 import { TrafficConsole } from "@/components/traffic-console";
 
@@ -198,6 +198,7 @@ export default function AuthTesterPage() {
   const [customUsers, setCustomUsers] = useState("");
   const [customPasswords, setCustomPasswords] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
+  const [completedJobId, setCompletedJobId] = useState<string | null>(null);
   const [status, setStatus] = useState<JobStatus | null>(null);
   const [launching, setLaunching] = useState(false);
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
@@ -218,7 +219,7 @@ export default function AuthTesterPage() {
     const data: JobStatus = await res.json();
     setStatus(data);
     if (!data.active) {
-      stopPolling(); setJobId(null);
+      stopPolling(); setCompletedJobId(id); setJobId(null);
       const risk = data.summary.riskScore;
       toast({
         title: "Auth Test Complete",
@@ -252,9 +253,19 @@ export default function AuthTesterPage() {
 
   const stop = async () => {
     if (!jobId) return;
-    await fetch(`/api/offensive/auth/stop/${jobId}`, { method: "DELETE" });
-    stopPolling(); setJobId(null);
+    const id = jobId;
+    await fetch(`/api/offensive/auth/stop/${id}`, { method: "DELETE" });
+    stopPolling(); setCompletedJobId(id); setJobId(null);
     toast({ title: "Test Stopped" });
+  };
+
+  const downloadReport = () => {
+    const id = completedJobId || jobId;
+    if (!id) return;
+    const link = document.createElement("a");
+    link.href = `/api/offensive/auth/download/${id}`;
+    link.download = `auth-report-${target}-${id.slice(0, 8)}.json`;
+    link.click();
   };
 
   const isRunning = !!jobId && status?.active;
@@ -441,6 +452,12 @@ export default function AuthTesterPage() {
                       <Square className="w-4 h-4 me-2" />Stop Test
                     </Button>
                 }
+                {(completedJobId || (!isRunning && status)) && (
+                  <Button variant="outline" onClick={downloadReport} data-testid="button-download-auth" className="gap-2 shrink-0">
+                    <Download className="w-4 h-4" />
+                    Download Report
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
