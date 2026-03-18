@@ -13,6 +13,7 @@ import {
   Code, AlertTriangle, Activity, Square, ShieldAlert, CheckCircle, Terminal,
   Flame, ChevronDown, ChevronRight, Brain, Repeat, Shield, Target, Zap, BookOpen,
   HelpCircle, Cpu, Wifi, WifiOff, Search, Sparkles, Unlock, Eye, Download,
+  List, Plus, X, Library,
 } from "lucide-react";
 import { TrafficConsole } from "@/components/traffic-console";
 
@@ -57,6 +58,17 @@ const STATUS_LABEL: Record<string, string> = {
   not_reflected:       "Not Reflected",
   error:               "Connection Error",
 };
+
+const PARAM_LIBRARY = [
+  { id: "search",   label: "Search & Query",       cls: "text-blue-400 border-blue-500/40 bg-blue-500/10",        params: ["q","query","s","search","keyword","term","text","find","input","filter","kw","keywords","phrase","string","fulltext","needle","q1","search_query"] },
+  { id: "auth",     label: "Authentication",        cls: "text-rose-400 border-rose-500/40 bg-rose-500/10",        params: ["username","user","email","password","pass","token","auth","login","passwd","api_key","key","secret","otp","code","session","bearer","credential","hash","sig"] },
+  { id: "file",     label: "File & Path",           cls: "text-amber-400 border-amber-500/40 bg-amber-500/10",     params: ["file","path","filename","dir","folder","src","source","dest","include","load","read","download","upload","document","filepath","basepath","img","image","asset"] },
+  { id: "nav",      label: "Redirect & Navigation", cls: "text-violet-400 border-violet-500/40 bg-violet-500/10", params: ["redirect","next","return","ref","referrer","goto","url","return_url","redirect_uri","to","back","callback","continue","forward","location","target","dest","u"] },
+  { id: "id",       label: "IDs & Data",            cls: "text-emerald-400 border-emerald-500/40 bg-emerald-500/10",params: ["id","uid","user_id","product_id","order_id","item","record","num","value","data","payload","content","body","param","var","pid","oid","cid","node","ref_id"] },
+  { id: "api",      label: "API & Formatting",      cls: "text-cyan-400 border-cyan-500/40 bg-cyan-500/10",        params: ["json","format","output","callback","jsonp","response","type","mode","fields","select","expand","sort","order","limit","page","size","offset","version","v"] },
+  { id: "template", label: "Template & Config",     cls: "text-orange-400 border-orange-500/40 bg-orange-500/10", params: ["template","view","layout","theme","lang","locale","config","setting","option","style","name","version","env","debug","verbose","flag","render","show"] },
+  { id: "exec",     label: "Command & Execution",   cls: "text-severity-critical border-severity-critical/40 bg-severity-critical/10",params: ["cmd","command","exec","eval","script","shell","run","action","handler","op","method","function","proc","pipe","arg","argv","args","invoke","call"] },
+];
 
 interface ParamSuggestion {
   param: string;
@@ -167,8 +179,15 @@ export default function ScriptInjectorPage() {
   const [paramSuggestions, setParamSuggestions] = useState<ParamSuggestion[]>([]);
   const [probing, setProbing] = useState(false);
   const [probed, setProbed] = useState(false);
+  const [showParamLibrary, setShowParamLibrary] = useState(false);
+  const [paramCategory, setParamCategory] = useState("search");
+  const [paramQueue, setParamQueue] = useState<string[]>([]);
+  const [queueIdx, setQueueIdx] = useState(-1);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const probeTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const paramQueueRef = useRef<string[]>([]);
+  const queueIdxRef = useRef(-1);
+  const launchRef = useRef<((param?: string) => Promise<void>) | null>(null);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -218,8 +237,23 @@ export default function ScriptInjectorPage() {
     if (!data.active) {
       stopPolling(); setJobId(null); setCompletedJobId(id);
       const issues = data.summary.executed + data.summary.reflected;
+      // Queue advancement — auto-start next param if queue has more
+      const queue = paramQueueRef.current;
+      const curIdx = queueIdxRef.current;
+      if (queue.length > 1 && curIdx >= 0 && curIdx < queue.length - 1) {
+        const nextIdx = curIdx + 1;
+        queueIdxRef.current = nextIdx;
+        setQueueIdx(nextIdx);
+        setParamName(queue[nextIdx]);
+        toast({ title: `Queue: Starting param [${nextIdx + 1}/${queue.length}]`, description: `Scanning: ${queue[nextIdx]}` });
+        if (launchRef.current) launchRef.current(queue[nextIdx]);
+        return;
+      }
+      // Queue done or not running queue
+      queueIdxRef.current = -1;
+      setQueueIdx(-1);
       toast({
-        title: "Injection Scan Complete",
+        title: queue.length > 1 ? `Queue Complete — All ${queue.length} params tested` : "Injection Scan Complete",
         description: issues > 0
           ? `${data.summary.executed} executed + ${data.summary.reflected} reflected vulnerabilities found (${data.summary.bypassed} WAF bypasses)`
           : `No injection points found in ${data.summary.tested} tests`,
@@ -228,16 +262,17 @@ export default function ScriptInjectorPage() {
     }
   }, [stopPolling, toast]);
 
-  const launch = async () => {
+  const launch = async (overrideParam?: string) => {
+    const paramToUse = overrideParam ?? paramName;
     setLaunching(true);
     try {
       const res = await apiRequest("POST", "/api/offensive/inject/start", {
-        target, port: parseInt(port) || 80, path, method, paramName, technique, jsonMode,
+        target, port: parseInt(port) || 80, path, method, paramName: paramToUse, technique, jsonMode,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setJobId(data.jobId); setStatus(null);
-      toast({ title: "Injection Scan Started", description: `Adaptive engine targeting ${paramName} on ${target}:${port}${path}` });
+      toast({ title: "Injection Scan Started", description: `Adaptive engine targeting ${paramToUse} on ${target}:${port}${path}` });
       pollRef.current = setInterval(() => pollStatus(data.jobId), 1000);
     } catch (e: any) {
       toast({ title: "Launch Failed", description: e.message, variant: "destructive" });
@@ -245,6 +280,7 @@ export default function ScriptInjectorPage() {
       setLaunching(false);
     }
   };
+  launchRef.current = launch;
 
   const stop = async () => {
     if (!jobId) return;
@@ -403,21 +439,34 @@ export default function ScriptInjectorPage() {
                 </div>
               </div>
 
-              {/* Auto-Param Detection */}
+              {/* Injection Parameter + Library */}
               <div className="space-y-2">
+                {/* Row 1: label + probe status + library toggle */}
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">Injection Parameter</Label>
-                  <div className="flex items-center gap-1.5 text-[10px]">
-                    {probing
-                      ? <><Activity className="w-3 h-3 animate-spin text-primary" /><span className="text-muted-foreground">Probing target...</span></>
-                      : probed
-                        ? <><Wifi className="w-3 h-3 text-emerald-400" /><span className="text-emerald-400">Live params detected</span></>
-                        : paramSuggestions.length > 0
-                          ? <><Search className="w-3 h-3 text-amber-400" /><span className="text-amber-400">Heuristic suggestions</span></>
-                          : null
-                    }
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                      {probing
+                        ? <><Activity className="w-3 h-3 animate-spin text-primary" /><span className="text-muted-foreground">Probing...</span></>
+                        : probed
+                          ? <><Wifi className="w-3 h-3 text-emerald-400" /><span className="text-emerald-400">Live params</span></>
+                          : paramSuggestions.length > 0
+                            ? <><Search className="w-3 h-3 text-amber-400" /><span className="text-amber-400">Heuristic</span></>
+                            : null
+                      }
+                    </div>
+                    <button
+                      onClick={() => setShowParamLibrary(!showParamLibrary)}
+                      data-testid="button-toggle-param-library"
+                      className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-semibold transition-all ${showParamLibrary ? "border-primary bg-primary/10 text-primary" : "border-border/50 text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
+                    >
+                      <Library className="w-3 h-3" />
+                      Library
+                    </button>
                   </div>
                 </div>
+
+                {/* Row 2: Input + JSON Mode */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="col-span-2 space-y-1.5">
                     <Input
@@ -430,14 +479,10 @@ export default function ScriptInjectorPage() {
                       <div className="flex flex-wrap gap-1">
                         {paramSuggestions.slice(0, 10).map((s) => (
                           <button
-                            key={s.param}
-                            onClick={() => setParamName(s.param)}
-                            title={s.source}
+                            key={s.param} onClick={() => setParamName(s.param)} title={s.source}
                             data-testid={`button-param-suggest-${s.param}`}
                             className={`px-1.5 py-0.5 rounded border text-[9px] font-mono font-semibold transition-all hover:opacity-80 ${s.param === paramName ? "ring-1 ring-primary" : ""} ${confidenceColor(s.confidence)}`}
-                          >
-                            {s.param}
-                          </button>
+                          >{s.param}</button>
                         ))}
                       </div>
                     )}
@@ -448,16 +493,126 @@ export default function ScriptInjectorPage() {
                   <div className="space-y-1">
                     <Label className="text-xs">JSON Mode</Label>
                     <button
-                      onClick={() => !isRunning && setJsonMode(!jsonMode)}
-                      disabled={isRunning}
+                      onClick={() => !isRunning && setJsonMode(!jsonMode)} disabled={isRunning}
                       data-testid="button-toggle-json-mode"
                       className={`w-full h-8 rounded-md border text-xs font-mono font-semibold transition-all ${jsonMode ? "border-primary bg-primary/10 text-primary" : "border-border/50 text-muted-foreground hover:border-primary/40"} ${isRunning ? "opacity-40 cursor-not-allowed" : ""}`}
-                    >
-                      {jsonMode ? "JSON ON" : "JSON OFF"}
-                    </button>
+                    >{jsonMode ? "JSON ON" : "JSON OFF"}</button>
                     <p className="text-[10px] text-muted-foreground">For REST APIs</p>
                   </div>
                 </div>
+
+                {/* Param Library Panel */}
+                {showParamLibrary && (
+                  <div className="border border-border/50 rounded-lg overflow-hidden">
+                    {/* Category tabs */}
+                    <div className="flex overflow-x-auto border-b border-border/40 bg-muted/20">
+                      {PARAM_LIBRARY.map((cat) => (
+                        <button
+                          key={cat.id} onClick={() => setParamCategory(cat.id)}
+                          data-testid={`button-param-cat-${cat.id}`}
+                          className={`px-3 py-1.5 text-[10px] whitespace-nowrap font-semibold border-b-2 transition-all shrink-0 ${paramCategory === cat.id ? `border-current ${cat.cls}` : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"}`}
+                        >{cat.label}</button>
+                      ))}
+                    </div>
+                    {/* Param chips for selected category */}
+                    {PARAM_LIBRARY.filter((c) => c.id === paramCategory).map((cat) => (
+                      <div key={cat.id} className="p-3 space-y-2.5">
+                        <div className="flex flex-wrap gap-1.5">
+                          {cat.params.map((p) => {
+                            const isActive = paramName === p;
+                            const inQueue = paramQueue.includes(p);
+                            return (
+                              <button
+                                key={p}
+                                onClick={() => {
+                                  if (!isRunning) setParamName(p);
+                                }}
+                                onContextMenu={(e) => {
+                                  e.preventDefault();
+                                  if (isRunning) return;
+                                  const newQ = inQueue
+                                    ? paramQueue.filter((x) => x !== p)
+                                    : [...paramQueue, p];
+                                  paramQueueRef.current = newQ;
+                                  setParamQueue(newQ);
+                                  if (!inQueue && paramQueue.length === 0) setParamName(p);
+                                }}
+                                data-testid={`button-param-lib-${p}`}
+                                title={inQueue ? "In queue — right-click to remove" : "Click to select · Right-click to add to queue"}
+                                className={`px-2 py-1 rounded border text-[10px] font-mono font-semibold transition-all ${
+                                  isActive ? `ring-1 ring-offset-1 ring-offset-background ${cat.cls} ring-current` :
+                                  inQueue ? `${cat.cls} opacity-80` :
+                                  "border-border/40 text-muted-foreground hover:border-border hover:text-foreground"
+                                } ${isRunning ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+                              >
+                                {inQueue && <Plus className="w-2.5 h-2.5 inline mr-0.5 opacity-70" />}
+                                {p}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="flex items-center justify-between pt-1 border-t border-border/30">
+                          <span className="text-[10px] text-muted-foreground">Click: select · Right-click: add/remove from queue</span>
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => {
+                                if (isRunning) return;
+                                const newQ = [...new Set([...paramQueue, ...cat.params])];
+                                paramQueueRef.current = newQ;
+                                setParamQueue(newQ);
+                                if (newQ.length > 0 && !paramName) setParamName(newQ[0]);
+                              }}
+                              disabled={isRunning}
+                              className="text-[10px] text-primary font-semibold hover:underline disabled:opacity-40"
+                            >+ Add all {cat.params.length} to queue</button>
+                            {paramQueue.length > 0 && (
+                              <button
+                                onClick={() => { paramQueueRef.current = []; setParamQueue([]); }}
+                                className="text-[10px] text-muted-foreground hover:text-foreground hover:underline"
+                              >Clear queue</button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Queue display */}
+                {paramQueue.length > 0 && (
+                  <div className="p-2.5 rounded-md border border-primary/25 bg-primary/5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold text-primary flex items-center gap-1.5">
+                        <List className="w-3 h-3" />
+                        Multi-Param Queue ({paramQueue.length} param{paramQueue.length !== 1 ? "s" : ""})
+                      </span>
+                      <button
+                        onClick={() => { paramQueueRef.current = []; setParamQueue([]); queueIdxRef.current = -1; setQueueIdx(-1); }}
+                        className="text-[9px] text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+                      ><X className="w-2.5 h-2.5" />Clear all</button>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {paramQueue.map((p, i) => (
+                        <span key={p} data-testid={`chip-queue-param-${i}`}
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono border transition-all ${
+                            queueIdx === i ? "border-primary bg-primary text-primary-foreground font-bold" :
+                            queueIdx > i ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" :
+                            "border-border/40 text-muted-foreground"
+                          }`}>
+                          <span className="opacity-60">{queueIdx > i ? "✓" : queueIdx === i ? "→" : `${i + 1}.`}</span>
+                          {p}
+                          <button onClick={() => {
+                            const newQ = paramQueue.filter((_, j) => j !== i);
+                            paramQueueRef.current = newQ; setParamQueue(newQ);
+                          }} className="opacity-50 hover:opacity-100 ml-0.5"><X className="w-2 h-2" /></button>
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {paramQueue.length > 1 ? `Sequential injection — scans ${paramQueue.length} params one after another` : "Add more params to queue for sequential testing"}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {(isRunning || status) && (
@@ -528,8 +683,21 @@ export default function ScriptInjectorPage() {
 
               <div className="flex gap-2">
                 {!isRunning
-                  ? <Button onClick={launch} disabled={launching} className="flex-1" data-testid="button-launch-inject">
-                      {launching ? <><Activity className="w-4 h-4 me-2 animate-spin" />Launching...</> : <><Flame className="w-4 h-4 me-2" />Launch Adaptive Injection Scan</>}
+                  ? <Button
+                      onClick={() => {
+                        if (paramQueue.length > 1) {
+                          paramQueueRef.current = paramQueue;
+                          queueIdxRef.current = 0;
+                          setQueueIdx(0);
+                          launch(paramQueue[0]);
+                        } else {
+                          launch();
+                        }
+                      }}
+                      disabled={launching} className="flex-1" data-testid="button-launch-inject">
+                      {launching ? <><Activity className="w-4 h-4 me-2 animate-spin" />Launching...</> :
+                        paramQueue.length > 1 ? <><List className="w-4 h-4 me-2" />Launch Queue ({paramQueue.length} params)</> :
+                        <><Flame className="w-4 h-4 me-2" />Launch Adaptive Injection Scan</>}
                     </Button>
                   : <Button onClick={stop} variant="destructive" className="flex-1" data-testid="button-stop-inject">
                       <Square className="w-4 h-4 me-2" />Stop Scan

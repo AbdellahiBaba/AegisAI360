@@ -613,6 +613,56 @@ export function startStressTest(config: StressConfig): StressJob {
   const runner = RUNNERS[config.technique] ?? runHttpFlood;
   runner(job);
 
+  // ─── Real-time traffic log — fires every 1 second ─────────────────────
+  const fmtB = (b: number) => b < 1024 ? `${b}B` : b < 1048576 ? `${(b/1024).toFixed(1)}KB` : `${(b/1048576).toFixed(1)}MB`;
+  const ts = () => new Date().toISOString().slice(11, 23);
+  let lastSent = 0;
+  let lastFailed = 0;
+  let logTick = 0;
+
+  const pad50 = (s: string) => s.slice(0, 50).padEnd(50);
+  job.log.push(`[${ts()}] ╔════════════════════════════════════════════════╗`);
+  job.log.push(`[${ts()}] ║  AegisAI360 HTTP Stress Tester — LIVE TRAFFIC  ║`);
+  job.log.push(`[${ts()}] ║  ${pad50(`Target: ${config.target}:${config.port}${config.path}`)}║`);
+  job.log.push(`[${ts()}] ║  ${pad50(`Mode: ${config.technique} | threads: ${config.concurrency} | ${config.duration}s`)}║`);
+  job.log.push(`[${ts()}] ╚════════════════════════════════════════════════╝`);
+
+  const logInterval = setInterval(() => {
+    if (!job.active) { clearInterval(logInterval); return; }
+    const m = job.metrics;
+    const elapsed = Math.floor((Date.now() - job.startTime) / 1000);
+    const curRps = m.rpsWindow.length > 0 ? m.rpsWindow[m.rpsWindow.length - 1] : 0;
+    const avgLat = m.latencyCount > 0 ? Math.round(m.latencySum / m.latencyCount) : 0;
+    const errRate = m.requestsSent > 0 ? ((m.requestsFailed / m.requestsSent) * 100).toFixed(1) : "0.0";
+    const deltaSent = m.requestsSent - lastSent;
+    const deltaErr = m.requestsFailed - lastFailed;
+    lastSent = m.requestsSent; lastFailed = m.requestsFailed;
+    logTick++;
+
+    // Section header every 10 ticks
+    if (logTick % 10 === 1) {
+      job.log.push(`[${ts()}] ┌── TICK ${logTick} ─ ${elapsed}s elapsed ──────────────────────────────`);
+    }
+
+    // Core request stats
+    const statuses = Object.entries(m.statusCodes)
+      .sort(([, a], [, b]) => b - a).slice(0, 6)
+      .map(([k, v]) => `${k}:${v}`).join("  ");
+    job.log.push(`[${ts()}] → SENT ${deltaSent}/s | total:${m.requestsSent.toLocaleString()} ok:${m.requestsSuccess.toLocaleString()} fail:${m.requestsFailed.toLocaleString()}`);
+    job.log.push(`[${ts()}] ← RPS ${curRps} (peak:${m.peakRps}) | latency avg:${avgLat}ms p95:${m.latencyBucket.p95 || "—"}ms p99:${m.latencyBucket.p99 || "—"}ms`);
+    if (statuses) job.log.push(`[${ts()}] ← HTTP codes: ${statuses}`);
+    job.log.push(`[${ts()}] ← err-rate:${errRate}% | ECONNREFUSED:${m.errorsConnRefused} TIMEOUT:${m.errorsTimeout} RESET:${m.errorsReset} OTHER:${m.errorsOther}`);
+    job.log.push(`[${ts()}] ← bw ↑${fmtB(m.bytesOut)} ↓${fmtB(m.bytesIn)} | conns:${m.connectionsOpen} | threads:${m.currentConcurrency}`);
+
+    // Delta summary line  
+    if (deltaErr > 0) job.log.push(`[${ts()}] ! ${deltaErr} errors this second — target may be degrading`);
+    if (curRps > m.peakRps - 1 && curRps > 0) job.log.push(`[${ts()}] ★ New peak RPS: ${curRps} req/s`);
+
+    // Trim log to 3000 lines
+    if (job.log.length > 3000) job.log.splice(0, job.log.length - 3000);
+  }, 1000);
+  job.intervals.push(logInterval);
+
   // ─── Ramp Mode — increases concurrency every N seconds ──────────────────
   if (config.rampMode) {
     const stepSecs = Math.max(5, config.rampStepSecs ?? 10);
