@@ -743,9 +743,42 @@ function SubdomainResults({ data }: { data: any }) {
 function DirBruteResults({ data, target }: { data: any; target: string }) {
   const { t } = useTranslation();
   const remediation = useRemediation();
+  const { toast } = useToast();
+  const [downloading, setDownloading] = useState(false);
+
   if (data.error) return <Card><CardContent className="p-4 text-xs text-destructive">{data.error}</CardContent></Card>;
 
   const foundPaths = data.foundPaths || [];
+
+  const downloadFiles = async () => {
+    if (!foundPaths.length) return;
+    setDownloading(true);
+    try {
+      const res = await fetch("/api/scan/dir-fetch-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ target, paths: foundPaths }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const hostname = target.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+      a.download = `dir-content-${hostname}-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Download ready", description: `Fetched content from ${foundPaths.length} discovered path(s)` });
+    } catch (e: any) {
+      toast({ title: "Download failed", description: e.message, variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -782,6 +815,28 @@ function DirBruteResults({ data, target }: { data: any; target: string }) {
 
       {foundPaths.length > 0 ? (
         <Card>
+          <CardHeader className="pb-2 pt-3 px-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle className="text-xs font-medium tracking-wider uppercase">
+                {t("scanner.dirPathsFound")} ({foundPaths.length})
+              </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={downloadFiles}
+                disabled={downloading}
+                data-testid="button-dir-download-files"
+                className="gap-2 h-7 text-xs"
+              >
+                {downloading
+                  ? <><span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />Fetching files...</>
+                  : <><Download className="w-3.5 h-3.5" />Download Files</>}
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Click "Download Files" to fetch the actual content from each discovered path and scan for exposed credentials, config files, admin panels, and sensitive data.
+            </p>
+          </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto"><Table>
               <TableHeader>

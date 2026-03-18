@@ -34,7 +34,7 @@ import { ResponseEngine } from "./responseEngine";
 import { AlertEngine } from "./alertEngine";
 import { testChannel } from "./notificationService";
 import { scanPorts, lookupDNS, checkSSL, scanHeaders, scanVulnerabilities, isPrivateTarget } from "./scanEngine";
-import { enumerateSubdomains, bruteforceDirectories, fingerprintTechnology, detectWAF, whoisLookup, testSQLInjection, testXSS, identifyHash, crackHash, analyzePassword } from "./pentestEngine";
+import { enumerateSubdomains, bruteforceDirectories, fingerprintTechnology, detectWAF, whoisLookup, testSQLInjection, testXSS, identifyHash, crackHash, analyzePassword, fetchDiscoveredPaths } from "./pentestEngine";
 import { lookupHash, classifyBehavior, generateYARARule, generateSigmaRule, extractIOCs, listFamilies, extractIOCsFromText, getThreatActor, getKillChain, getMitreHeatmap } from "./trojanAnalyzer";
 import { analyzePermissions, testMobileEndpoint, checkOWASPMobile, lookupDeviceVulnerabilities } from "./mobilePentestEngine";
 import { generateReverseShell, generateBindShell, generateWebShell, generateMeterpreterStager, encodePayload, getSupportedLanguages } from "./payloadGenerator";
@@ -3088,6 +3088,45 @@ export async function registerRoutes(
     } catch (error) {
       if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
       res.status(500).json({ error: "Scan failed" });
+    }
+  });
+
+  app.post("/api/scan/dir-fetch-content", async (req, res) => {
+    try {
+      const { target, paths } = z.object({
+        target: z.string().min(1),
+        paths: z.array(z.object({
+          path: z.string(),
+          category: z.string(),
+          severity: z.string(),
+          statusCode: z.number(),
+          contentLength: z.number(),
+          redirectUrl: z.string().nullable().optional(),
+        })).max(200),
+      }).parse(req.body);
+
+      const cleanTarget = target.replace(/^https?:\/\//, "").split(/[:/]/)[0];
+      if (isPrivateTarget(cleanTarget)) {
+        return res.status(400).json({ error: "Scanning private/internal addresses is not allowed" });
+      }
+
+      const report = await fetchDiscoveredPaths(target, paths.map(p => ({
+        ...p,
+        redirectUrl: p.redirectUrl ?? null,
+        contentLength: p.contentLength ?? 0,
+      })));
+
+      // Build a downloadable filename
+      const hostname = cleanTarget.replace(/[^a-z0-9]/gi, "-");
+      const ts = new Date().toISOString().slice(0, 10);
+      const filename = `dir-content-${hostname}-${ts}.json`;
+
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Type", "application/json");
+      return res.json(report);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Fetch failed" });
     }
   });
 
