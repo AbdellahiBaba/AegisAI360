@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Search, Filter, Clock, Globe, Server, ArrowRight, ShieldBan, AlertTriangle, Loader2, Download, Trash2, CheckCircle, Eye, XCircle, Brain, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+import { Search, Filter, Clock, Globe, Server, ArrowRight, ShieldBan, AlertTriangle, Loader2, Download, Trash2, CheckCircle, Eye, XCircle, Brain, ChevronDown, ChevronUp, Sparkles, SquareCheck } from "lucide-react";
 import { exportToCsv } from "@/lib/csvExport";
 import { useToast } from "@/hooks/use-toast";
 import type { SecurityEvent } from "@shared/schema";
@@ -74,6 +74,7 @@ export default function Alerts() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedEvent, setSelectedEvent] = useState<SecurityEvent | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [allEventsSelected, setAllEventsSelected] = useState(false);
   const [aiInsightsOpen, setAiInsightsOpen] = useState(true);
   const { toast } = useToast();
   const { t } = useTranslation();
@@ -116,7 +117,24 @@ export default function Alerts() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
       setSelectedIds(new Set());
+      setAllEventsSelected(false);
       toast({ title: "Events deleted", description: `${data.deleted} events removed` });
+    },
+    onError: (err: Error) => {
+      toast({ title: t("alerts.failed"), description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteAll = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", "/api/security-events");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/security-events"] });
+      setSelectedIds(new Set());
+      setAllEventsSelected(false);
+      toast({ title: "All events deleted", description: `${data.deleted} events removed` });
     },
     onError: (err: Error) => {
       toast({ title: t("alerts.failed"), description: err.message, variant: "destructive" });
@@ -183,14 +201,23 @@ export default function Alerts() {
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((e) => selectedIds.has(e.id));
   const someFilteredSelected = filtered.some((e) => selectedIds.has(e.id));
-  const isBulkPending = bulkUpdateStatus.isPending || bulkDelete.isPending;
+  const isBulkPending = bulkUpdateStatus.isPending || bulkDelete.isPending || deleteAll.isPending;
+  const totalEventCount = (events || []).length;
+  const canSelectAllEvents = allFilteredSelected && !allEventsSelected && totalEventCount > filtered.length;
 
   function toggleSelectAll() {
     if (allFilteredSelected) {
       setSelectedIds(new Set());
+      setAllEventsSelected(false);
     } else {
       setSelectedIds(new Set(filtered.map((e) => e.id)));
+      setAllEventsSelected(false);
     }
+  }
+
+  function selectAllEvents() {
+    setSelectedIds(new Set((events || []).map((e) => e.id)));
+    setAllEventsSelected(true);
   }
 
   function toggleSelect(id: number) {
@@ -249,6 +276,19 @@ export default function Alerts() {
             <Download className="w-4 h-4 me-1" />
             {t("common.exportCsv", "Export CSV")}
           </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={totalEventCount === 0 || deleteAll.isPending}
+            onClick={() => {
+              if (!window.confirm(`Delete ALL ${totalEventCount} security events? This cannot be undone.`)) return;
+              deleteAll.mutate();
+            }}
+            data-testid="button-delete-all-events"
+          >
+            {deleteAll.isPending ? <Loader2 className="w-4 h-4 me-1 animate-spin" /> : <Trash2 className="w-4 h-4 me-1" />}
+            Delete All
+          </Button>
           <Badge variant="secondary" className="font-mono text-xs">{filtered.length} {t("common.events")}</Badge>
         </div>
       </div>
@@ -295,9 +335,24 @@ export default function Alerts() {
       {selectedIds.size > 0 && (
         <Card data-testid="bulk-action-bar">
           <CardContent className="p-3 flex items-center gap-3 flex-wrap">
-            <Badge variant="secondary" className="font-mono text-xs" data-testid="text-selected-count">
-              {selectedIds.size} selected
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="font-mono text-xs" data-testid="text-selected-count">
+                {allEventsSelected ? `All ${selectedIds.size}` : selectedIds.size} selected
+              </Badge>
+              {canSelectAllEvents && (
+                <button
+                  className="text-xs text-primary underline-offset-2 hover:underline flex items-center gap-1"
+                  onClick={selectAllEvents}
+                  data-testid="button-select-all-events"
+                >
+                  <SquareCheck className="w-3 h-3" />
+                  Select all {totalEventCount} events
+                </button>
+              )}
+              {allEventsSelected && (
+                <span className="text-xs text-muted-foreground">All {totalEventCount} events selected</span>
+              )}
+            </div>
             <div className="flex items-center gap-2 flex-wrap">
               <Button
                 size="sm"
@@ -340,13 +395,13 @@ export default function Alerts() {
                 data-testid="button-bulk-delete"
               >
                 {bulkDelete.isPending ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <Trash2 className="w-3 h-3 me-1" />}
-                Delete
+                Delete Selected
               </Button>
             </div>
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => setSelectedIds(new Set())}
+              onClick={() => { setSelectedIds(new Set()); setAllEventsSelected(false); }}
               data-testid="button-clear-selection"
             >
               Clear selection

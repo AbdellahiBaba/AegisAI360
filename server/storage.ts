@@ -89,6 +89,7 @@ export interface IStorage {
   updateSecurityEventStatus(id: number, orgId: number, status: string): Promise<SecurityEvent | undefined>;
   bulkUpdateSecurityEventStatus(ids: number[], orgId: number, status: string): Promise<number>;
   bulkDeleteSecurityEvents(ids: number[], orgId: number): Promise<number>;
+  deleteAllSecurityEvents(orgId: number): Promise<number>;
   mitigateEventsByIp(orgId: number, ip: string): Promise<number>;
   updateSecurityEventAiTriage(id: number, data: { aiThreatScore: number; aiClassification: string; aiRecommendation: string }): Promise<SecurityEvent | undefined>;
 
@@ -466,6 +467,13 @@ export class DatabaseStorage implements IStorage {
     if (ids.length === 0) return 0;
     const result = await db.delete(securityEvents)
       .where(and(eq(securityEvents.organizationId, orgId), inArray(securityEvents.id, ids)))
+      .returning();
+    return result.length;
+  }
+
+  async deleteAllSecurityEvents(orgId: number): Promise<number> {
+    const result = await db.delete(securityEvents)
+      .where(eq(securityEvents.organizationId, orgId))
       .returning();
     return result.length;
   }

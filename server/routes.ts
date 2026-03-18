@@ -1168,6 +1168,16 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/security-events", requireRole("admin"), async (req, res) => {
+    try {
+      const orgId = getOrgId(req);
+      const count = await storage.deleteAllSecurityEvents(orgId);
+      res.json({ deleted: count });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete all events" });
+    }
+  });
+
   app.patch("/api/security-events/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
