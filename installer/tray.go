@@ -51,7 +51,7 @@ func onTrayReady(cfg *AgentConfig) {
         systray.AddSeparator()
 
         mAbout := systray.AddMenuItem(
-                fmt.Sprintf("AegisAI360 Agent v%s", agentVersion),
+                fmt.Sprintf("AegisAI360 Endpoint Agent v%s", agentVersion),
                 companyName,
         )
         mAbout.Disable()

@@ -1,7 +1,7 @@
 {
   "serverUrl": "https://aegisai360.com",
   "apiKey": "REPLACE_WITH_YOUR_DEVICE_TOKEN",
-  "agentVersion": "1.0.0",
+  "agentVersion": "8.2.1",
   "heartbeatInterval": 30,
   "commandPollInterval": 5,
   "updateCheckInterval": 300,

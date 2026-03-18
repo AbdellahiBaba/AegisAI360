@@ -21,8 +21,8 @@ const (
         serviceName        = "AegisAI360Agent"
         serviceDisplayName = "AegisAI360 Endpoint Agent"
         serviceDescription = "Security agent for AegisAI360 SOC platform"
-        companyName        = "AegisAI Cyber Defense"
-        agentVersion       = "1.1.0"
+        companyName        = "FAHADERA LLC"
+        agentVersion       = "8.2.1"
         logFolder          = "logs"
         registryKey        = `Software\Microsoft\Windows\CurrentVersion\Uninstall\AegisAI360Agent`
 )

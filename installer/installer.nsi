@@ -64,7 +64,7 @@ Section "Install"
   FileWrite $0 '{$\n'
   FileWrite $0 '  "serverUrl": "https://aegisai360.com",$\n'
   FileWrite $0 '  "apiKey": "$DEVICE_TOKEN",$\n'
-  FileWrite $0 '  "agentVersion": "1.0.0",$\n'
+  FileWrite $0 '  "agentVersion": "8.2.1",$\n'
   FileWrite $0 '  "heartbeatInterval": 30,$\n'
   FileWrite $0 '  "commandPollInterval": 5,$\n'
   FileWrite $0 '  "logMaxSizeMB": 10,$\n'
@@ -79,9 +79,9 @@ Section "Install"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AegisAI360Agent" \
     "UninstallString" '"$INSTDIR\uninstall.exe"'
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AegisAI360Agent" \
-    "Publisher" "AegisAI Cyber Defense"
+    "Publisher" "FAHADERA LLC"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AegisAI360Agent" \
-    "DisplayVersion" "1.0.0"
+    "DisplayVersion" "8.2.1"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AegisAI360Agent" \
     "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\AegisAI360Agent" \

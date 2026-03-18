@@ -1,7 +1,7 @@
 ===============================================
   AegisAI360 Endpoint Agent - Build Guide
-  Version 1.0.0
-  AegisAI Cyber Defense
+  Version 8.2.1
+  FAHADERA LLC
 ===============================================
 
 This directory contains everything needed to build and package the
