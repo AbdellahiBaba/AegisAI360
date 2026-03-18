@@ -270,11 +270,11 @@ function AuthenticatedApp() {
     return <Redirect to="/" />;
   }
 
+  const ALLOWED_STATUSES = ["active", "trialing"];
   if (
     !user.isSuperAdmin &&
     billingStatus &&
-    billingStatus.subscriptionStatus !== "active" &&
-    billingStatus.subscriptionStatus !== "trial" &&
+    !ALLOWED_STATUSES.includes(billingStatus.subscriptionStatus) &&
     !BILLING_ROUTES.includes(location)
   ) {
     return <ChoosePlan />;
