@@ -404,6 +404,16 @@ export class DatabaseStorage implements IStorage {
     );
   }
 
+  async getOrgByStripeCustomerId(customerId: string): Promise<Organization | undefined> {
+    const [org] = await db.select().from(organizations).where(eq(organizations.stripeCustomerId, customerId)).limit(1);
+    return org;
+  }
+
+  async getOrgByStripeSubscriptionId(subscriptionId: string): Promise<Organization | undefined> {
+    const [org] = await db.select().from(organizations).where(eq(organizations.stripeSubscriptionId, subscriptionId)).limit(1);
+    return org;
+  }
+
   async getOrganizationUserCount(orgId: number): Promise<number> {
     const [result] = await db.select({ count: count() }).from(users).where(eq(users.organizationId, orgId));
     return result?.count ?? 0;

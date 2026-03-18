@@ -62,6 +62,8 @@ interface AdminOrganization {
   createdAt: string;
   subscriptionStatus: string;
   subscriptionExpiresAt: string | null;
+  stripeSubscriptionId: string | null;
+  stripeCustomerId: string | null;
 }
 
 interface AdminUser {
@@ -344,13 +346,33 @@ function OrganizationsTable() {
                   </TableCell>
                   <TableCell className="min-w-[220px]">
                     <div className="space-y-1.5">
-                      {org.subscriptionExpiresAt && (
-                        <p className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(org.subscriptionExpiresAt).toLocaleDateString()}
-                          {isExpired && <span className="text-red-400 font-semibold ml-1">EXPIRED</span>}
-                        </p>
-                      )}
+                      {/* Source badge + date */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {org.stripeSubscriptionId ? (
+                          <Badge className="text-[8px] px-1.5 py-0 bg-violet-500/15 text-violet-400 border-violet-500/30 uppercase tracking-wide">
+                            Stripe Auto
+                          </Badge>
+                        ) : (
+                          <Badge className="text-[8px] px-1.5 py-0 bg-muted text-muted-foreground uppercase tracking-wide">
+                            Manual
+                          </Badge>
+                        )}
+                        {org.subscriptionExpiresAt && (
+                          <span className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(org.subscriptionExpiresAt).toLocaleDateString()}
+                            {isExpired && <span className="text-red-400 font-semibold ml-1">EXPIRED</span>}
+                          </span>
+                        )}
+                        {!org.subscriptionExpiresAt && !org.stripeSubscriptionId && (
+                          <span className="text-[10px] text-muted-foreground italic">No expiry set</span>
+                        )}
+                        {org.stripeSubscriptionId && !org.subscriptionExpiresAt && (
+                          <span className="text-[10px] text-muted-foreground">Awaiting webhook</span>
+                        )}
+                      </div>
+
+                      {/* Override controls — always available to super admin */}
                       <div className="flex items-center gap-1">
                         <input
                           type="date"
@@ -358,6 +380,7 @@ function OrganizationsTable() {
                           value={editDate}
                           onChange={e => setRenewalEditing(prev => ({ ...prev, [org.id]: e.target.value }))}
                           data-testid={`input-renewal-date-${org.id}`}
+                          title={org.stripeSubscriptionId ? "Override Stripe renewal date (emergency use)" : "Set expiry date"}
                         />
                         <Select value={editStatus} onValueChange={v => setRenewalStatusEditing(prev => ({ ...prev, [org.id]: v }))}>
                           <SelectTrigger className="h-6 w-24 text-[10px]" data-testid={`select-sub-status-${org.id}`}>
@@ -366,6 +389,7 @@ function OrganizationsTable() {
                           <SelectContent>
                             <SelectItem value="active">Active</SelectItem>
                             <SelectItem value="trialing">Trialing</SelectItem>
+                            <SelectItem value="past_due">Past Due</SelectItem>
                             <SelectItem value="expired">Expired</SelectItem>
                             <SelectItem value="canceled">Canceled</SelectItem>
                             <SelectItem value="inactive">Inactive</SelectItem>
@@ -378,6 +402,7 @@ function OrganizationsTable() {
                           disabled={setRenewalMutation.isPending}
                           onClick={() => setRenewalMutation.mutate({ id: org.id, expiresAt: editDate || null, subscriptionStatus: editStatus })}
                           data-testid={`button-set-renewal-${org.id}`}
+                          title="Save override"
                         >
                           <RefreshCw className="w-3 h-3" />
                         </Button>
@@ -387,13 +412,18 @@ function OrganizationsTable() {
                             variant="ghost"
                             className="h-6 px-1 text-[10px] text-muted-foreground"
                             onClick={() => setRenewalMutation.mutate({ id: org.id, expiresAt: null, subscriptionStatus: "active" })}
-                            title="Clear expiry date"
+                            title="Clear override"
                             data-testid={`button-clear-renewal-${org.id}`}
                           >
                             <XCircle className="w-3 h-3" />
                           </Button>
                         )}
                       </div>
+                      {org.stripeSubscriptionId && (
+                        <p className="text-[9px] text-muted-foreground/60">
+                          Auto-updated by Stripe on each renewal
+                        </p>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>

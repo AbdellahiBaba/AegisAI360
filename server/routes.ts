@@ -2245,10 +2245,18 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Session does not belong to this organization" });
       }
 
-      if (org.subscriptionStatus !== "active") {
-        await storage.updateOrganization(orgId, { subscriptionStatus: "active" } as any);
+      const updateData: any = { subscriptionStatus: "active" };
+      if (session.subscription) {
+        try {
+          const sub = await stripe.subscriptions.retrieve(session.subscription as string);
+          if (sub.current_period_end) {
+            updateData.subscriptionExpiresAt = new Date(sub.current_period_end * 1000);
+          }
+          if (sub.id) updateData.stripeSubscriptionId = sub.id;
+        } catch (_) {}
       }
-      res.json({ status: "active" });
+      await storage.updateOrganization(orgId, updateData);
+      res.json({ status: "active", expiresAt: updateData.subscriptionExpiresAt?.toISOString() ?? null });
     } catch (error: any) {
       if (error instanceof z.ZodError) return res.status(400).json({ error: "Session ID required" });
       res.status(500).json({ error: "Failed to confirm subscription" });

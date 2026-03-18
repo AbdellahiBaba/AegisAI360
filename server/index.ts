@@ -29,6 +29,60 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+async function syncStripeEventToOrg(rawBody: Buffer): Promise<void> {
+  try {
+    const event = JSON.parse(rawBody.toString());
+    const { storage: s } = await import("./storage");
+    const obj = event?.data?.object;
+    if (!obj) return;
+
+    const SUBSCRIPTION_EVENTS = [
+      "customer.subscription.created",
+      "customer.subscription.updated",
+      "customer.subscription.trial_will_end",
+    ];
+    const DELETED_EVENTS = ["customer.subscription.deleted"];
+    const INVOICE_PAID = "invoice.paid";
+    const INVOICE_FAILED = "invoice.payment_failed";
+
+    if (SUBSCRIPTION_EVENTS.includes(event.type)) {
+      const sub = obj;
+      const org = sub.customer ? await s.getOrgByStripeCustomerId(sub.customer) : undefined;
+      if (!org) return;
+      const expiresAt = sub.current_period_end ? new Date(sub.current_period_end * 1000) : null;
+      await s.updateOrganization(org.id, {
+        subscriptionStatus: sub.status,
+        subscriptionExpiresAt: expiresAt,
+        stripeSubscriptionId: sub.id,
+      } as any);
+      console.log(`[Stripe] Org #${org.id} subscription updated: status=${sub.status} expires=${expiresAt?.toISOString()}`);
+    } else if (DELETED_EVENTS.includes(event.type)) {
+      const sub = obj;
+      const org = sub.customer ? await s.getOrgByStripeCustomerId(sub.customer) : undefined;
+      if (!org) return;
+      await s.updateOrganization(org.id, { subscriptionStatus: "canceled" } as any);
+      console.log(`[Stripe] Org #${org.id} subscription canceled`);
+    } else if (event.type === INVOICE_PAID) {
+      const invoice = obj;
+      const org = invoice.customer ? await s.getOrgByStripeCustomerId(invoice.customer) : undefined;
+      if (!org) return;
+      const periodEnd = invoice.lines?.data?.[0]?.period?.end;
+      const updateData: any = { subscriptionStatus: "active" };
+      if (periodEnd) updateData.subscriptionExpiresAt = new Date(periodEnd * 1000);
+      await s.updateOrganization(org.id, updateData);
+      console.log(`[Stripe] Org #${org.id} invoice paid — subscription active, expires ${updateData.subscriptionExpiresAt?.toISOString() ?? "unknown"}`);
+    } else if (event.type === INVOICE_FAILED) {
+      const invoice = obj;
+      const org = invoice.customer ? await s.getOrgByStripeCustomerId(invoice.customer) : undefined;
+      if (!org) return;
+      await s.updateOrganization(org.id, { subscriptionStatus: "past_due" } as any);
+      console.log(`[Stripe] Org #${org.id} payment failed — status set to past_due`);
+    }
+  } catch (err) {
+    console.error("[Stripe] syncStripeEventToOrg error (non-fatal):", err);
+  }
+}
+
 app.post(
   '/api/stripe/webhook',
   express.raw({ type: 'application/json' }),
@@ -43,6 +97,7 @@ app.post(
         return res.status(500).json({ error: 'Webhook processing error' });
       }
       await WebhookHandlers.processWebhook(req.body as Buffer, sig);
+      syncStripeEventToOrg(req.body).catch(() => {});
       res.status(200).json({ received: true });
     } catch (error: any) {
       console.error('Webhook error:', error.message);
