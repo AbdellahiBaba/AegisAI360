@@ -1,6 +1,6 @@
 AegisAI360 - Defensive Cybersecurity Platform
 <p align="center">
-  <img src="https://your-logo-url-here.svg" width="180" alt="AegisAI360 Logo"/>
+  width="180" alt="AegisAI360 Logo"/>
 </p>
 
 <h1 align="center">🛡️ AegisAI360</h1>
