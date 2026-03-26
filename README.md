@@ -1,6 +1,6 @@
 AegisAI360 - Defensive Cybersecurity Platform
 <p align="center">
-  <img src="https://replit.com/@MiConnect/AegisAI360#public/aegisai360-logo-full.svg" width="180" alt="AegisAI360 Logo"/>
+  <img src="https://your-logo-url-here.svg" width="180" alt="AegisAI360 Logo"/>
 </p>
 
 <h1 align="center">🛡️ AegisAI360</h1>
@@ -11,6 +11,7 @@ AegisAI360 - Defensive Cybersecurity Platform
   <img src="https://img.shields.io/badge/License-Proprietary-red?style=flat-square"/>
   <img src="https://img.shields.io/badge/Security-Military%20Grade-amber?style=flat-square"/>
 </p>
+
 
 📚 Table of Contents
 - [Introduction](#-introduction)
