@@ -77,31 +77,7 @@ entire digital infrastructure.
                         └──────────────────────────┘
 
 
-🧰 Tech Stack
-### Frontend
-React • TypeScript • Vite • TailwindCSS • shadcn/ui • Recharts • TanStack Query • i18next
 
-### Backend
-Node.js • Express.js • TypeScript • WebSockets • Passport.js • Drizzle ORM • PostgreSQL
-
-### AI
-OpenAI API
-
-### Threat Intelligence
-AbuseIPDB • AlienVault OTX • URLScan.io • Google Safe Browsing • MalwareBazaar • HIBP • NIST NVD
-
-### Endpoint Agent
-Go (EDR Agent)
-
-Dark‑Mode Cybersecurity Theme
-AegisAI360 uses a premium dark‑mode UI inspired by modern SOC dashboards:
-
-- Midnight navy background
-- Gold/amber accent colors
-- Scanline + grid background patterns
-- Cyber‑terminal animations
-- SVG shield logo
-- Space Grotesk, Cairo, JetBrains Mono fonts
 
 
 ### Frontend
