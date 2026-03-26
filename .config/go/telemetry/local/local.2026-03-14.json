@@ -1,0 +1,42 @@
+{
+ "Week": "2026-03-14",
+ "LastWeek": "",
+ "X": 0.923911646612148,
+ "Programs": [
+  {
+   "Program": "cmd/go",
+   "Version": "go1.25.8",
+   "GoVersion": "go1.25.8",
+   "GOOS": "linux",
+   "GOARCH": "amd64",
+   "Counters": {
+    "go/goroot:other": 2,
+    "go/invocations": 2,
+    "go/mod-download/flag:json": 2,
+    "go/mode:module": 2,
+    "go/platform/host/linux/major-version:6": 2,
+    "go/platform/host/linux/version:6-14": 2,
+    "go/platform/target/goamd64:v1": 2,
+    "go/platform/target/goarch:amd64": 2,
+    "go/platform/target/goos:linux": 2,
+    "go/subcommand:mod-download": 2
+   },
+   "Stacks": {}
+  },
+  {
+   "Program": "golang.org/x/tools/gopls",
+   "Version": "devel",
+   "GoVersion": "go1.21.13",
+   "GOOS": "linux",
+   "GOARCH": "amd64",
+   "Counters": {
+    "gopls/client:other": 18,
+    "gopls/completion/used:unknown": 207,
+    "gopls/gotoolchain:auto": 17,
+    "gopls/goversion:1.21": 17
+   },
+   "Stacks": {}
+  }
+ ],
+ "Config": "v0.90.0"
+}

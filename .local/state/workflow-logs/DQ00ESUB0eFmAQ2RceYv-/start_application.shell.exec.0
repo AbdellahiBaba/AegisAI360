@@ -1,0 +1,16 @@
+
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+[1G[0KInitializing Stripe schema...
+Stripe schema ready
+Stripe: using development credentials (live mode: false)
+{ autoExpandLists: [90mundefined[39m, stripeApiVersion: [90mundefined[39m } StripeSync initialized
+Stripe webhook configured: OK
+Stripe data synced
+Default rules and playbooks seeded
+[DataRetention] Scheduler started. First cleanup in 260 minutes
+7:39:34 PM [scan-scheduler] Scan scheduler started (checking every 60s)
+7:39:34 PM [report-scheduler] Report scheduler started (checking every 60s)
+[SubscriptionEnforcer] Started — checking every 5 minutes.
+7:39:36 PM [express] serving on port 5000

@@ -1,0 +1,17 @@
+
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+[1G[0KInitializing Stripe schema...
+Stripe schema ready
+Stripe: using development credentials (live mode: false)
+{ autoExpandLists: [90mundefined[39m, stripeApiVersion: [90mundefined[39m } StripeSync initialized
+Stripe webhook configured: OK
+Stripe data synced
+Default rules and playbooks seeded
+[DataRetention] Scheduler started. First cleanup in 1094 minutes
+5:45:59 AM [scan-scheduler] Scan scheduler started (checking every 60s)
+5:45:59 AM [report-scheduler] Report scheduler started (checking every 60s)
+[SubscriptionEnforcer] Started — checking every 5 minutes.
+5:45:59 AM [express] serving on port 5000
+5:46:07 AM [express] DELETE /api/agent/1 401 in 4ms :: {"error":"Authentication required"}

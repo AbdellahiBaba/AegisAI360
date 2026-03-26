@@ -1,0 +1,40 @@
+
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+[1G[0KInitializing Stripe schema...
+Stripe schema ready
+Stripe: using development credentials (live mode: false)
+{ autoExpandLists: [90mundefined[39m, stripeApiVersion: [90mundefined[39m } StripeSync initialized
+Stripe webhook configured: OK
+Stripe data synced
+Default rules and playbooks seeded
+[DataRetention] Scheduler started. First cleanup in 1217 minutes
+3:43:21 AM [scan-scheduler] Scan scheduler started (checking every 60s)
+3:43:21 AM [report-scheduler] Report scheduler started (checking every 60s)
+[SubscriptionEnforcer] Started — checking every 5 minutes.
+3:43:21 AM [express] serving on port 5000
+
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+3:43:29 AM [express] GET /api/user 401 in 2ms :: {"error":"Not authenticated"}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[0J[2m3:45:53 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
