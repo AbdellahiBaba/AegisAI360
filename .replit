@@ -49,5 +49,5 @@ integrations = ["javascript_websocket:1.0.0", "javascript_openai_ai_integrations
 [userenv]
 
 [userenv.shared]
-VAPID_PUBLIC_KEY = "BFlZgIVPFZoNVrDnwFO7gKMwkomOHRYaUCZt8GfDe7eg0Px529qmyNvVWzozw_st7-QpT899IDv9pvroa5WreD4"
-VAPID_PRIVATE_KEY = "AyFgxI_Fuuz4jL8orga5h9VYYJGID0v57lsSU-mBzz8"
+VAPID_PUBLIC_KEY = "BFlZgIVPFZoNVrDnwFO7gKM"
+VAPID_PRIVATE_KEY = "AyU-mBzz8"
