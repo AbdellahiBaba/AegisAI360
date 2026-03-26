@@ -1,4 +1,48 @@
 AegisAI360 - Defensive Cybersecurity Platform
+### Frontend
+[![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)](https://vitejs.dev)
+[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-38B2AC?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![shadcn/ui](https://img.shields.io/badge/shadcn/ui-000000?logo=shadcnui&logoColor=white)](https://ui.shadcn.com)
+[![Recharts](https://img.shields.io/badge/Recharts-FF6384?logo=recharts&logoColor=white)](https://recharts.org)
+[![TanStack Query](https://img.shields.io/badge/TanStack_Query-FF4154?logo=reactquery&logoColor=white)](https://tanstack.com/query)
+[![i18next](https://img.shields.io/badge/i18next-26A69A?logo=i18next&logoColor=white)](https://www.i18next.com)
+
+### Backend
+[![Node.js](https://img.shields.io/badge/Node.js-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Express.js](https://img.shields.io/badge/Express.js-000000?logo=express&logoColor=white)](https://expressjs.com)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![WebSockets](https://img.shields.io/badge/WebSockets-4A90E2?logo=socket.io&logoColor=white)](https://github.com/websockets/ws)
+[![Passport.js](https://img.shields.io/badge/Passport.js-34E27A?logo=passport&logoColor=white)](https://www.passportjs.org)
+[![Drizzle ORM](https://img.shields.io/badge/Drizzle_ORM-F7DF1E?logo=javascript&logoColor=black)](https://orm.drizzle.team)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org)
+
+### AI
+[![OpenAI](https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white)](https://platform.openai.com)
+
+### Billing
+[![Stripe](https://img.shields.io/badge/Stripe-635BFF?logo=stripe&logoColor=white)](https://stripe.com)
+
+### Threat Intelligence
+[![AbuseIPDB](https://img.shields.io/badge/AbuseIPDB-2D2D2D?logo=shield&logoColor=white)](https://www.abuseipdb.com)
+[![AlienVault OTX](https://img.shields.io/badge/AlienVault_OTX-1A1A1A?logo=alienware&logoColor=white)](https://otx.alienvault.com)
+[![URLScan.io](https://img.shields.io/badge/URLScan.io-0A0A0A?logo=security&logoColor=white)](https://urlscan.io)
+[![Google Safe Browsing](https://img.shields.io/badge/Google_Safe_Browsing-4285F4?logo=google&logoColor=white)](https://developers.google.com/safe-browsing)
+[![MalwareBazaar](https://img.shields.io/badge/MalwareBazaar-FF0000?logo=virustotal&logoColor=white)](https://bazaar.abuse.ch)
+[![Have I Been Pwned](https://img.shields.io/badge/HIBP-2A2A2A?logo=haveibeenpwned&logoColor=white)](https://haveibeenpwned.com/API/v3)
+[![NIST NVD](https://img.shields.io/badge/NIST_NVD-005A9C?logo=security&logoColor=white)](https://nvd.nist.gov/developers)
+
+### Security Standards
+[![MITRE ATT&CK](https://img.shields.io/badge/MITRE_ATT%26CK-CC0000?logo=mitre&logoColor=white)](https://attack.mitre.org)
+[![OWASP](https://img.shields.io/badge/OWASP-000000?logo=owasp&logoColor=white)](https://owasp.org/www-project-mobile-top-10)
+[![YARA](https://img.shields.io/badge/YARA-FFCC00?logo=code&logoColor=black)](https://yara.readthedocs.io)
+[![Sigma](https://img.shields.io/badge/Sigma_Rules-000000?logo=security&logoColor=white)](https://sigmahq.io)
+
+### Endpoint Agent
+[![Go](https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white)](https://go.dev)
+
+
 Overview
 AegisAI360 is an enterprise-grade multi-tenant SaaS Security Operations Center (SOC) platform designed to provide comprehensive cybersecurity management. It offers real-time threat monitoring, AI-powered threat detection, and one-click defense response actions. The platform integrates firewall management, alert rule engines, security scanning tools, and a threat simulation engine. Its core purpose is to equip organizations with automated and intelligent defense capabilities against cyber threats, ensuring data integrity and business continuity.
 
