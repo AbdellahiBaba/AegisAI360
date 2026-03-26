@@ -1,7 +1,4 @@
 AegisAI360 - Defensive Cybersecurity Platform
-<p align="center">
-  width="180" alt="AegisAI360 Logo"/>
-</p>
 
 <h1 align="center">🛡️ AegisAI360</h1>
 <p align="center">Enterprise‑Grade AI‑Powered Cybersecurity Platform</p>
