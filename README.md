@@ -1,4 +1,109 @@
 AegisAI360 - Defensive Cybersecurity Platform
+<p align="center">
+  <img src="https://replit.com/@MiConnect/AegisAI360#public/aegisai360-logo-full.svg" width="180" alt="AegisAI360 Logo"/>
+</p>
+
+<h1 align="center">🛡️ AegisAI360</h1>
+<p align="center">Enterprise‑Grade AI‑Powered Cybersecurity Platform</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Status-Active-success?style=flat-square"/>
+  <img src="https://img.shields.io/badge/License-Proprietary-red?style=flat-square"/>
+  <img src="https://img.shields.io/badge/Security-Military%20Grade-amber?style=flat-square"/>
+</p>
+
+📚 Table of Contents
+- [Introduction](#-introduction)
+- [Key Features](#-key-features)
+- [System Architecture](#-system-architecture)
+- [Tech Stack](#-tech-stack)
+- [Screenshots](#-screenshots)
+- [Installation](#-installation)
+- [License](#-license)
+
+🧩 Introduction
+AegisAI360 is a next‑generation, enterprise‑grade cybersecurity platform designed for 
+Security Operations Centers (SOC), MSSPs, and large organizations. It provides 
+real‑time threat detection, AI‑powered analysis, automated incident response, 
+multi‑tenant isolation, and a full suite of defensive and offensive security tools.
+
+Built with a modern, dark‑mode cybersecurity UI and powered by advanced AI models, 
+AegisAI360 delivers unmatched visibility, automation, and protection across your 
+entire digital infrastructure.
+
+🧱 Feature Grid
+| Category | Features |
+|---------|----------|
+| 🛡️ Threat Defense | Real‑time monitoring, AI threat scoring, alert rules, firewall control |
+| 🧠 AI Automation | Auto‑triage, AI executive summaries, natural language threat hunting |
+| 🔍 Scanning Tools | Port scan, DNS scan, SSL/TLS inspector, vulnerability scanner |
+| 🧪 Offensive Tools | SQLi tester, XSS tester, directory brute‑force, WAF detection |
+| 📱 Mobile & Malware | Trojan analyzer, YARA/Sigma, OWASP Mobile Top 10 |
+| 🌐 Threat Intel | AbuseIPDB, OTX, URLScan, Google Safe Browsing |
+| 🛰️ Endpoint Agent | Go‑based EDR agent, host isolation, file retrieval |
+| 🧭 Compliance | NIST CSF, ISO 27001, SOC 2, GDPR, PCI DSS |
+| 💳 Billing | Stripe‑powered subscription system |
+| 🗺️ Visualization | Global threat map, dashboards, analytics |
+
+
+🏗️ System Architecture
+                        ┌────────────────────────────┐
+                        │        Web Client (UI)      │
+                        │  React • Vite • Tailwind    │
+                        └──────────────┬─────────────┘
+                                       │
+                                       ▼
+                     ┌────────────────────────────────────┐
+                     │        API Gateway / Backend        │
+                     │ Express.js • TypeScript • WebSockets│
+                     └──────────────┬──────────────┬──────┘
+                                    │              │
+                                    │              │
+                     ┌──────────────▼───┐   ┌──────▼────────────────┐
+                     │  Security Engines │   │  Multi‑Tenant Manager │
+                     │ Scanners • AI •   │   │ RBAC • Org Isolation  │
+                     │ Threat Intel      │   └────────────────────────┘
+                     └──────────────┬────┘
+                                    │
+                                    ▼
+                        ┌──────────────────────────┐
+                        │     PostgreSQL + Drizzle │
+                        │   Events • Agents • Logs │
+                        └──────────────────────────┘
+
+                        ┌──────────────────────────┐
+                        │   Go Endpoint Agent (EDR)│
+                        │  Host Isolation • FIM    │
+                        └──────────────────────────┘
+
+
+🧰 Tech Stack
+### Frontend
+React • TypeScript • Vite • TailwindCSS • shadcn/ui • Recharts • TanStack Query • i18next
+
+### Backend
+Node.js • Express.js • TypeScript • WebSockets • Passport.js • Drizzle ORM • PostgreSQL
+
+### AI
+OpenAI API
+
+### Threat Intelligence
+AbuseIPDB • AlienVault OTX • URLScan.io • Google Safe Browsing • MalwareBazaar • HIBP • NIST NVD
+
+### Endpoint Agent
+Go (EDR Agent)
+
+Dark‑Mode Cybersecurity Theme
+AegisAI360 uses a premium dark‑mode UI inspired by modern SOC dashboards:
+
+- Midnight navy background
+- Gold/amber accent colors
+- Scanline + grid background patterns
+- Cyber‑terminal animations
+- SVG shield logo
+- Space Grotesk, Cairo, JetBrains Mono fonts
+
+
 ### Frontend
 [![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
